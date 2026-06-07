@@ -1,0 +1,6 @@
+{
+  "name": "Play & Win USDT",
+  "description": "Premium real-time authoritative 8-ball pool betting platform featuring secure USDT wallet escrows, instant crypto payouts, player dashboards, and AI Bot training grounds.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
