@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, ArrowRight, Zap, Shield, Trophy, Cpu, Wallet, TrendingUp, Users, Star, ChevronDown } from 'lucide-react';
 import { Lang } from '../i18n';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface HomePageProps {
   loginUser: string; setLoginUser: (v: string) => void;
@@ -88,24 +89,24 @@ export default function HomePage({
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-emerald-500/8 rounded-full blur-[120px] pointer-events-none" />
 
         <div className="relative max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-6">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-semibold mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             {isAr ? 'منصة مراهنات عالمية PvP' : 'Global PvP Wagering Platform — Live Now'}
-          </div>
+          </motion.div>
 
-          <h1 className="text-5xl sm:text-7xl font-black leading-none tracking-tight text-white mb-5">
+          <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }} className="text-5xl sm:text-7xl font-black leading-none tracking-tight text-white mb-5">
             {isAr ? (
               <>تنافس في<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">البلياردو الاحترافي</span></>
             ) : (
               <>COMPETE FOR<br /><span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-400">REAL USDT STAKES</span></>
             )}
-          </h1>
+          </motion.h1>
 
-          <p className="text-lg text-slate-400 max-w-xl mx-auto mb-10">
+          <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35, duration: 0.5 }} className="text-lg text-slate-400 max-w-xl mx-auto mb-10">
             {isAr
               ? 'فيزياء دقيقة، تسويات فورية، منافسون حقيقيون. رهانات من 5$ إلى 10,000$ USDT.'
               : 'Physics-accurate 8-ball pool with instant crypto payouts. Real players, real stakes, proven integrity.'}
-          </p>
+          </motion.p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
@@ -133,14 +134,14 @@ export default function HomePage({
       {/* ── LIVE STATS ──────────────────────── */}
       <section className="border-y border-white/5 bg-white/2 py-10 px-5">
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
-          {LIVE_STATS.map((s) => {
+          {LIVE_STATS.map((s, i) => {
             const Icon = s.icon;
             return (
-              <div key={s.label} className="text-center">
+              <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * i, duration: 0.5 }} className="text-center">
                 <Icon className="w-5 h-5 text-emerald-400 mx-auto mb-2" />
                 <div className="text-2xl font-black text-white">{s.value}</div>
                 <div className="text-xs text-slate-500 mt-1">{s.label}</div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -312,7 +313,7 @@ export default function HomePage({
                   <ChevronDown className={`w-4 h-4 transition-transform shrink-0 ${openFaq === i ? 'rotate-180' : ''}`} />
                 </button>
                 {openFaq === i && (
-                  <div className="px-5 pb-4 text-sm text-slate-400">{f.a}</div>
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="px-5 pb-4 text-sm text-slate-400">{f.a}</motion.div>
                 )}
               </div>
             ))}

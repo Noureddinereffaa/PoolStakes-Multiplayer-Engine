@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, useState, MouseEvent } from 'react';
+﻿import React, { useRef, useEffect, useState, MouseEvent } from 'react';
 import { Ball, RoomState } from '../types';
-import { RotateCcw, ShieldCheck, Zap, Crosshair, Sliders, Play, Flame, Lock, Bot } from 'lucide-react';
+import { RotateCcw, Bot } from 'lucide-react';
 import { poolAudio } from '../utils/audio';
+import PoolHUD from './PoolTable/PoolHUD';
 
 interface PoolTableProps {
   roomState: RoomState;
@@ -30,6 +31,7 @@ export default function PoolTable({
 }: PoolTableProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Interaction States
   const [aimAngle, setAimAngle] = useState(0); // angle in radians
@@ -658,12 +660,392 @@ export default function PoolTable({
     if (!ctx) return;
 
     // HighDPI (Retina) Resolution Backing-Store Scaling
+    // HighDPI (Retina) Resolution Backing-Store Scaling
     const dpr = window.devicePixelRatio || 1;
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
     ctx.scale(dpr, dpr);
 
     const BALL_R = 10;
+
+    // Cache static background table graphics on offscreen canvas for extreme performance
+    if (!offscreenCanvasRef.current) {
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = 800;
+      offCanvas.height = 400;
+      const offCtx = offCanvas.getContext('2d');
+      if (offCtx) {
+        // Draw outer rails, wood grain, felt spotlight, cushions, miters, diamond markers, pockets, corner brackets
+        const topRailGrad = offCtx.createLinearGradient(0, 0, 800, 20);
+        topRailGrad.addColorStop(0, '#0a0301');
+        topRailGrad.addColorStop(0.15, '#220c05');
+        topRailGrad.addColorStop(0.5, '#3a150b');
+        topRailGrad.addColorStop(0.85, '#220c05');
+        topRailGrad.addColorStop(1, '#0a0301');
+        offCtx.fillStyle = topRailGrad;
+        offCtx.fillRect(0, 0, 800, 20);
+        offCtx.fillRect(0, 380, 800, 20);
+
+        const sideRailGrad = offCtx.createLinearGradient(0, 0, 20, 400);
+        sideRailGrad.addColorStop(0, '#080100');
+        sideRailGrad.addColorStop(0.5, '#2c0f07');
+        sideRailGrad.addColorStop(1, '#080100');
+        offCtx.fillStyle = sideRailGrad;
+        offCtx.fillRect(0, 20, 20, 360);
+        offCtx.fillRect(780, 20, 20, 360);
+
+        offCtx.strokeStyle = 'rgba(74, 25, 10, 0.28)';
+        offCtx.lineWidth = 1.25;
+        for (let i = 3; i < 18; i += 4) {
+          offCtx.beginPath();
+          for (let x = 20; x <= 780; x += 15) {
+            const wave = Math.sin(x * 0.03 + i) * 1.8;
+            if (x === 20) offCtx.moveTo(x, i + wave);
+            else offCtx.lineTo(x, i + wave);
+          }
+          offCtx.stroke();
+
+          offCtx.beginPath();
+          for (let x = 20; x <= 780; x += 15) {
+            const wave = Math.sin(x * 0.035 + i) * 1.5;
+            if (x === 20) offCtx.moveTo(x, 380 + i + wave);
+            else offCtx.lineTo(x, 380 + i + wave);
+          }
+          offCtx.stroke();
+        }
+
+        for (let i = 3; i < 18; i += 4) {
+          offCtx.beginPath();
+          for (let y = 20; y <= 380; y += 15) {
+            const wave = Math.sin(y * 0.03 + i) * 1.8;
+            if (y === 20) offCtx.moveTo(i + wave, y);
+            else offCtx.lineTo(i + wave, y);
+          }
+          offCtx.stroke();
+
+          offCtx.beginPath();
+          for (let y = 20; y <= 380; y += 15) {
+            const wave = Math.sin(y * 0.035 + i) * 1.5;
+            if (y === 20) offCtx.moveTo(780 + i + wave, y);
+            else offCtx.lineTo(780 + i + wave, y);
+          }
+          offCtx.stroke();
+        }
+
+        offCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+        offCtx.lineWidth = 1;
+        offCtx.strokeRect(1, 1, 798, 398);
+
+        offCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        offCtx.fillRect(18, 18, 764, 3);
+        offCtx.fillRect(18, 379, 764, 3);
+        offCtx.fillRect(18, 18, 3, 364);
+        offCtx.fillRect(779, 18, 3, 364);
+
+        offCtx.strokeStyle = '#c2780e';
+        offCtx.lineWidth = 1.5;
+        offCtx.strokeRect(19, 19, 762, 362);
+
+        const feltSpotlight = offCtx.createRadialGradient(400, 200, 40, 400, 200, 520);
+        feltSpotlight.addColorStop(0, '#0fa696');
+        feltSpotlight.addColorStop(0.3, '#11655d');
+        feltSpotlight.addColorStop(0.65, '#0d544c');
+        feltSpotlight.addColorStop(1, '#083833');
+        offCtx.fillStyle = feltSpotlight;
+        offCtx.fillRect(20, 20, 760, 360);
+
+        offCtx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        for (let i = 0; i < 35; i++) {
+          const rx = 25 + (i * 47) % 750;
+          const ry = 25 + (i * 23) % 350;
+          offCtx.fillRect(rx - 0.5, ry - 0.5, 1.2, 1.2);
+        }
+
+        offCtx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        offCtx.beginPath();
+        offCtx.ellipse(260, 200, 110, 45, 0, 0, Math.PI * 2);
+        offCtx.fill();
+        offCtx.beginPath();
+        offCtx.ellipse(540, 200, 110, 45, 0, 0, Math.PI * 2);
+        offCtx.fill();
+
+        const shadowTop = offCtx.createLinearGradient(20, 32, 20, 48);
+        shadowTop.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+        shadowTop.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        offCtx.fillStyle = shadowTop;
+        offCtx.fillRect(32, 32, 736, 16);
+
+        const shadowBottom = offCtx.createLinearGradient(20, 368, 20, 352);
+        shadowBottom.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+        shadowBottom.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        offCtx.fillStyle = shadowBottom;
+        offCtx.fillRect(32, 352, 736, 16);
+
+        const shadowLeft = offCtx.createLinearGradient(32, 20, 48, 20);
+        shadowLeft.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+        shadowLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        offCtx.fillStyle = shadowLeft;
+        offCtx.fillRect(32, 32, 16, 336);
+
+        const shadowRight = offCtx.createLinearGradient(768, 20, 752, 20);
+        shadowRight.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+        shadowRight.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        offCtx.fillStyle = shadowRight;
+        offCtx.fillRect(752, 32, 16, 336);
+
+        const topBrush = offCtx.createLinearGradient(20, 20, 20, 32);
+        topBrush.addColorStop(0, '#0a4234');
+        topBrush.addColorStop(0.3, '#0f6e56');
+        topBrush.addColorStop(1, '#138b6d');
+        offCtx.fillStyle = topBrush;
+        offCtx.beginPath();
+        offCtx.moveTo(32, 20);
+        offCtx.lineTo(768, 20);
+        offCtx.lineTo(752, 32);
+        offCtx.lineTo(48, 32);
+        offCtx.closePath();
+        offCtx.fill();
+
+        const bottomBrush = offCtx.createLinearGradient(20, 380, 20, 368);
+        bottomBrush.addColorStop(0, '#052920');
+        bottomBrush.addColorStop(0.4, '#0b5240');
+        bottomBrush.addColorStop(1, '#117b60');
+        offCtx.fillStyle = bottomBrush;
+        offCtx.beginPath();
+        offCtx.moveTo(32, 380);
+        offCtx.lineTo(768, 380);
+        offCtx.lineTo(752, 368);
+        offCtx.lineTo(48, 368);
+        offCtx.closePath();
+        offCtx.fill();
+
+        const leftBrush = offCtx.createLinearGradient(20, 20, 32, 20);
+        leftBrush.addColorStop(0, '#052920');
+        leftBrush.addColorStop(0.4, '#0b5240');
+        leftBrush.addColorStop(1, '#117b60');
+        offCtx.fillStyle = leftBrush;
+        offCtx.beginPath();
+        offCtx.moveTo(20, 32);
+        offCtx.lineTo(20, 368);
+        offCtx.lineTo(32, 352);
+        offCtx.lineTo(32, 48);
+        offCtx.closePath();
+        offCtx.fill();
+
+        const rightBrush = offCtx.createLinearGradient(780, 20, 768, 20);
+        rightBrush.addColorStop(0, '#052920');
+        rightBrush.addColorStop(0.4, '#0b5240');
+        rightBrush.addColorStop(1, '#117b60');
+        offCtx.fillStyle = rightBrush;
+        offCtx.beginPath();
+        offCtx.moveTo(780, 32);
+        offCtx.lineTo(780, 368);
+        offCtx.lineTo(768, 352);
+        offCtx.lineTo(768, 48);
+        offCtx.closePath();
+        offCtx.fill();
+
+        offCtx.strokeStyle = '#94a3b8';
+        offCtx.lineWidth = 1.5;
+        offCtx.beginPath();
+        offCtx.moveTo(400, 20);
+        offCtx.lineTo(400, 32);
+        offCtx.stroke();
+        offCtx.beginPath();
+        offCtx.moveTo(400, 368);
+        offCtx.lineTo(400, 380);
+        offCtx.stroke();
+
+        const diamondSpacingX = 800 / 8;
+        const pearlGrad = offCtx.createRadialGradient(0, 0, 0.5, 0, 0, 4);
+        pearlGrad.addColorStop(0, '#ffffff');
+        pearlGrad.addColorStop(0.4, '#e2e8f0');
+        pearlGrad.addColorStop(1, '#94a3b8');
+
+        for (let i = 1; i <= 7; i++) {
+           if (i !== 4) {
+             offCtx.save();
+             offCtx.translate(i * diamondSpacingX, 10);
+             offCtx.beginPath();
+             offCtx.moveTo(0, -4);
+             offCtx.lineTo(3, 0);
+             offCtx.lineTo(0, 4);
+             offCtx.lineTo(-3, 0);
+             offCtx.closePath();
+             offCtx.fillStyle = pearlGrad;
+             offCtx.fill();
+             offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+             offCtx.lineWidth = 0.5;
+             offCtx.stroke();
+             offCtx.restore();
+
+             offCtx.save();
+             offCtx.translate(i * diamondSpacingX, 390);
+             offCtx.beginPath();
+             offCtx.moveTo(0, -4);
+             offCtx.lineTo(3, 0);
+             offCtx.lineTo(0, 4);
+             offCtx.lineTo(-3, 0);
+             offCtx.closePath();
+             offCtx.fillStyle = pearlGrad;
+             offCtx.fill();
+             offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+             offCtx.lineWidth = 0.5;
+             offCtx.stroke();
+             offCtx.restore();
+           }
+        }
+        const diamondSpacingY = 400 / 4;
+        for (let j = 1; j <= 3; j++) {
+          offCtx.save();
+          offCtx.translate(10, j * diamondSpacingY);
+          offCtx.beginPath();
+          offCtx.moveTo(-4, 0);
+          offCtx.lineTo(0, -3);
+          offCtx.lineTo(4, 0);
+          offCtx.lineTo(0, 3);
+          offCtx.closePath();
+          offCtx.fillStyle = pearlGrad;
+          offCtx.fill();
+          offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+          offCtx.lineWidth = 0.5;
+          offCtx.stroke();
+          offCtx.restore();
+
+          offCtx.save();
+          offCtx.translate(790, j * diamondSpacingY);
+          offCtx.beginPath();
+          offCtx.moveTo(-4, 0);
+          offCtx.lineTo(0, -3);
+          offCtx.lineTo(4, 0);
+          offCtx.lineTo(0, 3);
+          offCtx.closePath();
+          offCtx.fillStyle = pearlGrad;
+          offCtx.fill();
+          offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+          offCtx.lineWidth = 0.5;
+          offCtx.stroke();
+          offCtx.restore();
+        }
+
+        const pockets = [
+          { x: 22, y: 22, ang: Math.PI * 0.25 },
+          { x: 400, y: 18, ang: Math.PI * 0.5 },
+          { x: 778, y: 22, ang: Math.PI * 0.75 },
+          { x: 22, y: 378, ang: -Math.PI * 0.25 },
+          { x: 400, y: 382, ang: -Math.PI * 0.5 },
+          { x: 778, y: 378, ang: -Math.PI * 0.75 },
+        ];
+
+        pockets.forEach((p) => {
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 27, 0, Math.PI * 2);
+          offCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+          offCtx.fill();
+
+          const pocketPlateGrad = offCtx.createRadialGradient(p.x, p.y, 15, p.x, p.y, 25);
+          pocketPlateGrad.addColorStop(0, '#1e293b');
+          pocketPlateGrad.addColorStop(0.4, '#475569');
+          pocketPlateGrad.addColorStop(0.75, '#f1f5f9');
+          pocketPlateGrad.addColorStop(0.9, '#cbd5e1');
+          pocketPlateGrad.addColorStop(1, '#1e293b');
+
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 24, 0, Math.PI * 2);
+          offCtx.fillStyle = pocketPlateGrad;
+          offCtx.fill();
+
+          offCtx.strokeStyle = 'rgba(217, 119, 6, 0.65)';
+          offCtx.lineWidth = 1;
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 23.5, 0, Math.PI * 2);
+          offCtx.stroke();
+
+          offCtx.fillStyle = 'rgba(217, 119, 6, 0.9)';
+          const screwAngs = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+          screwAngs.forEach((sa) => {
+            const sx = p.x + Math.cos(sa) * 20.5;
+            const sy = p.y + Math.sin(sa) * 20.5;
+            offCtx.beginPath();
+            offCtx.arc(sx, sy, 1.2, 0, Math.PI * 2);
+            offCtx.fill();
+          });
+
+          const voidGrad = offCtx.createRadialGradient(p.x, p.y, 3, p.x, p.y, 18);
+          voidGrad.addColorStop(0, '#000000');
+          voidGrad.addColorStop(0.7, '#070a0f');
+          voidGrad.addColorStop(0.9, '#111827');
+          voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 18, 0, Math.PI * 2);
+          offCtx.fillStyle = voidGrad;
+          offCtx.fill();
+
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 18.5, p.ang - 0.75, p.ang + 0.75);
+          offCtx.lineWidth = 4;
+          offCtx.strokeStyle = '#05070a';
+          offCtx.stroke();
+        });
+
+        const cornerPlates = [
+          { x: 0, y: 0, w: 25, h: 25, r: 0 },
+          { x: 800, y: 0, w: 25, h: 25, r: Math.PI * 0.5 },
+          { x: 0, y: 400, w: 25, h: 25, r: -Math.PI * 0.5 },
+          { x: 800, y: 400, w: 25, h: 25, r: Math.PI },
+        ];
+        cornerPlates.forEach((cp) => {
+          offCtx.save();
+          offCtx.translate(cp.x, cp.y);
+          offCtx.rotate(cp.r);
+          const brassGrad = offCtx.createLinearGradient(0, 0, 20, 20);
+          brassGrad.addColorStop(0, '#78350f');
+          brassGrad.addColorStop(0.4, '#fbbf24');
+          brassGrad.addColorStop(0.85, '#fef08a');
+          brassGrad.addColorStop(1, '#92400e');
+          offCtx.fillStyle = brassGrad;
+          offCtx.beginPath();
+          offCtx.moveTo(0, 0);
+          offCtx.lineTo(26, 0);
+          offCtx.bezierCurveTo(24, 15, 15, 24, 0, 26);
+          offCtx.closePath();
+          offCtx.fill();
+          offCtx.restore();
+        });
+
+        offCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        offCtx.lineWidth = 1;
+        offCtx.beginPath();
+        offCtx.moveTo(200, 21);
+        offCtx.lineTo(200, 379);
+        offCtx.stroke();
+
+        offCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        offCtx.beginPath();
+        offCtx.arc(200, 200, 48, Math.PI * 0.5, Math.PI * 1.5, false);
+        offCtx.stroke();
+
+        offCtx.beginPath();
+        offCtx.arc(200, 200, 3.5, 0, Math.PI * 2);
+        offCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        offCtx.fill();
+        offCtx.beginPath();
+        offCtx.arc(200, 200, 1.2, 0, Math.PI * 2);
+        offCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        offCtx.fill();
+
+        offCtx.beginPath();
+        offCtx.arc(600, 200, 3, 0, Math.PI * 2);
+        offCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        offCtx.fill();
+        offCtx.beginPath();
+        offCtx.arc(600, 200, 1, 0, Math.PI * 2);
+        offCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        offCtx.fill();
+      }
+      offscreenCanvasRef.current = offCanvas;
+    }
 
     // Initialize atmospheric dust specks if empty
     if (dustSpecksRef.current.length === 0) {
@@ -694,478 +1076,10 @@ export default function PoolTable({
         ctx.translate(sx, sy);
       }
 
-    // 1. Draw Table Cushion Borders & Luxurious Wood Frame
-    // Real mahogany wood rails with 3D bevels and grain linear gradients of rich dark burgundy wood
-    const topRailGrad = ctx.createLinearGradient(0, 0, 800, 20);
-    topRailGrad.addColorStop(0, '#0a0301');
-    topRailGrad.addColorStop(0.15, '#220c05');
-    topRailGrad.addColorStop(0.5, '#3a150b');
-    topRailGrad.addColorStop(0.85, '#220c05');
-    topRailGrad.addColorStop(1, '#0a0301');
-    
-    // Draw outer heavy wooden rails
-    ctx.fillStyle = topRailGrad;
-    ctx.fillRect(0, 0, 800, 20); // Top wood border
-    ctx.fillRect(0, 380, 800, 20); // Bottom wood border
-    
-    const sideRailGrad = ctx.createLinearGradient(0, 0, 20, 400);
-    sideRailGrad.addColorStop(0, '#080100');
-    sideRailGrad.addColorStop(0.5, '#2c0f07');
-    sideRailGrad.addColorStop(1, '#080100');
-    ctx.fillStyle = sideRailGrad;
-    ctx.fillRect(0, 20, 20, 360); // Left wood border
-    ctx.fillRect(780, 20, 20, 360); // Right wood border
-
-    // Draw Realistic Wood Grain Lines inside Wood Frame (realistic organic mahogany growth curves!)
-    ctx.strokeStyle = 'rgba(74, 25, 10, 0.28)';
-    ctx.lineWidth = 1.25;
-    for (let i = 3; i < 18; i += 4) {
-      // Horizontal top wood wavy grain
-      ctx.beginPath();
-      for (let x = 20; x <= 780; x += 15) {
-        const wave = Math.sin(x * 0.03 + i) * 1.8;
-        if (x === 20) ctx.moveTo(x, i + wave);
-        else ctx.lineTo(x, i + wave);
+      // Draw Cached Static Table Background
+      if (offscreenCanvasRef.current) {
+        ctx.drawImage(offscreenCanvasRef.current, 0, 0);
       }
-      ctx.stroke();
-
-      // Horizontal bottom wood wavy grain
-      ctx.beginPath();
-      for (let x = 20; x <= 780; x += 15) {
-        const wave = Math.sin(x * 0.035 + i) * 1.5;
-        if (x === 20) ctx.moveTo(x, 380 + i + wave);
-        else ctx.lineTo(x, 380 + i + wave);
-      }
-      ctx.stroke();
-    }
-    for (let i = 3; i < 18; i += 4) {
-      // Vertical left wood wavy grain
-      ctx.beginPath();
-      for (let y = 20; y <= 380; y += 15) {
-        const wave = Math.sin(y * 0.03 + i) * 1.8;
-        if (y === 20) ctx.moveTo(i + wave, y);
-        else ctx.lineTo(i + wave, y);
-      }
-      ctx.stroke();
-
-      // Vertical right wood wavy grain
-      ctx.beginPath();
-      for (let y = 20; y <= 380; y += 15) {
-        const wave = Math.sin(y * 0.035 + i) * 1.5;
-        if (y === 20) ctx.moveTo(780 + i + wave, y);
-        else ctx.lineTo(780 + i + wave, y);
-      }
-      ctx.stroke();
-    }
-
-    // Specular Bevel Line for 3D Wood Edges
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(1, 1, 798, 398);
-
-    // Deep ambient occlusion shadow inside the wood rail boards to simulate deep carve recess
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(18, 18, 764, 3); // top inner recess shadow
-    ctx.fillRect(18, 379, 764, 3); // bottom inner recess shadow
-    ctx.fillRect(18, 18, 3, 364); // left inner recess shadow
-    ctx.fillRect(779, 18, 3, 364); // right inner recess shadow
-
-    // Golden/Brass Luxury Miter Inlay separating Wood frame from Cushion Felt bounds (1.5px golden bevel)
-    ctx.strokeStyle = '#c2780e';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(19, 19, 762, 362);
-
-    // Inner Green Felt Base area with a gorgeous Overhead Spotlight (Radial illumination) + Ambient Sheen
-    // Center spotlight source centered overhead at (400, 200).
-    const feltSpotlight = ctx.createRadialGradient(400, 200, 40, 400, 200, 520);
-    feltSpotlight.addColorStop(0, '#0fa696'); // Glowing premium teal-emerald lit center
-    feltSpotlight.addColorStop(0.3, '#11655d'); // Deep teal-green
-    feltSpotlight.addColorStop(0.65, '#0d544c'); // Shadowy velvet-felt
-    feltSpotlight.addColorStop(1, '#083833'); // Deep rich forest edges
-
-    ctx.fillStyle = feltSpotlight;
-    ctx.fillRect(20, 20, 760, 360);
-
-    // Elegant Chalk & Felt Friction Overlay (subtle texture particles) - HIGH-PERFORMANCE STATIC RECTS
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    for (let i = 0; i < 35; i++) {
-      const rx = 25 + (i * 47) % 750;
-      const ry = 25 + (i * 23) % 350;
-      ctx.fillRect(rx - 0.5, ry - 0.5, 1.2, 1.2);
-    }
-
-    // DRAW DUAL PROFESSIONAL OVERHEAD LAMP REFLECTIONS on the felt (Translucent capsules)
-    // This gives incredible "billiard-room" realism where ceiling fluorescent tubes reflect on the cloth
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-    ctx.beginPath();
-    ctx.ellipse(260, 200, 110, 45, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(540, 200, 110, 45, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // UPDATE & DRAW ACTIVE FELT RIPPLES
-    feltRipplesRef.current = feltRipplesRef.current.filter((r) => {
-      r.radius += 0.55;
-      r.opacity -= 0.015;
-      if (r.opacity <= 0 || r.radius >= r.maxRadius) return false;
-      
-      ctx.save();
-      ctx.strokeStyle = r.color.replace(/[\d\.]+\)$/, `${r.opacity})`);
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-      return true;
-    });
-
-    // UPDATE & DRAW CLASH / CHALK SPARK PARTICLES
-    chalkParticlesRef.current = chalkParticlesRef.current.filter((p) => {
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vx *= 0.94;
-      p.vy *= 0.94;
-      p.size = Math.max(0.1, p.size - 0.012);
-      p.opacity -= 0.012;
-      if (p.opacity <= 0) return false;
-
-      ctx.save();
-      ctx.fillStyle = p.color;
-      ctx.globalAlpha = p.opacity;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      return true;
-    });
-
-    // UPDATE & DRAW DUST SPECKS UNDER THE spotlight (hovering atmosphere) - HIGH-PERFORMANCE ENGINE
-    dustSpecksRef.current.forEach((d) => {
-      d.x += d.vx;
-      d.y += d.vy;
-      if (d.x < 20) d.x = 780;
-      if (d.x > 780) d.x = 20;
-      if (d.y < 20) d.y = 380;
-      if (d.y > 380) d.y = 20;
-
-      const shineIntensity = 0.15 + Math.sin(Date.now() * d.speed) * 0.08;
-      // Draw a subtle translucent dust particle, bypassing slower shadowBlur
-      ctx.beginPath();
-      ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(255, 255, 255, ${d.alpha * shineIntensity})`;
-      ctx.fill();
-    });
-
-    // Cushion Bevel Drop Shadows (Realistic Ambient Occlusion casting onto the felt)
-    // Top Cushion Ambient Shadow
-    const shadowTop = ctx.createLinearGradient(20, 32, 20, 48);
-    shadowTop.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-    shadowTop.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = shadowTop;
-    ctx.fillRect(32, 32, 736, 16);
-
-    // Bottom Cushion Ambient Shadow
-    const shadowBottom = ctx.createLinearGradient(20, 368, 20, 352);
-    shadowBottom.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-    shadowBottom.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = shadowBottom;
-    ctx.fillRect(32, 352, 736, 16);
-
-    // Left Cushion Ambient Shadow
-    const shadowLeft = ctx.createLinearGradient(32, 20, 48, 20);
-    shadowLeft.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-    shadowLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = shadowLeft;
-    ctx.fillRect(32, 32, 16, 336);
-
-    // Right Cushion Ambient Shadow
-    const shadowRight = ctx.createLinearGradient(768, 20, 752, 20);
-    shadowRight.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-    shadowRight.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = shadowRight;
-    ctx.fillRect(752, 32, 16, 336);
-
-    // Rail Cushions Felt Surface styling with 3D Depth bevel gradients
-    // Top Cushion Bevel
-    const topBrush = ctx.createLinearGradient(20, 20, 20, 32);
-    topBrush.addColorStop(0, '#0a4234'); // dark underside felt
-    topBrush.addColorStop(0.3, '#0f6e56'); // mid
-    topBrush.addColorStop(1, '#138b6d'); // lighter face
-    ctx.fillStyle = topBrush;
-    ctx.beginPath();
-    ctx.moveTo(32, 20);
-    ctx.lineTo(768, 20);
-    ctx.lineTo(752, 32);
-    ctx.lineTo(48, 32);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bottom Cushion Bevel
-    const bottomBrush = ctx.createLinearGradient(20, 380, 20, 368);
-    bottomBrush.addColorStop(0, '#052920'); // deep dark shadow
-    bottomBrush.addColorStop(0.4, '#0b5240');
-    bottomBrush.addColorStop(1, '#117b60');
-    ctx.fillStyle = bottomBrush;
-    ctx.beginPath();
-    ctx.moveTo(32, 380);
-    ctx.lineTo(768, 380);
-    ctx.lineTo(752, 368);
-    ctx.lineTo(48, 368);
-    ctx.closePath();
-    ctx.fill();
-
-    // Left Cushion Bevel
-    const leftBrush = ctx.createLinearGradient(20, 20, 32, 20);
-    leftBrush.addColorStop(0, '#052920');
-    leftBrush.addColorStop(0.4, '#0b5240');
-    leftBrush.addColorStop(1, '#117b60');
-    ctx.fillStyle = leftBrush;
-    ctx.beginPath();
-    ctx.moveTo(20, 32);
-    ctx.lineTo(20, 368);
-    ctx.lineTo(32, 352);
-    ctx.lineTo(32, 48);
-    ctx.closePath();
-    ctx.fill();
-
-    // Right Cushion Bevel
-    const rightBrush = ctx.createLinearGradient(780, 20, 768, 20);
-    rightBrush.addColorStop(0, '#052920');
-    rightBrush.addColorStop(0.4, '#0b5240');
-    rightBrush.addColorStop(1, '#117b60');
-    ctx.fillStyle = rightBrush;
-    ctx.beginPath();
-    ctx.moveTo(780, 32);
-    ctx.lineTo(780, 368);
-    ctx.lineTo(768, 352);
-    ctx.lineTo(768, 48);
-    ctx.closePath();
-    ctx.fill();
-
-    // Draw luxury silver-plated cushion cap lines dividing rail sections
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1.5;
-    // Top-Center cushion divide
-    ctx.beginPath();
-    ctx.moveTo(400, 20);
-    ctx.lineTo(400, 32);
-    ctx.stroke();
-    // Bottom-Center cushion divide
-    ctx.beginPath();
-    ctx.moveTo(400, 368);
-    ctx.lineTo(400, 380);
-    ctx.stroke();
-
-    // 2. Draw Table diamonds/markers (Gleaming mother-of-pearl diamond inlays) - HIGH SPEED
-    const diamondSpacingX = 800 / 8;
-    for (let i = 1; i <= 7; i++) {
-       if (i !== 4) { // omit center pockets areas
-         // Top diamonds
-         ctx.save();
-         ctx.translate(i * diamondSpacingX, 10);
-         ctx.beginPath();
-         ctx.moveTo(0, -4);
-         ctx.lineTo(3, 0);
-         ctx.lineTo(0, 4);
-         ctx.lineTo(-3, 0);
-         ctx.closePath();
-         // Mother of pearl luster gradient
-         const pearlGrad = ctx.createRadialGradient(0, 0, 0.5, 0, 0, 4);
-         pearlGrad.addColorStop(0, '#ffffff');
-         pearlGrad.addColorStop(0.4, '#e2e8f0');
-         pearlGrad.addColorStop(1, '#94a3b8');
-         ctx.fillStyle = pearlGrad;
-         ctx.fill();
-         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-         ctx.lineWidth = 0.5;
-         ctx.stroke();
-         ctx.restore();
-
-         // Bottom diamonds
-         ctx.save();
-         ctx.translate(i * diamondSpacingX, 390);
-         ctx.beginPath();
-         ctx.moveTo(0, -4);
-         ctx.lineTo(3, 0);
-         ctx.lineTo(0, 4);
-         ctx.lineTo(-3, 0);
-         ctx.closePath();
-         ctx.fillStyle = pearlGrad;
-         ctx.fill();
-         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-         ctx.lineWidth = 0.5;
-         ctx.stroke();
-         ctx.restore();
-       }
-    }
-    const diamondSpacingY = 400 / 4;
-    for (let j = 1; j <= 3; j++) {
-      // Left diamonds
-      ctx.save();
-      ctx.translate(10, j * diamondSpacingY);
-      ctx.beginPath();
-      ctx.moveTo(-4, 0);
-      ctx.lineTo(0, -3);
-      ctx.lineTo(4, 0);
-      ctx.lineTo(0, 3);
-      ctx.closePath();
-      const pearlGrad = ctx.createRadialGradient(0, 0, 0.5, 0, 0, 4);
-      pearlGrad.addColorStop(0, '#ffffff');
-      pearlGrad.addColorStop(0.4, '#e2e8f0');
-      pearlGrad.addColorStop(1, '#94a3b8');
-      ctx.fillStyle = pearlGrad;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.restore();
-
-      // Right diamonds
-      ctx.save();
-      ctx.translate(790, j * diamondSpacingY);
-      ctx.beginPath();
-      ctx.moveTo(-4, 0);
-      ctx.lineTo(0, -3);
-      ctx.lineTo(4, 0);
-      ctx.lineTo(0, 3);
-      ctx.closePath();
-      ctx.fillStyle = pearlGrad;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 3. Draw The 6 World-Class Pockets (Cast Iron Plate Covers & Mesh Net visual depth)
-    const pockets = [
-      { x: 22, y: 22, ang: Math.PI * 0.25 }, // TL
-      { x: 400, y: 18, ang: Math.PI * 0.5 }, // TC
-      { x: 778, y: 22, ang: Math.PI * 0.75 }, // TR
-      { x: 22, y: 378, ang: -Math.PI * 0.25 }, // BL
-      { x: 400, y: 382, ang: -Math.PI * 0.5 }, // BC
-      { x: 778, y: 378, ang: -Math.PI * 0.75 }, // BR
-    ];
-
-    pockets.forEach((p) => {
-      // A. Outer dark shadow ring underneath iron castings
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 27, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-      ctx.fill();
-
-      // B. Specular Chrome/Metallic Corner castings
-      // High-pressure polished steel/brass texture
-      const pocketPlateGrad = ctx.createRadialGradient(p.x, p.y, 15, p.x, p.y, 25);
-      pocketPlateGrad.addColorStop(0, '#1e293b'); // black steel core
-      pocketPlateGrad.addColorStop(0.4, '#475569'); // slate iron
-      pocketPlateGrad.addColorStop(0.75, '#f1f5f9'); // brilliant specular chrome sheen
-      pocketPlateGrad.addColorStop(0.9, '#cbd5e1'); // highlight
-      pocketPlateGrad.addColorStop(1, '#1e293b'); // shadowed outer rim
-
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 24, 0, Math.PI * 2);
-      ctx.fillStyle = pocketPlateGrad;
-      ctx.fill();
-
-      // Draw an elegant gold/brass rim highlight on the metallic plate cover
-      ctx.strokeStyle = 'rgba(217, 119, 6, 0.65)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 23.5, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Add a couple of tiny gold screws on the metal plates to simulate real structural craft
-      ctx.fillStyle = 'rgba(217, 119, 6, 0.9)'; // tiny gold screws
-      const screwAngs = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
-      screwAngs.forEach((sa) => {
-        const sx = p.x + Math.cos(sa) * 20.5;
-        const sy = p.y + Math.sin(sa) * 20.5;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1.2, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // C. Inner Black Void Leather Nest
-      const voidGrad = ctx.createRadialGradient(p.x, p.y, 3, p.x, p.y, 18);
-      voidGrad.addColorStop(0, '#000000'); // total absolute velvet darkness
-      voidGrad.addColorStop(0.7, '#070a0f'); // heavy stitch-leather
-      voidGrad.addColorStop(0.9, '#111827'); // rim highlight
-      voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)'); // edge
-
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 18, 0, Math.PI * 2);
-      ctx.fillStyle = voidGrad;
-      ctx.fill();
-
-      // D. High physical thick rubber pocket linings facing cloth cushions
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 18.5, p.ang - 0.75, p.ang + 0.75);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#05070a';
-      ctx.stroke();
-    });
-
-    // Draw Luxurious Polished Gold Corner Bracket Plates protecting wood framing
-    const cornerPlates = [
-      { x: 0, y: 0, w: 25, h: 25, r: 0 },
-      { x: 800, y: 0, w: 25, h: 25, r: Math.PI * 0.5 },
-      { x: 0, y: 400, w: 25, h: 25, r: -Math.PI * 0.5 },
-      { x: 800, y: 400, w: 25, h: 25, r: Math.PI },
-    ];
-    cornerPlates.forEach((cp) => {
-      ctx.save();
-      ctx.translate(cp.x, cp.y);
-      ctx.rotate(cp.r);
-      const brassGrad = ctx.createLinearGradient(0, 0, 20, 20);
-      brassGrad.addColorStop(0, '#78350f'); // shadow brass
-      brassGrad.addColorStop(0.4, '#fbbf24'); // shiny gold
-      brassGrad.addColorStop(0.85, '#fef08a'); // specular glint
-      brassGrad.addColorStop(1, '#92400e');
-      ctx.fillStyle = brassGrad;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(26, 0);
-      ctx.bezierCurveTo(24, 15, 15, 24, 0, 26);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    });
-
-    // 4. Draw Table Headstring (D-Zone) and Spot Marker with fine luxury details
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(200, 21);
-    ctx.lineTo(200, 379);
-    ctx.stroke();
-
-    // Characteristics of classic professional tables: Elegant D-Zone curve
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.beginPath();
-    ctx.arc(200, 200, 48, Math.PI * 0.5, Math.PI * 1.5, false); // Semi-circle pointing to the left D-zone
-    ctx.stroke();
-
-    // Center Spot marker (D-spot) with silver outline
-    ctx.beginPath();
-    ctx.arc(200, 200, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(200, 200, 1.2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.fill();
-
-    // Foot spot marker (billiard ball racking spot)
-    ctx.beginPath();
-    ctx.arc(600, 200, 3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(600, 200, 1, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.fill();
 
      // 4.5. Render Sinking Balls with Ultimate Realism (Vortex suction, progressive shrinking, and atmospheric pocket-depth shadow overlays)
     sinkingBallsRef.current = sinkingBallsRef.current.filter((sb) => {
@@ -1277,19 +1191,20 @@ export default function PoolTable({
 
       const px = isScratchPlacingRef.current && b.id === 0 ? placedPosRef.current.x : b.x;
       const py = isScratchPlacingRef.current && b.id === 0 ? placedPosRef.current.y : b.y;
+      const ballRadius = b.radius || 10; // Defensive fallback to prevent NaN in canvas gradients
       // Level A: Ambient shadow (blurred large outer layer)
-      const outerShadow = ctx.createRadialGradient(px + 2.4, py + 3.4, 0.5, px + 2.4, py + 3.4, b.radius * 1.6);
+      const outerShadow = ctx.createRadialGradient(px + 2.4, py + 3.4, 0.5, px + 2.4, py + 3.4, ballRadius * 1.6);
       outerShadow.addColorStop(0, 'rgba(0, 0, 0, 0.62)');
       outerShadow.addColorStop(0.35, 'rgba(0, 0, 0, 0.32)');
       outerShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.beginPath();
-      ctx.arc(px + 2.4, py + 3.4, b.radius * 1.6, 0, Math.PI * 2);
+      ctx.arc(px + 2.4, py + 3.4, ballRadius * 1.6, 0, Math.PI * 2);
       ctx.fillStyle = outerShadow;
       ctx.fill();
 
       // Level B: Direct contact shadow (tight, very dark layer grounding the sphere)
       ctx.beginPath();
-      ctx.arc(px + 0.6, py + 0.9, b.radius * 0.95, 0, Math.PI * 2);
+      ctx.arc(px + 0.6, py + 0.9, ballRadius * 0.95, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
       ctx.fill();
 
@@ -1315,12 +1230,12 @@ export default function PoolTable({
 
           // Under-glow underneath the shadow (much tighter & more professional)
           ctx.save();
-          const underGlow = ctx.createRadialGradient(px, py, b.radius - 1, px, py, b.radius + 6);
+          const underGlow = ctx.createRadialGradient(px, py, ballRadius - 1, px, py, ballRadius + 6);
           underGlow.addColorStop(0, `rgba(${mainColor}, ${0.25 * baseAlpha})`);
           underGlow.addColorStop(0.6, `rgba(${accentColor}, ${0.08 * baseAlpha})`);
           underGlow.addColorStop(1, 'rgba(0,0,0,0)');
           ctx.beginPath();
-          ctx.arc(px, py, b.radius + 6, 0, Math.PI * 2);
+          ctx.arc(px, py, ballRadius + 6, 0, Math.PI * 2);
           ctx.fillStyle = underGlow;
           ctx.fill();
           ctx.restore();
@@ -1328,7 +1243,7 @@ export default function PoolTable({
           // 1. Concentric Radial Ripples (Extremely subtle, tightly hugged fluid wave rings)
           for (let rIndex = 0; rIndex < 2; rIndex++) {
             const wavePhase = ((time / 1200) + rIndex * 0.5) % 1.0; // cycle from 0 to 1
-            const rippleRadius = b.radius + 1.5 + wavePhase * 4.5;
+            const rippleRadius = ballRadius + 1.5 + wavePhase * 4.5;
             const rippleAlpha = (1.0 - wavePhase) * 0.35 * baseAlpha;
 
             ctx.save();
@@ -1343,7 +1258,7 @@ export default function PoolTable({
           // 2. High-Tech Rotating Dotted Orbital Ring (Tighter profile around the ball)
           ctx.save();
           ctx.beginPath();
-          ctx.arc(px, py, b.radius + 2.2, 0, Math.PI * 2);
+          ctx.arc(px, py, ballRadius + 2.2, 0, Math.PI * 2);
           ctx.strokeStyle = `rgba(${mainColor}, ${0.65 * baseAlpha})`;
           ctx.lineWidth = 1.0;
           // Rotating dash effect:
@@ -1359,7 +1274,7 @@ export default function PoolTable({
           ctx.strokeStyle = `rgba(${mainColor}, ${0.35 * baseAlpha})`;
           ctx.lineWidth = 0.8;
           const bLen = 2.0; // bracket line length
-          const bDist = b.radius + 3.8; // bracket distance from center
+          const bDist = ballRadius + 3.8; // bracket distance from center
           
           // 4 Brackets at 45, 135, 225, 315 degrees
           for (let aCorner = 0; aCorner < 4; aCorner++) {
@@ -1440,15 +1355,15 @@ export default function PoolTable({
       if (b.id !== 0 && b.type === 'stripe') {
         // Stripe ball background is pure cream white ivory (with subtle 3D depth gradient)
         ctx.beginPath();
-        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+        ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
         
         const ivoryGrad = ctx.createRadialGradient(
-          px - b.radius * 0.32,
-          py - b.radius * 0.32,
+          px - ballRadius * 0.32,
+          py - ballRadius * 0.32,
           0,
           px,
           py,
-          b.radius
+          ballRadius
         );
         ivoryGrad.addColorStop(0, '#ffffff');
         ivoryGrad.addColorStop(0.6, '#f7f4ef');
@@ -1460,37 +1375,37 @@ export default function PoolTable({
         // Clip the colored belt to the boundaries of the sphere
         ctx.save();
         ctx.beginPath();
-        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+        ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
         ctx.clip();
 
         // Draw equatorial colored belt of about 62% width of the ball, warped by 3D rotation
-        const minorRadius = b.radius * (0.16 + 0.46 * Math.abs(uy[2]));
+        const minorRadius = ballRadius * (0.16 + 0.46 * Math.abs(uy[2]));
         const beltAngle = Math.atan2(uy[1], uy[0]) + Math.PI / 2;
 
         // Draw micro-embossed shadow seam (3D edge line where stripe meets ivory on the sphere)
         ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
         ctx.beginPath();
-        ctx.ellipse(px, py, b.radius + 0.35, minorRadius + 0.35, beltAngle, 0, Math.PI * 2);
+        ctx.ellipse(px, py, ballRadius + 0.35, minorRadius + 0.35, beltAngle, 0, Math.PI * 2);
         ctx.fill();
 
         // Main stripe belt body with 3D color gradient
-        ctx.fillStyle = getBallBaseGradient(b.color, b.radius);
+        ctx.fillStyle = getBallBaseGradient(b.color, ballRadius);
         ctx.beginPath();
-        ctx.ellipse(px, py, b.radius, minorRadius, beltAngle, 0, Math.PI * 2);
+        ctx.ellipse(px, py, ballRadius, minorRadius, beltAngle, 0, Math.PI * 2);
         ctx.fill();
 
         // High gloss inner highlight inside stripe belt
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.ellipse(px, py, b.radius * 0.9, minorRadius * 0.9, beltAngle, 0, Math.PI * 2);
+        ctx.ellipse(px, py, ballRadius * 0.9, minorRadius * 0.9, beltAngle, 0, Math.PI * 2);
         ctx.stroke();
 
         ctx.restore();
 
         // Add a subtle dark rim for stronger depth
         ctx.beginPath();
-        ctx.arc(px, py, b.radius - 0.5, 0, Math.PI * 2);
+        ctx.arc(px, py, ballRadius - 0.5, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
         ctx.lineWidth = 1.2;
         ctx.stroke();
@@ -1499,26 +1414,26 @@ export default function PoolTable({
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const stripeHighlight = ctx.createRadialGradient(
-          px - b.radius * 0.32,
-          py - b.radius * 0.34,
+          px - ballRadius * 0.32,
+          py - ballRadius * 0.34,
           0,
-          px - b.radius * 0.16,
-          py - b.radius * 0.18,
-          b.radius * 0.55
+          px - ballRadius * 0.16,
+          py - ballRadius * 0.18,
+          ballRadius * 0.55
         );
         stripeHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.42)');
         stripeHighlight.addColorStop(0.35, 'rgba(255, 255, 255, 0.12)');
         stripeHighlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
         ctx.fillStyle = stripeHighlight;
         ctx.beginPath();
-        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+        ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       } else {
         // Solid or Cue Ball: base is filled with premium 3D radial color gradient
         ctx.beginPath();
-        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
-        ctx.fillStyle = getBallBaseGradient(b.color, b.radius);
+        ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
+        ctx.fillStyle = getBallBaseGradient(b.color, ballRadius);
         ctx.fill();
 
         // Add a subtle dark rim for stronger depth on solids/cue
@@ -1530,12 +1445,12 @@ export default function PoolTable({
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         const whiteGlare = ctx.createRadialGradient(
-          px - b.radius * 0.34,
-          py - b.radius * 0.28,
+          px - ballRadius * 0.34,
+          py - ballRadius * 0.28,
           0,
-          px - b.radius * 0.26,
-          py - b.radius * 0.24,
-          b.radius * 0.38
+          px - ballRadius * 0.26,
+          py - ballRadius * 0.24,
+          ballRadius * 0.38
         );
         whiteGlare.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
         whiteGlare.addColorStop(0.18, 'rgba(255, 255, 255, 0.26)');
@@ -1543,7 +1458,7 @@ export default function PoolTable({
         whiteGlare.addColorStop(1, 'rgba(255, 255, 255, 0)');
         ctx.fillStyle = whiteGlare;
         ctx.beginPath();
-        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+        ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
 
@@ -1552,7 +1467,7 @@ export default function PoolTable({
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
         ctx.lineWidth = 0.9;
         ctx.beginPath();
-        ctx.arc(px, py, b.radius - 0.6, 0, Math.PI * 2);
+        ctx.arc(px, py, ballRadius - 0.6, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
       }
@@ -1573,8 +1488,8 @@ export default function PoolTable({
 
           // If facing the camera, draw it
           if (wz > 0) {
-            const spotX = px + wx * b.radius;
-            const spotY = py + wy * b.radius;
+            const spotX = px + wx * ballRadius;
+            const spotY = py + wy * ballRadius;
             const spotSize = 1.62 * wz; // scale size based on 3D depth to look rounded
             if (spotSize > 0.25) {
               // Shaded measle-dots for supreme realistic integration under light
@@ -1598,12 +1513,12 @@ export default function PoolTable({
       // 3D SPHERICAL SHADING & VEILS OF THE TABLE REFLECTIONS
       // Overhead specular spot + Ambient green felt glow reflecting upwards onto the bottom of the ball
       const sphereShader = ctx.createRadialGradient(
-        px - b.radius * 0.4,
-        py - b.radius * 0.4,
+        px - ballRadius * 0.4,
+        py - ballRadius * 0.4,
         0.5,
-        px - b.radius * 0.15,
-        py - b.radius * 0.15,
-        b.radius
+        px - ballRadius * 0.15,
+        py - ballRadius * 0.15,
+        ballRadius
       );
       sphereShader.addColorStop(0, 'rgba(255, 255, 255, 0.85)'); // Hot shiny specular point from overhead light source
       sphereShader.addColorStop(0.22, 'rgba(255, 255, 255, 0.38)'); // Sphere curve transition
@@ -1612,14 +1527,14 @@ export default function PoolTable({
       sphereShader.addColorStop(1, 'rgba(16, 185, 129, 0.18)'); // Soft, pristine green-felt bouncing reflection!
 
       ctx.beginPath();
-      ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+      ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
       ctx.fillStyle = sphereShader;
       ctx.fill();
 
       // EXTRA DUAL SPECULAR LIGHTREFLECTION GLINT (Professional "overhead tube light glass-reflection" effect)
       // This is a thin white pill capsule that adds enormous realistic gloss factor!
       ctx.save();
-      ctx.translate(px - b.radius * 0.42, py - b.radius * 0.42);
+      ctx.translate(px - ballRadius * 0.42, py - ballRadius * 0.42);
       ctx.rotate(-Math.PI * 0.25);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
       ctx.beginPath();
@@ -1630,17 +1545,17 @@ export default function PoolTable({
       // Second soft point light to give volume depth
       ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.beginPath();
-      ctx.arc(px - b.radius * 0.1, py - b.radius * 0.58, 1.2, 0, Math.PI * 2);
+      ctx.arc(px - ballRadius * 0.1, py - ballRadius * 0.58, 1.2, 0, Math.PI * 2);
       ctx.fill();
 
       // Additional Secondary Sharp Backlight Glare Crescent (For high polished resin look)
-      const secondaryGlare = ctx.createLinearGradient(px - b.radius, py - b.radius, px + b.radius, py + b.radius);
+      const secondaryGlare = ctx.createLinearGradient(px - ballRadius, py - ballRadius, px + ballRadius, py + ballRadius);
       secondaryGlare.addColorStop(0, 'rgba(255, 255, 255, 0)');
       secondaryGlare.addColorStop(0.8, 'rgba(255, 255, 255, 0)');
       secondaryGlare.addColorStop(1, 'rgba(255, 255, 255, 0.35)'); // bottom right crescent glare
       
       ctx.beginPath();
-      ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+      ctx.arc(px, py, ballRadius, 0, Math.PI * 2);
       ctx.fillStyle = secondaryGlare;
       ctx.fill();
 
@@ -1659,8 +1574,8 @@ export default function PoolTable({
           const wz = sign * uz[2];
 
           if (wz > 0.15) {
-            const badgeX = px + wx * b.radius * 0.92; // shift to follow sphere curvature perfectly
-            const badgeY = py + wy * b.radius * 0.92;
+            const badgeX = px + wx * ballRadius * 0.92; // shift to follow sphere curvature perfectly
+            const badgeY = py + wy * ballRadius * 0.92;
             
             // Text orientation in screen space: derived from local upper axis uy
             const textAngle = Math.atan2(uy[1], uy[0]) - Math.PI / 2;
@@ -3014,281 +2929,23 @@ export default function PoolTable({
     setIsScratchPlacing(false);
   };
 
-  const standardBallsList = [
-    { id: 1, number: 1, type: 'solid', color: '#CFAF30', nameAr: 'الصفراء المصمتة', nameEn: 'Yellow Solid' },
-    { id: 2, number: 2, type: 'solid', color: '#1B4CA7', nameAr: 'الزرقاء المصمتة', nameEn: 'Blue Solid' },
-    { id: 3, number: 3, type: 'solid', color: '#B12724', nameAr: 'الحمراء المصمتة', nameEn: 'Red Solid' },
-    { id: 4, number: 4, type: 'solid', color: '#5F3E9C', nameAr: 'البنفسجية المصمتة', nameEn: 'Purple Solid' },
-    { id: 5, number: 5, type: 'solid', color: '#C86414', nameAr: 'البرتقالية المصمتة', nameEn: 'Orange Solid' },
-    { id: 6, number: 6, type: 'solid', color: '#0F7B4D', nameAr: 'الخضراء المصمتة', nameEn: 'Green Solid' },
-    { id: 7, number: 7, type: 'solid', color: '#7A1E2A', nameAr: 'العنابية المصمتة', nameEn: 'Maroon Solid' },
-    { id: 8, number: 8, type: 'black', color: '#111111', nameAr: 'السوداء 8', nameEn: 'Black 8-Ball' },
-    { id: 9, number: 9, type: 'stripe', color: '#D7B037', nameAr: 'الصفراء المخططة', nameEn: 'Yellow Stripe' },
-    { id: 10, number: 10, type: 'stripe', color: '#4A76C8', nameAr: 'الزرقاء المخططة', nameEn: 'Blue Stripe' },
-    { id: 11, number: 11, type: 'stripe', color: '#D45851', nameAr: 'الحمراء المخططة', nameEn: 'Red Stripe' },
-    { id: 12, number: 12, type: 'stripe', color: '#9D6FD1', nameAr: 'البنفسجية المخططة', nameEn: 'Purple Stripe' },
-    { id: 13, number: 13, type: 'stripe', color: '#D28D3E', nameAr: 'البرتقالية المخططة', nameEn: 'Orange Stripe' },
-    { id: 14, number: 14, type: 'stripe', color: '#3CA972', nameAr: 'الخضراء المخططة', nameEn: 'Green Stripe' },
-    { id: 15, number: 15, type: 'stripe', color: '#8A1A24', nameAr: 'العنابية المخططة', nameEn: 'Maroon Stripe' },
-  ];
-
-  const myPlayerObj = roomState.players.find((p) => p.id === myPlayerId);
-  const mySide = myPlayerObj?.side;
-
-  const renderBallBadge = (ball: typeof standardBallsList[0]) => {
-    const isPocketed = roomState.balls.find((b) => b.id === ball.id)?.isPocketed ?? false;
-    return (
-      <div 
-        key={ball.id} 
-        className="relative flex flex-col items-center group cursor-help"
-        title={`${ball.nameEn} - ${isPocketed ? 'Pocketed' : 'On Table'}`}
-      >
-        <div 
-          className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center relative transition-all hover:scale-110 shadow-lg select-none overflow-hidden ${
-            isPocketed ? 'opacity-25 grayscale-[30%] scale-90 border border-slate-800' : 'opacity-100'
-          }`}
-          style={{
-            background: ball.type === 'stripe' 
-              ? `linear-gradient(135deg, #ffffff 18%, ${ball.color} 18%, ${ball.color} 82%, #fafaf9 82%)`
-              : `radial-gradient(circle at 30% 30%, ${ball.color} 30%, #000000 120%)`,
-            boxShadow: isPocketed 
-              ? 'none' 
-              : 'inset -2px -2px 6px rgba(0,0,0,0.65), 0 3px 6px rgba(0,0,0,0.45)',
-          }}
-        >
-          {/* Spherizing 3D shade overlay for striped balls */}
-          {ball.type === 'stripe' && !isPocketed && (
-            <div className="absolute inset-0 rounded-full pointer-events-none"
-              style={{
-                background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25) 0%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.55) 100%)',
-              }}
-            />
-          )}
-
-          {/* Golden metallic rim surrounding the container */}
-          {!isPocketed && (
-            <div className="absolute inset-0 rounded-full border border-yellow-500/20 pointer-events-none" />
-          )}
-
-          {/* Core sphere specular hot point reflection */}
-          {!isPocketed && (
-            <div className="absolute top-0.5 left-1 w-2 h-1 bg-white/45 rounded-full rotate-[-15deg] pointer-events-none" />
-          )}
-          
-          {/* Centered number wrapper - styled with gold-bordered elegant billiard number face */}
-          <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#fffaeb] border border-yellow-600/30 flex items-center justify-center shadow-xs z-10">
-            <span className="text-[7.5px] sm:text-[8.5px] font-black text-slate-900 font-mono leading-none">
-              {ball.number}
-            </span>
-          </div>
-
-          {/* Pocketed check overlay */}
-          {isPocketed && (
-            <div className="absolute inset-0 rounded-full bg-slate-950/45 flex items-center justify-center font-bold text-emerald-400 text-xs z-20">
-              ✓
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div ref={containerRef} className="flex flex-col items-center bg-slate-900 border border-slate-700/60 rounded-xl overflow-hidden p-4 shadow-xl relative">
-      {/* Upgraded Premium Match HUD Header (English Only, High density, no labels) */}
-      {(() => {
-        const myPlayerObjMatched = roomState.players.find((p) => p.id === myPlayerId);
-        const mySideMatched = myPlayerObjMatched?.side;
-        const opponentObjMatched = roomState.players.find((p) => p.id !== myPlayerId);
-        const opponentSideMatched = opponentObjMatched?.side;
-
-        const pocketedSolidsMatched = standardBallsList.filter(ball => {
-          const tableBall = roomState.balls.find(b => b.id === ball.id);
-          return tableBall && tableBall.isPocketed && ball.type === 'solid';
-        });
-
-        const pocketedStripesMatched = standardBallsList.filter(ball => {
-          const tableBall = roomState.balls.find(b => b.id === ball.id);
-          return tableBall && tableBall.isPocketed && ball.type === 'stripe';
-        });
-
-        let myPocketedMatched = [];
-        let opponentPocketedMatched = [];
-
-        if (mySideMatched === 'solids') {
-          myPocketedMatched = pocketedSolidsMatched;
-          opponentPocketedMatched = pocketedStripesMatched;
-        } else if (mySideMatched === 'stripes') {
-          myPocketedMatched = pocketedStripesMatched;
-          opponentPocketedMatched = pocketedSolidsMatched;
-        } else {
-          // Open table default grouping: show solids and stripes respectively
-          myPocketedMatched = pocketedSolidsMatched;
-          opponentPocketedMatched = pocketedStripesMatched;
-        }
-
-        const timerVal = roomState.turnTimer ?? 60;
-        const timerPercentage = (timerVal / 60) * 100;
-        
-        let timerColorClass = "bg-emerald-500 shadow-[0_0_8px_#10b981]";
-        let timerTextClass = "text-emerald-400";
-        if (timerVal <= 10) {
-          timerColorClass = "bg-rose-500 animate-pulse shadow-[0_0_12px_#ef4444]";
-          timerTextClass = "text-rose-400 font-extrabold animate-pulse";
-        } else if (timerVal <= 20) {
-          timerColorClass = "bg-amber-500 shadow-[0_0_8px_#f59e0b]";
-          timerTextClass = "text-amber-400";
-        }
-
-        return (
-          <div className="w-full bg-slate-950/80 border border-slate-800/60 rounded-xl p-3 mb-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
-            
-            {/* Left Side: You Profile & Your Pocketed Balls Group + Cue Contact Selector */}
-            <div className={`px-4 py-2 rounded-lg border flex items-center gap-4 transition-all ${
-              isMyTurn 
-                ? 'bg-cyan-500/[0.04] border-cyan-500/35 shadow-[0_0_15px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/20' 
-                : 'bg-slate-900/40 border-slate-850'
-            }`}>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">YOU</span>
-                <span className="text-xs font-black text-slate-200 tracking-wider font-mono flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${isMyTurn ? 'bg-cyan-400 animate-ping' : 'bg-slate-600'}`} />
-                  {myPlayerObjMatched?.username || 'You'}
-                </span>
-                {mySideMatched ? (
-                  <span className="text-[9px] uppercase font-bold text-slate-400 font-mono">
-                    {mySideMatched}
-                  </span>
-                ) : (
-                  <span className="text-[9px] uppercase font-bold text-amber-500/80 font-mono">
-                    OPEN TABLE
-                  </span>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-1 bg-slate-950/90 px-2 py-1 rounded border border-slate-900 min-h-[34px]">
-                {myPocketedMatched.length > 0 ? (
-                  myPocketedMatched.map(renderBallBadge)
-                ) : (
-                  <span className="text-[8px] font-mono text-slate-600">NO OBJECTS SUNK</span>
-                )}
-              </div>
-
-              {/* Dynamic Compact 3D Draggable Spin Contact Selector */}
-              <div 
-                className="relative w-11 h-11 rounded-full bg-radial from-white via-slate-100 to-slate-200 shadow-[inset_-2px_-2px_5px_rgba(0,0,0,0.5),0_2px_5px_rgba(0,0,0,0.4)] border border-slate-400/40 flex items-center justify-center cursor-crosshair select-none shrink-0 group active:scale-105 transition-all"
-                title="Cue Ball Spin Contact Point (English)"
-                onPointerDown={(e) => {
-                  if (!isMyTurn || isAnimating) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const handlePointerMoveLocal = (event: PointerEvent | MouseEvent) => {
-                    const x = event.clientX - rect.left;
-                    const y = event.clientY - rect.top;
-                    const r = rect.width / 2;
-                    let dx = (x - r) / r;
-                    let dy = (y - r) / r;
-                    const dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist > 1.0) {
-                      dx /= dist;
-                      dy /= dist;
-                    }
-                    setSpinX(dx);
-                    setSpinY(-dy);
-                  };
-                  handlePointerMoveLocal(e as any);
-                  
-                  const handlePointerUpLocal = () => {
-                    window.removeEventListener('pointermove', handlePointerMoveLocal as any);
-                    window.removeEventListener('pointerup', handlePointerUpLocal);
-                  };
-                  window.addEventListener('pointermove', handlePointerMoveLocal as any);
-                  window.addEventListener('pointerup', handlePointerUpLocal);
-                }}
-              >
-                <div className="absolute inset-0 rounded-full border border-dashed border-slate-400/10 pointer-events-none" />
-                <div className="absolute h-full w-[0.5px] bg-slate-400/20 pointer-events-none" />
-                <div className="absolute w-full h-[0.5px] bg-slate-400/20 pointer-events-none" />
-                <div 
-                  className="absolute w-2.5 h-2.5 bg-red-650 rounded-full border border-white shadow-[0_0_4px_#ef4444] transform -translate-x-1/2 -translate-y-1/2 animate-pulse"
-                  style={{
-                    left: `${22 + spinX * 22}px`,
-                    top: `${22 - spinY * 22}px`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Center: Upgraded Design Neon Turn Timer */}
-            <div className="flex flex-col items-center justify-center bg-slate-1000 border border-slate-850 px-6 py-2 rounded-xl relative shadow-lg min-w-[150px]">
-              <div className={`absolute -inset-[1px] rounded-xl opacity-15 blur-sm transition-colors ${
-                isMyTurn ? 'bg-cyan-500' : 'bg-amber-500'
-              }`} />
-              
-              <span className="text-[8px] tracking-widest text-slate-400 font-mono uppercase mb-0.5 z-10">
-                {isMyTurn ? 'YOUR SHOT' : 'OPPONENT TURN'}
-              </span>
-              <span className={`text-xl sm:text-2xl font-black font-mono tracking-tight leading-none z-10 ${timerTextClass}`}>
-                {timerVal}s
-              </span>
-              <div className="w-20 bg-slate-900 h-1 rounded-full overflow-hidden border border-slate-800/60 mt-1.5 z-10">
-                <div 
-                  className={`h-full transition-all duration-1000 ${timerColorClass}`}
-                  style={{ width: `${timerPercentage}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Right Side: Opponent Profile & Opponent's Pocketed Balls Group or Summon Bot */}
-            {roomState.players.length < 2 ? (
-              <div className="flex items-center gap-3 bg-slate-900/40 p-1.5 px-3 rounded-lg border border-slate-800">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[8px] uppercase font-bold text-slate-500 font-mono">OPPONENT</span>
-                  <span className="text-[10px] text-slate-400 leading-none">WAITING OPPONENT...</span>
-                </div>
-                <button
-                  onClick={() => onJoinAI?.('medium')}
-                  className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-[10px] rounded border border-amber-400 flex items-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.22)] animate-pulse transition-all cursor-pointer active:scale-95 shrink-0"
-                >
-                  <Bot className="w-3.5 h-3.5 fill-current" />
-                  استدعاء البوت للعب
-                </button>
-              </div>
-            ) : (
-              <div className={`px-4 py-2 rounded-lg border flex items-center gap-3 transition-all ${
-                !isMyTurn 
-                  ? 'bg-amber-500/[0.04] border-amber-500/35 shadow-[0_0_15px_rgba(234,179,8,0.15)] ring-1 ring-amber-500/20' 
-                  : 'bg-slate-900/40 border-slate-850'
-              }`}>
-                <div className="flex flex-col gap-0.5 items-end text-right">
-                  <span className="text-[9px] uppercase font-bold text-slate-500 font-mono">OPPONENT</span>
-                  <span className="text-xs font-black text-slate-200 tracking-wider font-mono flex items-center gap-1.5">
-                    {opponentObjMatched ? opponentObjMatched.username : 'AI Bot'}
-                    <span className={`w-2 h-2 rounded-full ${!isMyTurn ? 'bg-amber-400 animate-ping' : 'bg-slate-600'}`} />
-                  </span>
-                  {opponentSideMatched ? (
-                    <span className="text-[9px] uppercase font-bold text-slate-400 font-mono">
-                      {opponentSideMatched}
-                    </span>
-                  ) : (
-                    <span className="text-[9px] uppercase font-bold text-amber-500/80 font-mono">
-                      OPEN TABLE
-                    </span>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-1 bg-slate-950/90 px-2 py-1 rounded border border-slate-900 min-h-[34px]">
-                  {opponentPocketedMatched.length > 0 ? (
-                    opponentPocketedMatched.map(renderBallBadge)
-                  ) : (
-                    <span className="text-[8px] font-mono text-slate-600">NO OBJECTS SUNK</span>
-                  )}
-                </div>
-              </div>
-            )}
-
-          </div>
-        );
-      })()}
+      <PoolHUD
+        roomState={roomState}
+        myPlayerId={myPlayerId}
+        isMyTurn={isMyTurn}
+        isAnimating={isAnimating}
+        spinX={spinX}
+        setSpinX={setSpinX}
+        spinY={spinY}
+        setSpinY={setSpinY}
+        onJoinAI={onJoinAI}
+        isScratchPlacing={isScratchPlacing}
+        isPlacementInvalid={isPlacementInvalid()}
+        placementErrorMessage={placementErrorMessage()}
+        handleConfirmPlacement={handleConfirmPlacement}
+      />
 
       {/* Billiard Table Area (Full Width Canvas Center Stage) */}
       <div className="w-full mb-5 flex flex-col gap-3">
@@ -3305,139 +2962,6 @@ export default function PoolTable({
             style={{ touchAction: 'none', width: '100%', maxWidth: '800px', height: 'auto', aspectRatio: '2/1' }}
           />
         </div>
-
-        {/* Global Championship Pocketed Balls Returns Runway (Wood Rail Shelf Under the Table) */}
-        {(() => {
-          const pocketedList = standardBallsList.filter(ball => {
-            const tableBall = roomState.balls.find(b => b.id === ball.id);
-            return tableBall && tableBall.isPocketed;
-          }).sort((a, b) => a.id - b.id);
-
-          return (
-            <div className="w-full max-w-[800px] mx-auto bg-amber-950 border-4 border-amber-900 rounded-lg p-2 shadow-2xl relative">
-              {/* Inner dark runway with velvet shadow */}
-              <div className="w-full bg-slate-950/90 border border-amber-950 rounded-md p-2 min-h-[56px] flex flex-wrap items-center justify-center gap-3 shadow-[inset_0_4px_10px_rgba(0,0,0,0.9)] relative overflow-hidden">
-                {/* Visual Felt Lines to simulate bottom runway tube rails */}
-                <div className="absolute left-0 right-0 h-[2px] bg-slate-900/40 top-[35%] pointer-events-none" />
-                <div className="absolute left-0 right-0 h-[2px] bg-slate-900/40 bottom-[35%] pointer-events-none" />
-
-                {pocketedList.length > 0 ? (
-                  pocketedList.map((ball) => (
-                    <div 
-                      key={ball.id} 
-                      className="relative flex flex-col items-center group transform active:scale-95 transition-all"
-                      title={`${ball.nameEn} - Pocketed`}
-                    >
-                      {/* Realistic Ball Sphere */}
-                      <div 
-                        className="w-8 h-8 rounded-full flex items-center justify-center relative shadow-lg transition-transform hover:scale-110"
-                        style={{
-                          background: ball.type === 'stripe' 
-                            ? `linear-gradient(to right, #fafaf9 22%, ${ball.color} 22%, ${ball.color} 78%, #fafaf9 78%)`
-                            : `radial-gradient(circle at 35% 35%, ${ball.color} 40%, #000000 110%)`,
-                          boxShadow: 'inset -2px -2px 6px rgba(0,0,0,0.8), 0 3px 6px rgba(0,0,0,0.5)',
-                        }}
-                      >
-                        {/* Highlights */}
-                        <div className="absolute top-0.5 left-1 w-2 h-1 bg-white/45 rounded-full rotate-[-15deg] pointer-events-none" />
-                        
-                        {/* White circular plate with number */}
-                        <div className="w-4.5 h-4.5 rounded-full bg-[#fefcbd] border border-black/10 flex items-center justify-center shadow-inner z-10 select-none">
-                          <span className="text-[9px] font-black text-slate-900 font-mono leading-none">
-                            {ball.number}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-[10px] font-medium text-slate-500 italic tracking-wider flex items-center gap-2 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-700 animate-pulse" />
-                    Fallen balls runway is empty • Awaiting first pocket
-                  </div>
-                )}
-              </div>
-              
-              {/* Runway label badge */}
-              <div className="absolute -top-2.5 left-4 px-2 py-0.5 bg-amber-900 text-[8px] font-black text-amber-200 border border-amber-800 rounded uppercase font-mono tracking-wider shadow-md">
-                POCKETED BALLS RUNWAY
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Centered Premium Cue Ball Spin Controller */}
-      <div className="w-full flex flex-col items-center bg-slate-950 p-4 rounded-lg border border-slate-800 shadow-xl gap-4">
-        {isScratchPlacing ? (
-          (() => {
-            const invalidPlacing = isPlacementInvalid();
-            const errorMessage = placementErrorMessage();
-            return (
-              <button
-                onClick={handleConfirmPlacement}
-                disabled={invalidPlacing}
-                className={`w-full max-w-sm py-3 px-6 text-white font-bold font-mono rounded-lg transition-all shadow-lg text-xs flex flex-col items-center justify-center gap-1.5 ${
-                  invalidPlacing 
-                    ? 'bg-slate-800 border border-slate-700 text-slate-400 cursor-not-allowed' 
-                    : 'bg-red-650 hover:bg-red-700 focus:ring-2 focus:ring-red-400 cursor-pointer animate-pulse'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <RotateCcw className="w-4 h-4" /> 
-                  {invalidPlacing ? 'INVALID PLACEMENT' : 'CONFIRM CUE PLACEMENT'}
-                </span>
-                {invalidPlacing && errorMessage && (
-                  <span className="text-[10px] text-slate-300/90">{errorMessage}</span>
-                )}
-              </button>
-            );
-          })()
-        ) : (
-          <div className="flex flex-col gap-4 w-full">
-            {/* Status Feedback Indicator */}
-            <div className="w-full flex justify-center bg-slate-900/60 py-2.5 px-4 rounded-md border border-slate-800/40">
-              {!isMyTurn && roomState.status === 'playing' && (
-                <span className="text-xs font-bold text-slate-400 tracking-wide font-mono animate-pulse flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-slate-500 animate-ping" />
-                  WAITING FOR OPPONENT...
-                </span>
-              )}
-              {roomState.status !== 'playing' && (
-                <span className="text-xs font-bold text-slate-500 tracking-wide font-mono italic animate-pulse flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-slate-600" />
-                  WAITING RESUMPTION...
-                </span>
-              )}
-              {roomState.scratchOccurred && (
-                <span className="text-xs font-black tracking-wide flex items-center gap-1.5 text-white">
-                  <span className={`w-2.5 h-2.5 rounded-full shadow-lg ${roomState.ballInHandRestriction === 'behind_head_string' ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400 animate-ping'}`} />
-                  {isMyTurn ? (
-                    roomState.ballInHandRestriction === 'behind_head_string' ?
-                      'BREAK FOUL: Place the cue ball behind the head string.' :
-                      'BALL-IN-HAND: Place the cue ball anywhere.'
-                  ) : (
-                    roomState.ballInHandRestriction === 'behind_head_string' ?
-                      'Opponent has ball-in-hand behind the head string.' :
-                      'Opponent has ball-in-hand anywhere.'
-                  )}
-                </span>
-              )}
-              {!roomState.scratchOccurred && isMyTurn && !isAnimating && roomState.status === 'playing' && (
-                <span className="text-xs font-black text-emerald-400 tracking-wide animate-pulse flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-ping" />
-                  YOUR TURN • Drag cue ball back to aim and release to shoot
-                </span>
-              )}
-              {isAnimating && (
-                <span className="text-xs font-bold text-amber-400 tracking-wide font-mono animate-bounce flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                  BALLS IN MOTION...
-                </span>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

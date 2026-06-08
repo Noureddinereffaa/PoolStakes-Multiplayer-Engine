@@ -1,5 +1,6 @@
 import { ArrowLeft, BookOpen, ShieldCheck, Sparkles, Trophy, Wallet } from 'lucide-react';
 import React from 'react';
+import { motion } from 'framer-motion';
 
 interface RulesPageProps {
   onNavigateBack: () => void;
@@ -93,7 +94,14 @@ export default function RulesPage({ onNavigateBack, onNavigateDashboard, languag
   const text = copy[language];
 
   return (
-    <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 sm:py-10">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.3 }}
+      dir={language === 'ar' ? 'rtl' : 'ltr'} 
+      className="flex-1 w-full max-w-6xl mx-auto px-4 py-8 sm:py-10"
+    >
       <div className="flex justify-end mb-4">
         <button
           onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
@@ -191,6 +199,6 @@ export default function RulesPage({ onNavigateBack, onNavigateDashboard, languag
           </section>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -5,7 +5,7 @@ import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreat
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
 
-export function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join' }>) {
+export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join' }>) {
   const { roomId, username, stake } = msg;
   const room = getOrCreateRoom(roomId, `Stakes match: $${stake}`, stake);
 
@@ -14,7 +14,7 @@ export function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'j
   }
   clientsByRoom.get(roomId)!.add(ws);
 
-  const walletUser = ensureLaravelUser(username);
+  const walletUser = await ensureLaravelUser(username);
   const resolvedPlayerId = walletUser.id;
   playerRoomMap.set(ws, { roomId, playerId: resolvedPlayerId });
 
@@ -41,7 +41,7 @@ export function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'j
     room.status = 'ready';
     room.log.push('Players joined! Validating and locking stakes in secure Laravel wallet escrow...');
 
-    const escrowResult = lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock', {
+    const escrowResult = await lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock', {
       roomName: room.name,
       player1Id: room.players[0].id,
       player2Id: room.players[1].id,
@@ -61,7 +61,7 @@ export function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'j
   broadcastRoom(roomId);
 }
 
-export function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, { type: 'set_ai_opponent' }>) {
+export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, { type: 'set_ai_opponent' }>) {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId } = mapping;
@@ -72,7 +72,7 @@ export function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, {
   room.aiDifficulty = diffLevel;
   room.commissionRate = 0.05;
 
-  const userWallet = ensureLaravelUser(room.players[0].username);
+  const userWallet = await ensureLaravelUser(room.players[0].username);
   if (userWallet.balance < room.stake) {
     room.log.push(`AI match blocked: ${userWallet.username} has insufficient balance for a $${room.stake} stake.`);
     room.status = 'waiting';
@@ -82,28 +82,25 @@ export function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, {
 
   room.players[0].walletBalance = userWallet.balance;
 
-  const aiWallet = getAiUser();
-  ensureMinimumBalance(aiWallet, 10000.0);
+  const aiWallet = await getAiUser();
+  await ensureMinimumBalance(aiWallet.id, 10000.0);
 
   const aiPlayer = createAiPlayer(diffLevel, room.stake);
   room.players.push(aiPlayer);
   room.log.push(`AI Opponent (${diffLevel.toUpperCase()} Bot) has accepted the stakes!`);
   room.status = 'ready';
 
-  const mockHash = 'SHA256x' + Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase();
-  const escrowResult = lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock (AI match)', {
+  const escrowResult = await lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock (AI match)', {
     roomName: room.name,
     player1Id: userWallet.id,
     player2Id: aiWallet.id,
     stake: room.stake,
-    difficulty: diffLevel,
-    escrowHash: mockHash
+    difficulty: diffLevel
   });
 
   if (escrowResult.success) {
-    room.escrowHash = mockHash;
     room.log.push(`🔒 ESCROW SECURED: Verified by peer-signing. Tx ID: ${escrowResult.escrowId}`);
-    room.log.push(`🛡️ Integrity Hash: ${mockHash}`);
+    room.log.push(`🛡️ Integrity Hash: ${escrowResult.escrowHash}`);
     room.log.push(`Match active! Current turn: ${room.players[0].username}. Let the high-stakes game begin!`);
   } else {
     room.players.pop();

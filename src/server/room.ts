@@ -1,18 +1,26 @@
+import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 import { RoomState, Player } from '../types';
-import { LaravelUser, laravelDb, logLaravelApi } from './laravel';
+import { logLaravelApi } from './laravel';
 import { broadcastToAllWebSockets } from './state';
 
-export function ensureLaravelUser(username: string): LaravelUser {
-  let walletUser = laravelDb.users.find(u => u.username === username);
-  if (!walletUser) {
-    const generatedId = `usr-${Date.now()}`;
-    walletUser = { id: generatedId, username, balance: 500.0 };
-    laravelDb.users.push(walletUser);
+const prisma = new PrismaClient();
+
+export async function ensureLaravelUser(username: string) {
+  let user = await prisma.user.findUnique({ where: { username } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        username,
+        password: 'default_password',
+        balance: 500.0
+      }
+    });
   }
-  return walletUser;
+  return user;
 }
 
-export function createPlayerFromUser(user: LaravelUser, stake: number): Player {
+export function createPlayerFromUser(user: any, stake: number): Player {
   return {
     id: user.id,
     username: user.username,
@@ -22,17 +30,24 @@ export function createPlayerFromUser(user: LaravelUser, stake: number): Player {
   };
 }
 
-export function ensureMinimumBalance(user: LaravelUser, minimum: number) {
-  if (user.balance < minimum) {
-    user.balance = minimum;
+export async function ensureMinimumBalance(userId: string, minimum: number) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (user && user.balance < minimum) {
+    await prisma.user.update({ where: { id: userId }, data: { balance: minimum } });
   }
 }
 
-export function getAiUser(): LaravelUser {
-  let ai = laravelDb.users.find(u => u.id === 'ai-bot');
+export async function getAiUser() {
+  let ai = await prisma.user.findUnique({ where: { id: 'ai-bot' } });
   if (!ai) {
-    ai = { id: 'ai-bot', username: 'Authoritative_AI_Bot', balance: 10000.0 };
-    laravelDb.users.push(ai);
+    ai = await prisma.user.create({
+      data: {
+        id: 'ai-bot',
+        username: 'Authoritative_AI_Bot',
+        password: 'ai-password',
+        balance: 10000.0
+      }
+    });
   }
   return ai;
 }
@@ -47,50 +62,54 @@ export function createAiPlayer(diffLevel: string, stake: number): Player {
   };
 }
 
-export function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any) {
-  const player1 = laravelDb.users.find(u => u.id === room.players[0]?.id);
-  const player2 = laravelDb.users.find(u => u.id === room.players[1]?.id);
-  if (!player1 || !player2) {
-    const response = { success: false, message: 'One or both escrow participants are missing.' };
+export async function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const p1 = await tx.user.findUnique({ where: { id: room.players[0]?.id } });
+      const p2 = await tx.user.findUnique({ where: { id: room.players[1]?.id } });
+
+      if (!p1 || !p2) throw new Error('One or both escrow participants are missing.');
+      if (p1.balance < room.stake || p2.balance < room.stake) throw new Error('Insufficient funds in one or both player wallets.');
+
+      const updatedP1 = await tx.user.update({ where: { id: p1.id }, data: { balance: { decrement: room.stake } } });
+      const updatedP2 = await tx.user.update({ where: { id: p2.id }, data: { balance: { decrement: room.stake } } });
+
+      const escrow = await tx.escrow.create({
+        data: {
+          roomName: room.name,
+          player1Id: p1.id,
+          player2Id: p2.id,
+          amountEach: room.stake,
+          status: 'locked'
+        }
+      });
+
+      return { escrowId: escrow.id, balances: { [p1.id]: updatedP1.balance, [p2.id]: updatedP2.balance } };
+    });
+
+    room.players[0].walletBalance = result.balances[room.players[0].id];
+    room.players[1].walletBalance = result.balances[room.players[1].id];
+
+    const serverSeed = crypto.randomBytes(32).toString('hex');
+    const escrowHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
+    room.serverSeed = serverSeed;
+    room.escrowHash = escrowHash;
+    room.log.push(`Escrow successfully locked: Balance check verified. Transaction ID: ${result.escrowId}`);
+    room.status = 'playing';
+    room.currentTurn = room.players[0].id;
+
+    const response = {
+      success: true,
+      escrowId: result.escrowId,
+      escrowHash,
+      lockedAmount: room.stake * 2,
+      balances: result.balances
+    };
     logLaravelApi(broadcastToAllWebSockets, apiName, reqPayload, response);
-    return { success: false, message: response.message };
+
+    return { success: true, escrowId: result.escrowId, escrowHash };
+  } catch (error: any) {
+    logLaravelApi(broadcastToAllWebSockets, apiName, reqPayload, { success: false, message: error.message });
+    return { success: false, message: error.message };
   }
-
-  if (player1.balance < room.stake || player2.balance < room.stake) {
-    const response = { success: false, message: 'Insufficient funds in one or both player wallets.' };
-    logLaravelApi(broadcastToAllWebSockets, apiName, reqPayload, response);
-    return { success: false, message: response.message };
-  }
-
-  player1.balance -= room.stake;
-  player2.balance -= room.stake;
-  room.players[0].walletBalance = player1.balance;
-  room.players[1].walletBalance = player2.balance;
-
-  const escrowId = `escrow-${Math.floor(Math.random() * 89999 + 10000)}`;
-  const escrowHash = `HASH-${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase()}`;
-  laravelDb.escrows.push({
-    escrowId,
-    roomName: room.name,
-    player1Id: player1.id,
-    player2Id: player2.id,
-    amountEach: room.stake,
-    status: 'locked'
-  });
-
-  room.escrowHash = escrowHash;
-  room.log.push(`Escrow successfully locked: Balance check verified. Transaction ID: ${escrowId}`);
-  room.status = 'playing';
-  room.currentTurn = room.players[0].id;
-
-  const response = {
-    success: true,
-    escrowId,
-    escrowHash,
-    lockedAmount: room.stake * 2,
-    balances: { [player1.id]: player1.balance, [player2.id]: player2.balance }
-  };
-  logLaravelApi(broadcastToAllWebSockets, apiName, reqPayload, response);
-
-  return { success: true, escrowId, escrowHash };
 }

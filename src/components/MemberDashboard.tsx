@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { RoomState, MatchHistory as MatchType } from '../types';
 import { ArrowRight, Trophy, Wallet, Users, Cpu, Play, Shield, Target, TrendingUp, ArrowDownRight, ArrowUpRight, X } from 'lucide-react';
 import { Lang } from '../i18n';
+import { motion, AnimatePresence } from 'framer-motion';
 import MatchHistory from './MatchHistory';
 
 interface Props {
@@ -75,7 +76,7 @@ export default function MemberDashboard({
         {/* ── WALLET OVERVIEW ── */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Balance card */}
-          <div className="sm:col-span-2 rounded-2xl border border-white/8 bg-[#12121a] p-5 relative overflow-hidden">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="sm:col-span-2 rounded-2xl border border-white/8 bg-[#12121a] p-5 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/8 rounded-full blur-3xl pointer-events-none" />
             <div className="text-xs text-slate-400 mb-1 flex items-center gap-1.5">
               <Wallet className="w-3.5 h-3.5 text-emerald-400" />
@@ -97,7 +98,7 @@ export default function MemberDashboard({
                 <ArrowUpRight className="w-3.5 h-3.5" /> {isAr ? 'سحب' : 'Withdraw'}
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Stats cards */}
           <StatCard icon={Trophy} color="amber" label={isAr ? 'انتصارات' : 'Wins'} value={String(wins)} sub={`${losses} ${isAr ? 'خسارة' : 'losses'}`} />
@@ -152,7 +153,7 @@ export default function MemberDashboard({
         {/* ── MATCHMAKING + PRACTICE ── */}
         <div className="grid lg:grid-cols-2 gap-5">
           {/* Host match */}
-          <div className="rounded-2xl border border-white/8 bg-[#12121a] p-5 relative overflow-hidden">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="rounded-2xl border border-white/8 bg-[#12121a] p-5 relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-emerald-500 to-cyan-500" />
             <h2 className="font-black text-white mb-1 flex items-center gap-2">
               ⚔️ {isAr ? 'استضافة مباراة' : 'Host Match'}
@@ -195,10 +196,10 @@ export default function MemberDashboard({
                 <Play className="w-4 h-4" /> {isAr ? 'إطلاق الغرفة' : 'Launch Room'}
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Practice bot */}
-          <div className="rounded-2xl border border-white/8 bg-[#12121a] p-5 relative overflow-hidden">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="rounded-2xl border border-white/8 bg-[#12121a] p-5 relative overflow-hidden">
             <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-amber-500 to-orange-500" />
             <h2 className="font-black text-white mb-1 flex items-center gap-2">
               🤖 {isAr ? 'تدريب مجاني' : 'Practice vs AI'}
@@ -234,7 +235,7 @@ export default function MemberDashboard({
                 <Cpu className="w-4 h-4" /> {isAr ? 'ابدأ التدريب (0 USDT)' : 'Enter Practice Arena (0 USDT)'}
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* ── LEADERBOARD + PROFILE ── */}

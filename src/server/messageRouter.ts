@@ -10,13 +10,13 @@ import {
   handleDisconnect
 } from './gameActions';
 
-export function routeWsMessage(ws: WebSocket, msg: SocketMessage) {
+export async function routeWsMessage(ws: WebSocket, msg: SocketMessage) {
   switch (msg.type) {
     case 'join':
-      handleJoin(ws, msg);
+      await handleJoin(ws, msg);
       break;
     case 'set_ai_opponent':
-      handleSetAiOpponent(ws, msg);
+      await handleSetAiOpponent(ws, msg);
       break;
     case 'preview_aim':
       handlePreviewAim(ws, msg);

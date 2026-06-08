@@ -1,45 +1,65 @@
 import { RoomState, Player, MatchHistory } from '../types';
 import { animatingRoomIds, clientsByRoom, broadcastRoom, matchLogs } from './state';
-import { laravelDb, logLaravelApi } from './laravel';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 import { simulatePhysicsStep, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y } from './physics';
 import { WebSocket } from 'ws';
 
-export function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string) {
+export async function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string) {
   room.status = 'gameover';
   room.winnerId = winner.id;
   room.log.push(`🏆 MATCH CONCLUDED! ${summaryMessage}`);
 
-  const esc = laravelDb.escrows.find(e => e.roomName === room.name && e.status === 'locked');
-  if (!esc) {
-    return;
+  let commission = 0;
+  let prize = 0;
+
+  try {
+    const esc = await prisma.escrow.findFirst({
+      where: { roomName: room.name, status: 'locked' }
+    });
+    if (!esc) return;
+
+    const totalPot = esc.amountEach * 2;
+    commission = Math.round(totalPot * 0.05 * 100) / 100;
+    prize = totalPot - commission;
+
+    const dbWinner = await prisma.$transaction(async (tx) => {
+      const updatedWinner = await tx.user.update({
+        where: { id: winner.id },
+        data: { balance: { increment: prize } }
+      });
+
+      await tx.escrow.update({
+        where: { id: esc.id },
+        data: { status: 'payout_completed' }
+      });
+
+      await tx.transaction.create({
+        data: {
+          escrowId: esc.id,
+          prize,
+          commission,
+          winnerId: winner.id,
+          loserId: loser.id
+        }
+      });
+      return updatedWinner;
+    });
+
+    winner.walletBalance = dbWinner.balance;
+    const dbLoser = await prisma.user.findUnique({ where: { id: loser.id } });
+    if (dbLoser) loser.walletBalance = dbLoser.balance;
+
+    room.log.push(`💰 Wallet balances updated via Prisma gateway secure callbacks!`);
+    room.log.push(`Winner: ${winner.username} receives prize of $${prize.toFixed(2)} (locked stakes pot minus $${commission.toFixed(2)} commission).`);
+    if (room.serverSeed) {
+      room.log.push(`🔑 PROVABLY FAIR REVEAL: Server Seed was ${room.serverSeed}`);
+      room.log.push(`You can verify that SHA256(Server Seed) matches the Integrity Hash shown at the start of the match.`);
+    }
+  } catch (error) {
+    console.error("Failed to process match payout:", error);
+    room.log.push("⚠️ Error processing payout.");
   }
-
-  const totalPot = esc.amountEach * 2;
-  const commission = Math.round(totalPot * 0.05 * 100) / 100;
-  const prize = totalPot - commission;
-
-  const dbWinner = laravelDb.users.find(u => u.id === winner.id);
-  const dbLoser = laravelDb.users.find(u => u.id === loser.id);
-
-  if (dbWinner) dbWinner.balance += prize;
-  esc.status = 'payout_completed';
-
-  const trxId = `trx-${Math.floor(Math.random() * 899999 + 100000)}`;
-  laravelDb.transactions.push({
-    id: trxId,
-    escrowId: esc.escrowId,
-    prize,
-    commission,
-    winnerId: winner.id,
-    loserId: loser.id,
-    timestamp: new Date().toISOString()
-  });
-
-  winner.walletBalance = dbWinner ? dbWinner.balance : winner.walletBalance;
-  if (dbLoser) loser.walletBalance = dbLoser.balance;
-
-  room.log.push(`💰 Wallet balances updated via Laravel platform gateway secure callbacks!`);
-  room.log.push(`Winner: ${winner.username} receives prize of $${prize.toFixed(2)} (locked stakes pot minus $${commission.toFixed(2)} commission).`);
 
   const hist: MatchHistory = {
     id: `match-${Date.now()}`,

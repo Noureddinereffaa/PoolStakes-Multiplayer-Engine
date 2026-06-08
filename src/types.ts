@@ -50,6 +50,7 @@ export interface RoomState {
   log: string[];
   aiDifficulty?: 'easy' | 'medium' | 'hard';
   escrowHash?: string;
+  serverSeed?: string;
   commissionRate?: number;
   turnTimer?: number; // active player turn timer in seconds (e.g., 40 to 0)
 }
