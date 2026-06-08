@@ -1,9 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState } from '../types';
-import PoolTable from './PoolTable';
-import { 
-  Lock, MessageSquare, Send, Copy, Trophy, Maximize, Minimize, RotateCcw, Volume2, VolumeX, Settings, X, 
-  ChevronLeft, ChevronRight, Smartphone, Monitor, Wifi, WifiOff, BatteryCharging, Battery
+import PoolTable, { PoolTableHandle } from './PoolTable';
+import {
+  Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot
 } from 'lucide-react';
 import { ProvablyFairVerify } from './ProvablyFairVerify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,415 +26,465 @@ interface ArenaPageProps {
   handleSendChat: (msg: string) => void;
 }
 
+const BALLS_META = [
+  { id: 1, number: 1, type: 'solid', color: '#CFAF30' },
+  { id: 2, number: 2, type: 'solid', color: '#1B4CA7' },
+  { id: 3, number: 3, type: 'solid', color: '#B12724' },
+  { id: 4, number: 4, type: 'solid', color: '#5F3E9C' },
+  { id: 5, number: 5, type: 'solid', color: '#C86414' },
+  { id: 6, number: 6, type: 'solid', color: '#0F7B4D' },
+  { id: 7, number: 7, type: 'solid', color: '#7A1E2A' },
+  { id: 8, number: 8, type: 'black', color: '#111111' },
+  { id: 9, number: 9, type: 'stripe', color: '#D7B037' },
+  { id: 10, number: 10, type: 'stripe', color: '#4A76C8' },
+  { id: 11, number: 11, type: 'stripe', color: '#D45851' },
+  { id: 12, number: 12, type: 'stripe', color: '#9D6FD1' },
+  { id: 13, number: 13, type: 'stripe', color: '#D28D3E' },
+  { id: 14, number: 14, type: 'stripe', color: '#3CA972' },
+  { id: 15, number: 15, type: 'stripe', color: '#8A1A24' },
+];
+
+function BallIcon({ id, size = 20 }: { id: number; size?: number }) {
+  const meta = BALLS_META.find(b => b.id === id);
+  if (!meta) return null;
+  const isStripe = meta.type === 'stripe';
+  const s = size;
+  return (
+    <div className="rounded-full flex items-center justify-center relative select-none shrink-0"
+      style={{
+        width: s, height: s,
+        background: isStripe
+          ? `linear-gradient(135deg, #ffffff 20%, ${meta.color} 20%, ${meta.color} 80%, #ffffff 80%)`
+          : `radial-gradient(circle at 32% 32%, ${meta.color} 35%, #000000 120%)`,
+        boxShadow: `inset -1.5px -1.5px 4px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)`,
+      }}
+    >
+      {isStripe && (
+        <div className="absolute inset-0 rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25) 0%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.5) 100%)' }}
+        />
+      )}
+      <div className="absolute top-[15%] left-[18%] w-[22%] h-[12%] bg-white/50 rounded-full rotate-[-15deg] pointer-events-none" />
+      <div className="rounded-full bg-[#fffaeb] border border-amber-600/30 flex items-center justify-center z-10"
+        style={{ width: s * 0.52, height: s * 0.52 }}
+      >
+        <span className="font-black text-slate-900 font-mono leading-none" style={{ fontSize: s * 0.28 }}>{meta.number}</span>
+      </div>
+    </div>
+  );
+}
+
+function SpinControl({ spinX, spinY, onChange, disabled }: {
+  spinX: number; spinY: number; onChange: (x: number, y: number) => void; disabled: boolean;
+}) {
+  const size = 44;
+  const dotSize = 8;
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <div className="w-full h-full rounded-full cursor-crosshair select-none touch-none"
+        style={{
+          background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
+          boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.7), inset 2px 2px 5px rgba(245,158,11,0.15), 0 0 15px rgba(0,0,0,0.4), 0 0 0 1px rgba(217,119,6,0.2)',
+        }}
+        onPointerDown={(e) => {
+          if (disabled) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const move = (ev: PointerEvent) => {
+            const x = (ev.clientX - rect.left) / rect.width * 2 - 1;
+            const y = -((ev.clientY - rect.top) / rect.height * 2 - 1);
+            const dist = Math.sqrt(x * x + y * y);
+            onChange(dist > 1 ? x / dist : x, dist > 1 ? y / dist : y);
+          };
+          move(e.nativeEvent as any);
+          const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+          window.addEventListener('pointermove', move);
+          window.addEventListener('pointerup', up);
+        }}
+      >
+        <div className="absolute rounded-full"
+          style={{
+            width: dotSize, height: dotSize,
+            left: `calc(50% + ${spinX * (size / 2 - dotSize)}px)`,
+            top: `calc(50% + ${-spinY * (size / 2 - dotSize)}px)`,
+            transform: 'translate(-50%, -50%)',
+            background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
+            boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.3)',
+            border: '1px solid rgba(255,255,200,0.3)',
+          }}
+        />
+      </div>
+      <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[6px] text-amber-500/60 font-mono pointer-events-none whitespace-nowrap">SPIN</div>
+    </div>
+  );
+}
+
+function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage, setChatMessage, handleSendChat, handleJoinAI, chatRef, onClose }: {
+  roomState: RoomState; userSession: any; language: 'en' | 'ar'; activeEscrow: number;
+  chatMessage: string; setChatMessage: (v: string) => void; handleSendChat: (v: string) => void;
+  handleJoinAI: any; chatRef: React.RefObject<HTMLDivElement | null>; onClose: () => void;
+}) {
+  return (
+    <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0806] to-black border-l border-amber-900/30 overflow-hidden">
+      <div className="flex items-center justify-between p-3 border-b border-amber-900/20 shrink-0">
+        <span className="text-xs font-bold text-amber-400 font-mono tracking-wider">INFO</span>
+        <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/10 transition text-white/50 hover:text-white"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="rounded-xl border border-amber-900/30 bg-black/40 p-3">
+          <div className="text-[10px] text-amber-600 font-bold mb-2 font-mono tracking-wider">{language === 'ar' ? 'اللاعبون' : 'Players'}</div>
+          <div className="space-y-2">
+            {roomState.players.map((p: any, i: number) => (
+              <div key={p.id}
+                className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${p.username === userSession!.username ? 'border-amber-500/40 bg-amber-500/10' : 'border-amber-900/20 bg-black/30'}`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] text-amber-700 font-mono shrink-0">#{i + 1}</span>
+                  <span className="text-sm font-bold text-amber-200 truncate">{p.username}</span>
+                  {p.username.startsWith('Bot_') && <span className="text-[8px] bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded border border-amber-500/30 font-bold shrink-0">BOT</span>}
+                  {p.side && <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold shrink-0 ${p.side === 'solids' ? 'bg-amber-400 text-amber-950' : 'bg-blue-600 text-white'}`}>{p.side}</span>}
+                  {roomState.currentTurn === p.id && roomState.status === 'playing' && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />}
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400 shrink-0">${p.walletBalance.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          {roomState.players.length === 1 && (
+            <div className="mt-3 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+              <p className="text-[10px] text-amber-500 mb-2 font-bold">{language === 'ar' ? 'في انتظار الخصم...' : 'Waiting for opponent...'}</p>
+              <div className="flex items-center gap-2 text-[10px] text-amber-600 mb-2">
+                <span className="font-mono text-amber-400 font-bold bg-black/50 px-2 py-1 rounded border border-amber-900/30 truncate">{roomState.roomId}</span>
+                <button onClick={() => navigator.clipboard.writeText(roomState.roomId)} className="p-1 rounded bg-amber-700/30 hover:bg-amber-700/50 transition shrink-0"><Copy className="w-3 h-3" /></button>
+              </div>
+              <button onClick={() => handleJoinAI('medium')} className="w-full py-2 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black text-xs font-bold transition flex items-center justify-center gap-1.5"><Cpu className="w-3.5 h-3.5" />{language === 'ar' ? 'استدعاء AI' : 'Summon AI'}</button>
+            </div>
+          )}
+        </div>
+        {activeEscrow > 0 && (
+          <div className="rounded-xl border border-amber-500/30 bg-black/40 p-3 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-amber-500 via-amber-300 to-amber-500 opacity-50" />
+            <div className="flex items-center gap-1.5 mb-2 text-xs text-amber-400 font-bold">
+              <Lock className="w-3 h-3" />{language === 'ar' ? 'صندوق الضمان' : 'Escrow'}
+              <span className="text-[8px] ml-auto bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-bold border border-amber-500/30">Audited</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-black/50 p-2 rounded border border-amber-900/30"><div className="text-[9px] text-amber-600">{language === 'ar' ? 'مقفل' : 'Locked'}</div><div className="font-bold text-amber-100 font-mono">${activeEscrow.toFixed(2)}</div></div>
+              <div className="bg-amber-500/10 p-2 rounded border border-amber-500/20"><div className="text-[9px] text-amber-500">{language === 'ar' ? 'الرابح يأخذ' : 'Winner Gets'}</div><div className="font-bold text-amber-400 font-mono">${(activeEscrow * 0.95).toFixed(2)}</div></div>
+            </div>
+            {roomState.escrowHash && (
+              <div className="mt-2 pt-2 border-t border-amber-900/30">
+                <div className="text-[8px] text-amber-600 font-mono mb-1">SHA-256</div>
+                <div className="text-[8px] font-mono text-amber-400 bg-black/60 p-1.5 rounded border border-amber-900/30 truncate select-all">{roomState.escrowHash}</div>
+                {roomState.status === 'gameover' && roomState.serverSeed && <ProvablyFairVerify hash={roomState.escrowHash} seed={roomState.serverSeed} />}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="rounded-xl border border-amber-900/30 bg-black/40 flex flex-col min-h-[200px] overflow-hidden">
+          <div className="p-2 border-b border-amber-900/20">
+            <div className="flex items-center gap-1.5 text-xs"><MessageSquare className="w-3.5 h-3.5 text-amber-400" /><span className="font-bold text-amber-300 font-mono">{language === 'ar' ? 'الدردشة' : 'Chat'}</span></div>
+          </div>
+          <div ref={chatRef} className="flex-1 p-2 overflow-y-auto space-y-1 bg-black/30 min-h-0">
+            {roomState.log.map((line: string, idx: number) => (
+              <div key={idx} className={`text-[10px] leading-relaxed font-mono ${!line.includes(':') ? 'text-amber-500/80 italic' : line.includes('PROVABLY') ? 'text-amber-400 font-bold' : 'text-amber-600/70'}`}>{line}</div>
+            ))}
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); if (chatMessage.trim()) { handleSendChat(chatMessage); setChatMessage(''); } }}
+            className="flex gap-1.5 p-2 border-t border-amber-900/20 shrink-0"
+          >
+            <input type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)}
+              placeholder={language === 'ar' ? 'رسالة...' : 'Message...'}
+              className="flex-1 bg-black/60 border border-amber-900/30 rounded-lg px-3 py-1.5 text-xs text-amber-200 placeholder-amber-800 focus:outline-none focus:border-amber-500"
+            />
+            <button type="submit" className="p-1.5 rounded-lg bg-gradient-to-tr from-amber-600 to-amber-400 hover:from-amber-500 hover:to-amber-300 text-black transition shrink-0"><Send className="w-3.5 h-3.5" /></button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ArenaPage({
-  roomState,
-  userSession,
-  language,
-  onQuitRoom,
-  myPlayerObj,
-  isMyTurn,
-  physicsFrames,
-  setPhysicsFrames,
-  handleShoot,
-  handleResetCueBall,
-  opponentAim,
-  handlePreviewAim,
-  handleJoinAI,
-  chatMessage,
-  setChatMessage,
-  handleSendChat
+  roomState, userSession, language, onQuitRoom, myPlayerObj, isMyTurn,
+  physicsFrames, setPhysicsFrames, handleShoot, handleResetCueBall, opponentAim,
+  handlePreviewAim, handleJoinAI, chatMessage, setChatMessage, handleSendChat
 }: ArenaPageProps) {
-  const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const gameContainerRef = useRef<HTMLDivElement | null>(null); // Main container for fullscreen
-  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<PoolTableHandle>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [orientationLocked, setOrientationLocked] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false); // For mobile fullscreen
-  const [showControlsOverlay, setShowControlsOverlay] = useState(false); // For mobile aiming controls
-  const [overlayTimeout, setOverlayTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
+  const overlayTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // Determine if it's a mobile device (for responsive adjustments)
   useEffect(() => {
-    const checkMobile = () => {
-      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-      setIsMobile(mobile);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-
-    // Initial fullscreen on mount
-    enterFullscreen(); 
-
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-      exitFullscreen(); // Exit fullscreen on unmount
-    };
+    const check = () => setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
+    check();
+    enterFullscreen();
+    window.addEventListener('resize', check);
+    return () => { exitFullscreen(); window.removeEventListener('resize', check); };
   }, []);
 
-  // Scroll chat to bottom
   useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-    }
-  }, [roomState?.log]);
-
-  // Handle fullscreen change events
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      const fs = document.fullscreenElement === gameContainerRef.current;
+    const handler = () => {
+      const fs = document.fullscreenElement === containerRef.current;
       setIsFullscreen(fs);
-      if (!fs) { // If exiting fullscreen
-        setOrientationLocked(false);
-        screen.orientation?.unlock?.();
-        setShowSidebar(false); // Hide sidebar if it was open
-      }
+      if (!fs) { screen.orientation?.unlock?.(); setShowSidebar(false); }
     };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // Fullscreen logic
+  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
+
   const enterFullscreen = async () => {
-    if (!gameContainerRef.current) return;
+    if (!containerRef.current) return;
     try {
-      await gameContainerRef.current.requestFullscreen();
-      if (isMobile) {
-        try {
-          await screen.orientation?.lock('landscape-primary');
-          setOrientationLocked(true);
-        } catch (e) {
-          console.log('Orientation lock not supported or failed:', e);
-        }
-      }
-      setShowControlsOverlay(true); // Show initial controls overlay
-      startOverlayTimeout();
-    } catch (e) {
-      console.error('Fullscreen failed:', e);
-    }
+      await containerRef.current.requestFullscreen();
+      if (isMobile) try { await screen.orientation?.lock('landscape-primary'); } catch (_) {}
+    } catch (_) {}
   };
+  const exitFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {} };
+  const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
 
-  const exitFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      }
-      if (orientationLocked) {
-        screen.orientation?.unlock?.();
-        setOrientationLocked(false);
-      }
-      setShowControlsOverlay(false);
-      if (overlayTimeout) clearTimeout(overlayTimeout);
-    } catch (e) {
-      console.error('Exit fullscreen failed:', e);
-    }
-  };
-
-  const toggleFullscreen = () => {
-    if (isFullscreen) exitFullscreen();
-    else enterFullscreen();
-  };
-
-  // Overlay controls timeout (hide after a few seconds of inactivity)
-  const startOverlayTimeout = useCallback(() => {
-    if (overlayTimeout) clearTimeout(overlayTimeout);
-    setOverlayTimeout(setTimeout(() => setShowControlsOverlay(false), 3000));
-  }, [overlayTimeout]);
-
-  const handleOverlayInteraction = useCallback(() => {
-    setShowControlsOverlay(true);
-    startOverlayTimeout();
-  }, [startOverlayTimeout]);
-
-  // Prevent body scroll in fullscreen
-  useEffect(() => {
-    if (isFullscreen) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.touchAction = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.touchAction = '';
-    };
-  }, [isFullscreen]);
-
-  const onChatSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (chatMessage.trim()) {
-      handleSendChat(chatMessage);
-      setChatMessage('');
-    }
-  };
-
-  const handleCopyRoomCode = () => {
-    if (!roomState) return;
-    navigator.clipboard.writeText(roomState.roomId).then(() => {
-      // addToast('success', 'Room code copied!'); // Assuming addToast is available or passed down
-    }).catch(err => {
-      console.error('Failed to copy room code:', err);
-      // addToast('error', 'Failed to copy room code.');
-    });
-  };
+  const resetOverlayTimer = useCallback(() => {
+    setShowOverlay(true);
+    clearTimeout(overlayTimer.current);
+    overlayTimer.current = setTimeout(() => setShowOverlay(false), 3000);
+  }, []);
 
   const activeEscrow = roomState && roomState.status !== 'waiting' && roomState.status !== 'gameover' ? roomState.stake * 2 : 0;
 
-  // Render loading state if roomState is null
+  const myPlayer = roomState?.players.find(p => p.id === myPlayerObj?.id);
+  const opponent = roomState?.players.find(p => p.id !== myPlayerObj?.id);
+  const mySide = myPlayer?.side;
+  const opponentSide = opponent?.side;
+
+  const myPocketed = roomState ? BALLS_META.filter(b => {
+    if (!mySide) return false;
+    const tb = roomState.balls.find(t => t.id === b.id);
+    return tb?.isPocketed && (mySide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
+  }) : [];
+  const opponentPocketed = roomState ? BALLS_META.filter(b => {
+    if (!opponentSide) return false;
+    const tb = roomState.balls.find(t => t.id === b.id);
+    return tb?.isPocketed && (opponentSide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
+  }) : [];
+  const allPocketed = roomState ? BALLS_META.filter(b => roomState.balls.find(t => t.id === b.id)?.isPocketed) : [];
+
+  const timerVal = roomState?.turnTimer ?? 60;
+  const timerPct = (timerVal / 60) * 100;
+  const timerColor = timerVal <= 10 ? 'from-rose-500 to-rose-400' : timerVal <= 20 ? 'from-amber-500 to-amber-400' : 'from-emerald-500 to-emerald-400';
+
+  const spinX = tableRef.current?.spinX ?? 0;
+  const spinY = tableRef.current?.spinY ?? 0;
+  const shotPower = tableRef.current?.shotPower ?? 40;
+  const isAimLocked = tableRef.current?.isAimLocked ?? false;
+  const hudNotification = tableRef.current?.hudNotification ?? null;
+  const setSpinX = (v: number) => tableRef.current?.setSpinX(v);
+  const setSpinY = (v: number) => tableRef.current?.setSpinY(v);
+  const setIsAimLocked = (v: boolean) => tableRef.current?.setIsAimLocked(v);
+  const handleShootClick = () => tableRef.current?.handleShoot();
+
   if (!roomState) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col items-center justify-center min-h-[300px] gap-5 text-slate-100">
-        <div className="text-amber-400 animate-pulse text-lg font-mono font-bold flex items-center gap-3">
-          <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
-          {language === 'ar' ? 'جاري الاتصال بالخادم والتحقق من الرهان...' : 'Authenticating stake and connecting to arena...'}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-gradient-to-b from-[#0a0604] to-black flex items-center justify-center">
+        <div className="flex flex-col items-center gap-6 p-8 rounded-2xl bg-black/40 border border-amber-900/20 shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
+          <div className="text-amber-400 animate-pulse text-lg font-mono font-bold flex items-center gap-3">
+            <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping shadow-[0_0_10px_#f59e0b]" />
+            {language === 'ar' ? 'جاري الاتصال...' : 'Connecting to arena...'}
+          </div>
+          <button onClick={onQuitRoom} className="px-6 py-3 rounded-xl bg-amber-950/50 hover:bg-amber-900/60 border border-amber-800/40 text-amber-300 font-black transition shadow-lg backdrop-blur-sm">{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
         </div>
-        <button onClick={onQuitRoom} className="px-6 py-3 rounded-xl bg-amber-950 hover:bg-amber-900 border border-amber-800 text-amber-300 font-black transition">
-          {language === 'ar' ? 'إلغاء والعودة' : 'Cancel & Return'}
-        </button>
       </motion.div>
     );
   }
 
-  // Fullscreen class management
-  const fullscreenClass = isFullscreen ? 'fixed inset-0 z-50 bg-black flex flex-col items-center justify-center' : 'flex flex-col gap-5 w-full';
-  const tableWrapperClass = isFullscreen 
-    ? (isMobile ? 'w-full h-full landscape:h-screen landscape:w-auto landscape:max-w-none' : 'w-full h-full') + ' flex-1 flex items-center justify-center overflow-hidden'
-    : 'lg:col-span-8 p-3 flex flex-col items-center justify-center';
-  const sidebarClass = isFullscreen 
-    ? `absolute top-0 right-0 h-full w-2/3 md:w-1/3 bg-slate-950/90 backdrop-blur-md shadow-lg transform transition-transform duration-300 ease-in-out ${showSidebar ? 'translate-x-0' : 'translate-x-full'} p-4 flex flex-col gap-4 z-50`
-    : 'lg:col-span-4 flex flex-col gap-4';
-  const headerClass = isFullscreen 
-    ? 'absolute top-0 inset-x-0 bg-gradient-to-b from-black/80 to-transparent p-4 flex justify-between items-center z-50 text-white'
-    : 'rounded-2xl border border-amber-800/40 bg-gradient-to-r from-[#1a0f0a] to-[#0d0806] px-5 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 relative overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]';
-
-
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }} 
-      animate={{ opacity: 1, y: 0 }} 
-      exit={{ opacity: 0, y: -20 }} 
-      className={`relative w-full h-full ${fullscreenClass}`}
-      ref={gameContainerRef}
-      onPointerMove={isFullscreen ? handleOverlayInteraction : undefined}
-      onClick={isFullscreen ? handleOverlayInteraction : undefined}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden"
+      onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
     >
-      {/* Overlay Header / Controls */}
+      {/* Header - ultra compact single row */}
       <AnimatePresence>
-      { (isFullscreen && showControlsOverlay) && (
-        <motion.div 
-          initial={{ opacity: 0, y: -50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -50 }}
-          transition={{ duration: 0.3 }}
-          className={headerClass}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-lg shadow-lg">🎱</div>
-            <span className="font-black text-amber-100 text-sm">{roomState.name}</span>
-            <span className="text-[9px] bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-mono animate-pulse shadow-[0_0_10px_rgba(217,119,6,0.3)]">● LIVE</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={onQuitRoom} className="px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-bold transition">🏳️ {language === 'ar' ? 'مغادرة' : 'Forfeit'}</button>
-            <button onClick={toggleFullscreen} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition text-white">
-              <Minimize className="w-4 h-4" />
-            </button>
-            {isMobile && (
-              <button onClick={() => setShowSidebar(prev => !prev)} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition text-white">
-                <MessageSquare className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </motion.div>
-      )}
+        {showOverlay && (
+          <motion.header initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-0 inset-x-0 z-40 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-2 py-1.5 backdrop-blur-sm"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[10px] shadow-lg shrink-0">🎱</div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className={`w-1 h-1 rounded-full shrink-0 ${isMyTurn ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
+                  <span className="text-[8px] font-bold text-amber-200 font-mono truncate max-w-[60px]">{myPlayer?.username || 'You'}</span>
+                  {mySide && <span className={`text-[5px] font-bold px-1 py-0.5 rounded ${mySide === 'solids' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{mySide}</span>}
+                  <div className="flex items-center gap-px">{myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={10} />)}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[9px] font-black font-mono leading-none ${timerVal <= 10 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>{timerVal}<span className="text-[5px] text-amber-600/60 ml-0.5">s</span></span>
+                <div className="w-8 h-[1.5px] rounded-full bg-amber-950 overflow-hidden">
+                  <div className={`h-full rounded-full bg-gradient-to-r ${timerColor} transition-all duration-1000`} style={{ width: `${timerPct}%` }} />
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="flex items-center gap-px">{opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={10} />)}</div>
+                  {opponent?.username?.startsWith('Bot_') && <span className="text-[5px] bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded font-bold">BOT</span>}
+                  {opponentSide && <span className={`text-[5px] font-bold px-1 py-0.5 rounded ${opponentSide === 'solids' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{opponentSide}</span>}
+                  <span className="text-[8px] font-bold text-amber-200 font-mono truncate max-w-[60px]">{opponent?.username || 'Waiting...'}</span>
+                  <div className={`w-1 h-1 rounded-full shrink-0 ${!isMyTurn && roomState.status === 'playing' ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
+                </div>
+                <button onClick={toggleFullscreen} className="p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Minimize className="w-2.5 h-2.5" /></button>
+                <button onClick={() => setShowSidebar(prev => !prev)} className="p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Users className="w-2.5 h-2.5" /></button>
+                <button onClick={onQuitRoom} className="px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-[7px] font-bold transition shrink-0">{language === 'ar' ? 'مغادرة' : 'Quit'}</button>
+              </div>
+            </div>
+          </motion.header>
+        )}
       </AnimatePresence>
 
-      {/* Main Game Content */}
-      <div className={isFullscreen ? 'w-full h-full flex flex-col items-center justify-center' : 'grid grid-cols-1 lg:grid-cols-12 gap-5 items-start'}>
-        {/* Pool Table Canvas */}
-        <div className={tableWrapperClass}>
-          <motion.div layout className="relative rounded-2xl border border-amber-900/30 bg-gradient-to-b from-[#0d0806] to-[#070503] shadow-[0_0_40px_rgba(0,0,0,0.6)]"
-            style={{ 
-              width: isFullscreen ? (isMobile ? 'auto' : '100%') : '100%', 
-              height: isFullscreen ? (isMobile ? '100%' : 'auto') : 'auto', 
-              maxWidth: isFullscreen ? (isMobile ? 'calc(100vh * 2)' : '100%') : '800px', // Landscape mobile fit
-              maxHeight: isFullscreen ? (isMobile ? '100%' : 'calc(100vw * 0.5)') : 'auto',
-              aspectRatio: '2 / 1' 
-            }}
-          >
-            <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-amber-700/30 to-transparent pointer-events-none" />
-            <PoolTable
-              roomState={roomState}
-              onShoot={handleShoot}
-              onResetCueBall={handleResetCueBall}
-              myPlayerId={myPlayerObj?.id || ''}
-              isMyTurn={isMyTurn}
-              physicsFrames={physicsFrames}
-              onClearFrames={() => setPhysicsFrames(null)}
-              opponentAim={opponentAim}
-              onPreviewAim={handlePreviewAim}
-              onJoinAI={handleJoinAI}
-            />
-             <AnimatePresence>
-            { (isFullscreen && showControlsOverlay && !isMobile) && (
-              <motion.button 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ delay: 0.5, duration: 0.3 }}
-                onClick={toggleFullscreen} 
-                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition text-white z-50"
-              >
-                <Minimize className="w-5 h-5" />
-              </motion.button>
-            )}
-            </AnimatePresence>
-          </motion.div>
+      {/* Main - PoolTable fills everything */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className={`flex-1 relative ${showSidebar && isMobile ? 'hidden' : ''}`}>
+          <PoolTable ref={tableRef}
+            roomState={roomState} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
+            myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
+            physicsFrames={physicsFrames} onClearFrames={() => setPhysicsFrames(null)}
+            opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
+          />
+
+          {/* AI summon centered overlay */}
+          {roomState.players.length === 1 && (
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+              <button onClick={() => handleJoinAI('medium')}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black text-xs font-bold transition flex items-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.25)] hover:shadow-[0_0_35px_rgba(245,158,11,0.4)] border border-amber-400/20"
+              ><Bot className="w-4 h-4" />Summon AI</button>
+            </div>
+          )}
+
+          {/* Pocketed balls - left side vertical column */}
+          {(allPocketed.length > 0) && (
+            <div className="absolute left-1 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+              <div className="flex flex-col items-center gap-1.5 py-2.5 px-1.5 rounded-2xl bg-black/30 backdrop-blur-sm border border-amber-900/15 shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+                <span className="text-[5px] font-mono text-amber-500/50 tracking-widest">POCKETED</span>
+                <div className="flex flex-col items-center gap-1 max-h-[320px] overflow-y-auto scrollbar-none">
+                  <AnimatePresence mode="popLayout">
+                    {mySide && myPocketed.sort((a, b) => a.id - b.id).map((b, idx) => (
+                      <motion.div
+                        key={`my-${b.id}`}
+                        initial={{ opacity: 0, y: -30, scale: 0.3, rotate: -180 }}
+                        animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ type: 'spring', damping: 12, stiffness: 180, mass: 0.8, delay: idx * 0.05 }}
+                        className="relative drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]"
+                      >
+                        <BallIcon id={b.id} size={22} />
+                        <div className="absolute -inset-[1.5px] rounded-full border border-amber-400/40 pointer-events-none" />
+                        <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-[1.5px] bg-amber-500/25 rounded-full blur-[0.8px]" />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                  {mySide && myPocketed.length > 0 && opponentPocketed.length > 0 && (
+                    <div className="w-4 h-[1px] bg-amber-500/20 my-0.5" />
+                  )}
+                  <AnimatePresence mode="popLayout">
+                    {opponentSide && opponentPocketed.sort((a, b) => a.id - b.id).map((b, idx) => (
+                      <motion.div
+                        key={`opp-${b.id}`}
+                        initial={{ opacity: 0, y: -30, scale: 0.3, rotate: -180 }}
+                        animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                        exit={{ opacity: 0, scale: 0.5 }}
+                        transition={{ type: 'spring', damping: 12, stiffness: 180, mass: 0.8, delay: idx * 0.05 }}
+                        className="relative drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]"
+                      >
+                        <BallIcon id={b.id} size={22} />
+                        <div className="absolute -inset-[1.5px] rounded-full border border-blue-400/40 pointer-events-none" />
+                        <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-[1.5px] bg-blue-500/25 rounded-full blur-[0.8px]" />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                  {!mySide && (
+                    <AnimatePresence mode="popLayout">
+                      {allPocketed.sort((a, b) => a.id - b.id).map((b, idx) => (
+                        <motion.div key={b.id} initial={{ opacity: 0, y: -30, scale: 0.3, rotate: -180 }}
+                          animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                          transition={{ type: 'spring', damping: 12, stiffness: 180, mass: 0.8, delay: idx * 0.05 }}
+                          className="relative drop-shadow-[0_0_6px_rgba(0,0,0,0.6)]"
+                        >
+                          <BallIcon id={b.id} size={22} />
+                          <div className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-[1.5px] bg-amber-500/25 rounded-full blur-[0.8px]" />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notification toast */}
+          {hudNotification && (
+            <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }}
+              className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-md border border-amber-500/25 text-[10px] text-amber-200 font-mono shadow-[0_0_20px_rgba(245,158,11,0.15)] whitespace-nowrap pointer-events-none"
+            >
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-2 align-middle shadow-[0_0_4px_#f59e0b]" />
+              {hudNotification}
+            </motion.div>
+          )}
+
+          {/* Right side compact controls */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 p-2 rounded-2xl bg-black/30 backdrop-blur-sm border border-amber-900/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+            <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
+            <button onClick={() => setIsAimLocked(!isAimLocked)}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
+            >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
+                <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
+              </div>
+              <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
+            </div>
+            <button onClick={handleShootClick}
+              disabled={!isMyTurn}
+              className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+            ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+          </div>
+
+          {/* Mobile bottom controls */}
+          {isMobile && showOverlay && (
+            <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-4 pb-3 pt-10 backdrop-blur-sm">
+              <div className="flex items-center justify-around max-w-xs mx-auto">
+                <button onClick={onQuitRoom} className="w-10 h-10 rounded-full bg-red-700/50 hover:bg-red-600/70 transition flex items-center justify-center border border-red-500/20 shadow-lg"><X className="w-4 h-4 text-white" /></button>
+                <button onClick={handleShootClick} disabled={!isMyTurn} className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed active:scale-90 transition-all"><div className="w-4 h-4 rounded-full bg-white/90" /></button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Sidebar / Chat / Player Info */}
+        {/* Sidebar */}
         <AnimatePresence>
-        { (!isFullscreen || (isMobile && showSidebar)) && (
-          <motion.div 
-            initial={isMobile && isFullscreen ? { x: '100%' } : { opacity: 0 }}
-            animate={isMobile && isFullscreen ? { x: '0%' } : { opacity: 1 }}
-            exit={isMobile && isFullscreen ? { x: '100%' } : { opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className={sidebarClass}
-            style={isMobile && isFullscreen ? { position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: '350px' } : {}}
-          >
-            {isMobile && isFullscreen && (
-              <button onClick={() => setShowSidebar(false)} className="absolute top-4 left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition text-white z-50">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-            {/* Players */}
-            <div className="rounded-2xl border border-amber-900/30 bg-gradient-to-b from-[#1a0f0a] to-[#0d0806] p-4 shadow-lg">
-              <div className="text-[10px] text-amber-600 uppercase font-bold mb-3 tracking-wider font-mono">{language === 'ar' ? 'اللاعبون' : 'Players'}</div>
-              <div className="space-y-2">
-                <AnimatePresence>
-                  {roomState.players.map((p: any, i: number) => (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all duration-300 ${p.username === userSession!.username ? 'border-amber-500/40 bg-amber-500/10 shadow-[0_0_15px_rgba(217,119,6,0.15)]' : 'border-amber-900/20 bg-black/30'}`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] text-amber-700 font-mono shrink-0">#{i + 1}</span>
-                        <span className="text-sm font-bold text-amber-200 truncate">{p.username}</span>
-                        {p.username.startsWith('Bot_') && <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 shrink-0 font-bold">BOT</span>}
-                        {p.side && <span className={`text-[9px] px-1.5 py-0.5 rounded font-black shrink-0 ${p.side === 'solids' ? 'bg-amber-400 text-amber-950' : 'bg-blue-600 text-white'}`}>{p.side}</span>}
-                        {roomState.currentTurn === p.id && roomState.status === 'playing' && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0 shadow-[0_0_8px_rgba(217,119,6,0.8)]" />}
-                      </div>
-                      <span className="text-xs font-mono font-black text-amber-400 shrink-0">${p.walletBalance.toFixed(2)}</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {roomState.players.length === 1 && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-3 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
-                  <div className="text-[10px] text-amber-500 mb-2 font-bold uppercase tracking-wider">{language === 'ar' ? 'في انتظار الخصم...' : 'Waiting for opponent…'}</div>
-                  <p className="text-[11px] text-amber-600 mb-3">{language === 'ar' ? 'شارك الرمز:' : 'Share code:'} <span className="font-mono text-amber-400 font-bold bg-black/50 px-2 py-1 rounded border border-amber-900/30">
-                    {roomState.roomId}
-                    <button onClick={handleCopyRoomCode} className="ml-2 p-1 rounded-md bg-amber-700/30 hover:bg-amber-700/50 transition"><Copy className="w-3 h-3" /></button>
-                  </span></p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => handleJoinAI('medium')} className="py-2 rounded-lg bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black text-xs font-bold transition shadow-lg flex items-center justify-center gap-1.5">
-                      <Cpu className="w-3.5 h-3.5" /> {language === 'ar' ? 'استدعاء AI' : 'Summon AI'}
-                    </motion.button>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-
-            {/* Escrow — Gold Vault */}
-            {activeEscrow > 0 && (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1a0f0a] to-[#0d0806] p-4 shadow-[0_0_20px_rgba(217,119,6,0.05)] relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 via-amber-300 to-amber-500 opacity-50" />
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs text-amber-400 font-bold flex items-center gap-1.5 uppercase tracking-wider">
-                    <Lock className="w-3.5 h-3.5" /> {language === 'ar' ? 'صندوق الضمان الآمن' : 'Secure Escrow Vault'}
-                  </span>
-                  <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-bold border border-amber-500/30">Audited</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-black/50 p-2 rounded-lg border border-amber-900/30">
-                    <div className="text-[10px] text-amber-600 uppercase tracking-wider mb-1">{language === 'ar' ? 'مقفل' : 'Locked'}</div>
-                    <div className="font-black text-amber-100 font-mono">${activeEscrow.toFixed(2)}</div>
-                  </div>
-                  <div className="bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
-                    <div className="text-[10px] text-amber-500 uppercase tracking-wider mb-1">{language === 'ar' ? 'يفوز الرابح بـ' : 'Winner Gets'}</div>
-                    <div className="font-black text-amber-400 font-mono drop-shadow-[0_0_6px_rgba(217,119,6,0.3)]">${(activeEscrow * 0.95).toFixed(2)}</div>
-                  </div>
-                </div>
-                {roomState.escrowHash && (
-                  <div className="mt-3 pt-3 border-t border-amber-900/30">
-                    <div className="text-[9px] text-amber-600 mb-1 uppercase tracking-wider font-mono">SHA-256 Integrity Hash</div>
-                    <div className="text-[9px] font-mono text-amber-400 bg-black/60 p-2 rounded-lg border border-amber-900/30 truncate select-all">{roomState.escrowHash}</div>
-                    {roomState.status === 'gameover' && roomState.serverSeed && (
-                      <ProvablyFairVerify hash={roomState.escrowHash} seed={roomState.serverSeed} />
-                    )}
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {/* Chat / Log — Gold Terminal */}
-            <div className="rounded-2xl border border-amber-900/30 bg-gradient-to-b from-[#1a0f0a] to-[#0d0806] p-4 flex flex-col gap-3 shadow-lg flex-1 min-h-[250px]">
-              <div className="flex items-center gap-2 text-xs">
-                <MessageSquare className="w-4 h-4 text-amber-400" />
-                <span className="font-bold text-amber-300 uppercase tracking-wider font-mono">{language === 'ar' ? 'سجل المباراة' : 'Match Terminal'}</span>
-              </div>
-              <div ref={chatScrollRef} className="flex-1 bg-[#050302] rounded-xl p-3 border border-amber-900/20 overflow-y-auto space-y-1.5 shadow-inner">
-                {roomState.log.map((line: string, idx: number) => (
-                  <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} key={idx} className={`text-[11px] leading-relaxed break-words font-mono ${!line.includes(':') ? 'text-amber-500/90 italic' : line.includes('PROVABLY') ? 'text-amber-400 font-bold' : 'text-amber-600/80'}`}>{line}</motion.div>
-                ))}
-              </div>
-              <form onSubmit={onChatSubmit} className="flex gap-2 mt-auto pt-2">
-                <input
-                  type="text" value={chatMessage} onChange={e => setChatMessage(e.target.value)}
-                  placeholder={language === 'ar' ? 'رسالة…' : 'Type a message...'}
-                  className="flex-1 bg-[#050302] border border-amber-900/30 rounded-xl px-4 py-2.5 text-xs text-amber-200 placeholder-amber-800 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition shadow-inner"
-                />
-                <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} type="submit" className="p-2.5 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 hover:from-amber-500 hover:to-amber-300 text-black transition shadow-lg">
-                  <Send className="w-4 h-4" />
-                </motion.button>
-              </form>
-            </div>
-          </motion.div>
-        )}
+          {showSidebar && !isMobile && (
+            <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 280, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.25 }} className="overflow-hidden shrink-0"
+            >
+              <SidePanel roomState={roomState} userSession={userSession} language={language} activeEscrow={activeEscrow}
+                chatMessage={chatMessage} setChatMessage={setChatMessage} handleSendChat={handleSendChat}
+                handleJoinAI={handleJoinAI} chatRef={chatRef} onClose={() => setShowSidebar(false)} />
+            </motion.aside>
+          )}
+          {showSidebar && isMobile && (
+            <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="absolute inset-y-0 right-0 w-full max-w-sm z-30"
+            >
+              <SidePanel roomState={roomState} userSession={userSession} language={language} activeEscrow={activeEscrow}
+                chatMessage={chatMessage} setChatMessage={setChatMessage} handleSendChat={handleSendChat}
+                handleJoinAI={handleJoinAI} chatRef={chatRef} onClose={() => setShowSidebar(false)} />
+            </motion.aside>
+          )}
         </AnimatePresence>
       </div>
-
-      {/* Fullscreen Toggle (outside of header for non-fullscreen mode) */}
-      {!isFullscreen && (
-        <button 
-          onClick={toggleFullscreen} 
-          className="absolute bottom-4 right-4 p-3 rounded-full bg-emerald-700/80 hover:bg-emerald-600/80 transition text-white shadow-lg z-30"
-          title={language === 'ar' ? 'تكبير الشاشة' : 'Enter Fullscreen'}
-        >
-          <Maximize className="w-5 h-5" />
-        </button>
-      )}
-
-      {/* Mobile Controls Overlay (only in fullscreen mobile, shows on interaction) */}
-      {isFullscreen && isMobile && showControlsOverlay && (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-4 flex justify-around items-center z-50 text-white"
-        >
-          {/* Add compact controls here for mobile */}
-          <button onClick={() => onQuitRoom()} className="p-3 rounded-full bg-red-700/80 hover:bg-red-600/80 transition"><X className="w-5 h-5" /></button>
-          <button onClick={() => { /* aim left */ }} className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition"><ChevronLeft className="w-5 h-5" /></button>
-          <button onClick={() => { /* aim right */ }} className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition"><ChevronRight className="w-5 h-5" /></button>
-          <button onClick={() => { /* shoot */ }} className="p-3 rounded-full bg-emerald-700/80 hover:bg-emerald-600/80 transition"><Trophy className="w-5 h-5" /></button>
-        </motion.div>
-      )}
     </motion.div>
   );
 }

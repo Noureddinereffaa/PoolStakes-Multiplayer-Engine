@@ -133,394 +133,484 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       offCanvas.height = 400;
       const offCtx = offCanvas.getContext('2d');
       if (offCtx) {
-        const topRailGrad = offCtx.createLinearGradient(0, 0, 800, 20);
-        topRailGrad.addColorStop(0, '#0a0301');
-        topRailGrad.addColorStop(0.15, '#220c05');
-        topRailGrad.addColorStop(0.5, '#3a150b');
-        topRailGrad.addColorStop(0.85, '#220c05');
-        topRailGrad.addColorStop(1, '#0a0301');
+        // ── Outer table frame (wood rails) ──
+        const RAIL_W = 28;
+        const INNER = RAIL_W;
+        const PLAY_W = 800 - RAIL_W * 2;
+        const PLAY_H = 400 - RAIL_W * 2;
+        const PX = RAIL_W;
+        const PY = RAIL_W;
+
+        // Wood rail base
+        const railColors = ['#1a0803', '#2d0f06', '#3a150b', '#2d0f06', '#1a0803'];
+        const topRailGrad = offCtx.createLinearGradient(0, 0, 800, 8);
+        railColors.forEach((c, i) => topRailGrad.addColorStop(i / 4, c));
         offCtx.fillStyle = topRailGrad;
-        offCtx.fillRect(0, 0, 800, 20);
-        offCtx.fillRect(0, 380, 800, 20);
+        offCtx.fillRect(0, 0, 800, RAIL_W);
+        offCtx.fillRect(0, 400 - RAIL_W, 800, RAIL_W);
 
-        const sideRailGrad = offCtx.createLinearGradient(0, 0, 20, 400);
-        sideRailGrad.addColorStop(0, '#080100');
-        sideRailGrad.addColorStop(0.5, '#2c0f07');
-        sideRailGrad.addColorStop(1, '#080100');
+        const sideRailGrad = offCtx.createLinearGradient(0, 0, 8, 400);
+        railColors.forEach((c, i) => sideRailGrad.addColorStop(i / 4, c));
         offCtx.fillStyle = sideRailGrad;
-        offCtx.fillRect(0, 20, 20, 360);
-        offCtx.fillRect(780, 20, 20, 360);
+        offCtx.fillRect(0, RAIL_W, RAIL_W, PLAY_H);
+        offCtx.fillRect(800 - RAIL_W, RAIL_W, RAIL_W, PLAY_H);
 
-        offCtx.strokeStyle = 'rgba(74, 25, 10, 0.28)';
-        offCtx.lineWidth = 1.25;
-        for (let i = 3; i < 18; i += 4) {
+        // Wood grain lines on rails
+        offCtx.strokeStyle = 'rgba(120, 50, 20, 0.15)';
+        offCtx.lineWidth = 0.6;
+        for (let i = 0; i < 40; i++) {
+          const gY = Math.random() * RAIL_W;
           offCtx.beginPath();
-          for (let x = 20; x <= 780; x += 15) {
-            const wave = Math.sin(x * 0.03 + i) * 1.8;
-            if (x === 20) offCtx.moveTo(x, i + wave);
-            else offCtx.lineTo(x, i + wave);
-          }
+          offCtx.moveTo(0, gY);
+          for (let x = 0; x <= 800; x += 8) offCtx.lineTo(x, gY + Math.sin(x * 0.05 + i) * 1.2);
           offCtx.stroke();
-
+        }
+        for (let i = 0; i < 30; i++) {
+          const gX = Math.random() * RAIL_W;
           offCtx.beginPath();
-          for (let x = 20; x <= 780; x += 15) {
-            const wave = Math.sin(x * 0.035 + i) * 1.5;
-            if (x === 20) offCtx.moveTo(x, 380 + i + wave);
-            else offCtx.lineTo(x, 380 + i + wave);
-          }
+          offCtx.moveTo(gX, 0);
+          for (let y = 0; y <= 400; y += 8) offCtx.lineTo(gX + Math.sin(y * 0.05 + i) * 1.2, y);
           offCtx.stroke();
         }
 
-        for (let i = 3; i < 18; i += 4) {
-          offCtx.beginPath();
-          for (let y = 20; y <= 380; y += 15) {
-            const wave = Math.sin(y * 0.03 + i) * 1.8;
-            if (y === 20) offCtx.moveTo(i + wave, y);
-            else offCtx.lineTo(i + wave, y);
-          }
-          offCtx.stroke();
+        // 3D bevel on outer edge (top highlight)
+        const bevelGradTop = offCtx.createLinearGradient(0, 0, 0, 4);
+        bevelGradTop.addColorStop(0, 'rgba(255,200,150,0.18)');
+        bevelGradTop.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = bevelGradTop;
+        offCtx.fillRect(0, 0, 800, 3);
+        offCtx.fillRect(0, 400 - 3, 800, 3);
 
-          offCtx.beginPath();
-          for (let y = 20; y <= 380; y += 15) {
-            const wave = Math.sin(y * 0.035 + i) * 1.5;
-            if (y === 20) offCtx.moveTo(780 + i + wave, y);
-            else offCtx.lineTo(780 + i + wave, y);
-          }
-          offCtx.stroke();
-        }
+        const bevelGradSide = offCtx.createLinearGradient(0, 0, 4, 0);
+        bevelGradSide.addColorStop(0, 'rgba(255,200,150,0.14)');
+        bevelGradSide.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = bevelGradSide;
+        offCtx.fillRect(0, 0, 3, 400);
+        offCtx.fillRect(800 - 3, 0, 3, 400);
 
-        offCtx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
-        offCtx.lineWidth = 1;
-        offCtx.strokeRect(1, 1, 798, 398);
+        // Inner shadow for depth
+        const innerShadow = offCtx.createRadialGradient(400, 200, 280, 400, 200, 420);
+        innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
+        innerShadow.addColorStop(0.7, 'rgba(0,0,0,0)');
+        innerShadow.addColorStop(1, 'rgba(0,0,0,0.6)');
+        offCtx.fillStyle = innerShadow;
+        offCtx.fillRect(PX - 8, PY - 8, PLAY_W + 16, PLAY_H + 16);
 
-        offCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        offCtx.fillRect(18, 18, 764, 3);
-        offCtx.fillRect(18, 379, 764, 3);
-        offCtx.fillRect(18, 18, 3, 364);
-        offCtx.fillRect(779, 18, 3, 364);
-
-        offCtx.strokeStyle = '#c2780e';
-        offCtx.lineWidth = 1.5;
-        offCtx.strokeRect(19, 19, 762, 362);
-
-        const feltSpotlight = offCtx.createRadialGradient(
-          400,
-          200,
-          40,
-          400,
-          200,
-          520
-        );
-        feltSpotlight.addColorStop(0, '#0fa696');
-        feltSpotlight.addColorStop(0.3, '#11655d');
-        feltSpotlight.addColorStop(0.65, '#0d544c');
-        feltSpotlight.addColorStop(1, '#083833');
-        offCtx.fillStyle = feltSpotlight;
-        offCtx.fillRect(20, 20, 760, 360);
-
-        offCtx.fillStyle = 'rgba(255, 255, 255, 0.02)';
-        for (let i = 0; i < 35; i++) {
-          const rx = 25 + (i * 47) % 750;
-          const ry = 25 + (i * 23) % 350;
-          offCtx.fillRect(rx - 0.5, ry - 0.5, 1.2, 1.2);
-        }
-
-        offCtx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        // ── 3D Rubber Cushions with realistic profile ──
+        // Cushion base (darker, at felt level)
+        const cushionBaseGrad = offCtx.createLinearGradient(PX, PY, PX, PY + 10);
+        cushionBaseGrad.addColorStop(0, '#0a4a3a');
+        cushionBaseGrad.addColorStop(0.5, '#0c5c48');
+        cushionBaseGrad.addColorStop(1, '#083d30');
+        
+        // Cushion top surface (raised, rounded appearance)
+        const cushionTopGrad = offCtx.createLinearGradient(PX, PY, PX, PY + 7);
+        cushionTopGrad.addColorStop(0, '#0a5f4a');
+        cushionTopGrad.addColorStop(0.2, '#12866a');
+        cushionTopGrad.addColorStop(0.55, '#0e7058');
+        cushionTopGrad.addColorStop(0.85, '#0b5c48');
+        cushionTopGrad.addColorStop(1, '#084434');
+        
+        // Top cushion - two layers for 3D profile
+        offCtx.fillStyle = cushionBaseGrad;
         offCtx.beginPath();
-        offCtx.ellipse(260, 200, 110, 45, 0, 0, Math.PI * 2);
-        offCtx.fill();
-        offCtx.beginPath();
-        offCtx.ellipse(540, 200, 110, 45, 0, 0, Math.PI * 2);
-        offCtx.fill();
-
-        const shadowTop = offCtx.createLinearGradient(20, 32, 20, 48);
-        shadowTop.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-        shadowTop.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        offCtx.fillStyle = shadowTop;
-        offCtx.fillRect(32, 32, 736, 16);
-
-        const shadowBottom = offCtx.createLinearGradient(20, 368, 20, 352);
-        shadowBottom.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-        shadowBottom.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        offCtx.fillStyle = shadowBottom;
-        offCtx.fillRect(32, 352, 736, 16);
-
-        const shadowLeft = offCtx.createLinearGradient(32, 20, 48, 20);
-        shadowLeft.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-        shadowLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        offCtx.fillStyle = shadowLeft;
-        offCtx.fillRect(32, 32, 16, 336);
-
-        const shadowRight = offCtx.createLinearGradient(768, 20, 752, 20);
-        shadowRight.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
-        shadowRight.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        offCtx.fillStyle = shadowRight;
-        offCtx.fillRect(752, 32, 16, 336);
-
-        const topBrush = offCtx.createLinearGradient(20, 20, 20, 32);
-        topBrush.addColorStop(0, '#0a4234');
-        topBrush.addColorStop(0.3, '#0f6e56');
-        topBrush.addColorStop(1, '#138b6d');
-        offCtx.fillStyle = topBrush;
-        offCtx.beginPath();
-        offCtx.moveTo(32, 20);
-        offCtx.lineTo(768, 20);
-        offCtx.lineTo(752, 32);
-        offCtx.lineTo(48, 32);
+        offCtx.moveTo(PX - 2, PY);
+        offCtx.lineTo(800 - PX + 2, PY);
+        offCtx.lineTo(800 - PX - 4, PY + 8);
+        offCtx.lineTo(PX + 4, PY + 8);
         offCtx.closePath();
         offCtx.fill();
-
-        const bottomBrush = offCtx.createLinearGradient(20, 380, 20, 368);
-        bottomBrush.addColorStop(0, '#052920');
-        bottomBrush.addColorStop(0.4, '#0b5240');
-        bottomBrush.addColorStop(1, '#117b60');
-        offCtx.fillStyle = bottomBrush;
+        
+        offCtx.fillStyle = cushionTopGrad;
         offCtx.beginPath();
-        offCtx.moveTo(32, 380);
-        offCtx.lineTo(768, 380);
-        offCtx.lineTo(752, 368);
-        offCtx.lineTo(48, 368);
+        offCtx.moveTo(PX + 1, PY - 2);
+        offCtx.lineTo(800 - PX - 1, PY - 2);
+        offCtx.lineTo(800 - PX - 5, PY + 4);
+        offCtx.lineTo(PX + 5, PY + 4);
         offCtx.closePath();
         offCtx.fill();
-
-        const leftBrush = offCtx.createLinearGradient(20, 20, 32, 20);
-        leftBrush.addColorStop(0, '#052920');
-        leftBrush.addColorStop(0.4, '#0b5240');
-        leftBrush.addColorStop(1, '#117b60');
-        offCtx.fillStyle = leftBrush;
+        
+        // Bottom cushion
+        offCtx.fillStyle = cushionBaseGrad;
         offCtx.beginPath();
-        offCtx.moveTo(20, 32);
-        offCtx.lineTo(20, 368);
-        offCtx.lineTo(32, 352);
-        offCtx.lineTo(32, 48);
+        offCtx.moveTo(PX - 2, 400 - PY);
+        offCtx.lineTo(800 - PX + 2, 400 - PY);
+        offCtx.lineTo(800 - PX - 4, 400 - PY - 8);
+        offCtx.lineTo(PX + 4, 400 - PY - 8);
         offCtx.closePath();
         offCtx.fill();
-
-        const rightBrush = offCtx.createLinearGradient(780, 20, 768, 20);
-        rightBrush.addColorStop(0, '#052920');
-        rightBrush.addColorStop(0.4, '#0b5240');
-        rightBrush.addColorStop(1, '#117b60');
-        offCtx.fillStyle = rightBrush;
+        
+        offCtx.fillStyle = cushionTopGrad;
         offCtx.beginPath();
-        offCtx.moveTo(780, 32);
-        offCtx.lineTo(780, 368);
-        offCtx.lineTo(768, 352);
-        offCtx.lineTo(768, 48);
+        offCtx.moveTo(PX + 1, 400 - PY + 2);
+        offCtx.lineTo(800 - PX - 1, 400 - PY + 2);
+        offCtx.lineTo(800 - PX - 5, 400 - PY - 4);
+        offCtx.lineTo(PX + 5, 400 - PY - 4);
         offCtx.closePath();
         offCtx.fill();
-
-        offCtx.strokeStyle = '#94a3b8';
-        offCtx.lineWidth = 1.5;
+        
+        // Left cushion
+        offCtx.fillStyle = cushionBaseGrad;
         offCtx.beginPath();
-        offCtx.moveTo(400, 20);
-        offCtx.lineTo(400, 32);
-        offCtx.stroke();
+        offCtx.moveTo(PX, PY - 2);
+        offCtx.lineTo(PX, 400 - PY + 2);
+        offCtx.lineTo(PX + 8, 400 - PY - 4);
+        offCtx.lineTo(PX + 8, PY + 4);
+        offCtx.closePath();
+        offCtx.fill();
+        
+        offCtx.fillStyle = cushionTopGrad;
         offCtx.beginPath();
-        offCtx.moveTo(400, 368);
-        offCtx.lineTo(400, 380);
-        offCtx.stroke();
-
-        const diamondSpacingX = 800 / 8;
-        const pearlGrad = offCtx.createRadialGradient(0, 0, 0.5, 0, 0, 4);
-        pearlGrad.addColorStop(0, '#ffffff');
-        pearlGrad.addColorStop(0.4, '#e2e8f0');
-        pearlGrad.addColorStop(1, '#94a3b8');
-
-        for (let i = 1; i <= 7; i++) {
-          if (i !== 4) {
-            offCtx.save();
-            offCtx.translate(i * diamondSpacingX, 10);
+        offCtx.moveTo(PX - 2, PY + 1);
+        offCtx.lineTo(PX - 2, 400 - PY - 1);
+        offCtx.lineTo(PX + 4, 400 - PY - 5);
+        offCtx.lineTo(PX + 4, PY + 5);
+        offCtx.closePath();
+        offCtx.fill();
+        
+        // Right cushion
+        offCtx.fillStyle = cushionBaseGrad;
+        offCtx.beginPath();
+        offCtx.moveTo(800 - PX, PY - 2);
+        offCtx.lineTo(800 - PX, 400 - PY + 2);
+        offCtx.lineTo(800 - PX - 8, 400 - PY - 4);
+        offCtx.lineTo(800 - PX - 8, PY + 4);
+        offCtx.closePath();
+        offCtx.fill();
+        
+        offCtx.fillStyle = cushionTopGrad;
+        offCtx.beginPath();
+        offCtx.moveTo(800 - PX + 2, PY + 1);
+        offCtx.lineTo(800 - PX + 2, 400 - PY - 1);
+        offCtx.lineTo(800 - PX - 4, 400 - PY - 5);
+        offCtx.lineTo(800 - PX - 4, PY + 5);
+        offCtx.closePath();
+        offCtx.fill();
+        
+        // Cushion top edge highlight (ball contact surface)
+        const edgeHL = offCtx.createLinearGradient(PX, PY, PX, PY + 3);
+        edgeHL.addColorStop(0, 'rgba(100,230,190,0.35)');
+        edgeHL.addColorStop(0.5, 'rgba(80,200,160,0.2)');
+        edgeHL.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = edgeHL;
+        offCtx.fillRect(PX + 3, PY - 1, PLAY_W - 6, 3);
+        offCtx.fillRect(PX + 3, 400 - PY - 2, PLAY_W - 6, 3);
+        offCtx.fillStyle = edgeHL;
+        offCtx.fillRect(PX - 1, PY + 3, 3, PLAY_H - 6);
+        offCtx.fillRect(800 - PX - 2, PY + 3, 3, PLAY_H - 6);
+        
+        // Cushion rail bolts (screws along the cushion every ~70px)
+        const boltGrad = offCtx.createRadialGradient(0, 0, 0.3, 0, 0, 1.8);
+        boltGrad.addColorStop(0, '#2a1a08');
+        boltGrad.addColorStop(0.5, '#4a3018');
+        boltGrad.addColorStop(1, '#1a0e04');
+        
+        for (let bx = PX + 30; bx < 800 - PX - 20; bx += 72) {
+          [PY - 1, 400 - PY + 1].forEach((by) => {
             offCtx.beginPath();
-            offCtx.moveTo(0, -4);
-            offCtx.lineTo(3, 0);
-            offCtx.lineTo(0, 4);
-            offCtx.lineTo(-3, 0);
-            offCtx.closePath();
-            offCtx.fillStyle = pearlGrad;
+            offCtx.arc(bx, by, 2, 0, Math.PI * 2);
+            offCtx.fillStyle = 'rgba(0,0,0,0.35)';
             offCtx.fill();
-            offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-            offCtx.lineWidth = 0.5;
-            offCtx.stroke();
-            offCtx.restore();
-
-            offCtx.save();
-            offCtx.translate(i * diamondSpacingX, 390);
             offCtx.beginPath();
-            offCtx.moveTo(0, -4);
-            offCtx.lineTo(3, 0);
-            offCtx.lineTo(0, 4);
-            offCtx.lineTo(-3, 0);
-            offCtx.closePath();
-            offCtx.fillStyle = pearlGrad;
-            offCtx.fill();
-            offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-            offCtx.lineWidth = 0.5;
-            offCtx.stroke();
-            offCtx.restore();
-          }
-        }
-        const diamondSpacingY = 400 / 4;
-        for (let j = 1; j <= 3; j++) {
-          offCtx.save();
-          offCtx.translate(10, j * diamondSpacingY);
-          offCtx.beginPath();
-          offCtx.moveTo(-4, 0);
-          offCtx.lineTo(0, -3);
-          offCtx.lineTo(4, 0);
-          offCtx.lineTo(0, 3);
-          offCtx.closePath();
-          offCtx.fillStyle = pearlGrad;
-          offCtx.fill();
-          offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-          offCtx.lineWidth = 0.5;
-          offCtx.stroke();
-          offCtx.restore();
-
-          offCtx.save();
-          offCtx.translate(790, j * diamondSpacingY);
-          offCtx.beginPath();
-          offCtx.moveTo(-4, 0);
-          offCtx.lineTo(0, -3);
-          offCtx.lineTo(4, 0);
-          offCtx.lineTo(0, 3);
-          offCtx.closePath();
-          offCtx.fillStyle = pearlGrad;
-          offCtx.fill();
-          offCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-          offCtx.lineWidth = 0.5;
-          offCtx.stroke();
-          offCtx.restore();
-        }
-
-        const pockets = [
-          { x: 22, y: 22, ang: Math.PI * 0.25 },
-          { x: 400, y: 18, ang: Math.PI * 0.5 },
-          { x: 778, y: 22, ang: Math.PI * 0.75 },
-          { x: 22, y: 378, ang: -Math.PI * 0.25 },
-          { x: 400, y: 382, ang: -Math.PI * 0.5 },
-          { x: 778, y: 378, ang: -Math.PI * 0.75 },
-        ];
-
-        pockets.forEach((p) => {
-          offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 27, 0, Math.PI * 2);
-          offCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-          offCtx.fill();
-
-          const pocketPlateGrad = offCtx.createRadialGradient(
-            p.x,
-            p.y,
-            15,
-            p.x,
-            p.y,
-            25
-          );
-          pocketPlateGrad.addColorStop(0, '#1e293b');
-          pocketPlateGrad.addColorStop(0.4, '#475569');
-          pocketPlateGrad.addColorStop(0.75, '#f1f5f9');
-          pocketPlateGrad.addColorStop(0.9, '#cbd5e1');
-          pocketPlateGrad.addColorStop(1, '#1e293b');
-
-          offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 24, 0, Math.PI * 2);
-          offCtx.fillStyle = pocketPlateGrad;
-          offCtx.fill();
-
-          offCtx.strokeStyle = 'rgba(217, 119, 6, 0.65)';
-          offCtx.lineWidth = 1;
-          offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 23.5, 0, Math.PI * 2);
-          offCtx.stroke();
-
-          offCtx.fillStyle = 'rgba(217, 119, 6, 0.9)';
-          const screwAngs = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
-          screwAngs.forEach((sa) => {
-            const sx = p.x + Math.cos(sa) * 20.5;
-            const sy = p.y + Math.sin(sa) * 20.5;
-            offCtx.beginPath();
-            offCtx.arc(sx, sy, 1.2, 0, Math.PI * 2);
+            offCtx.arc(bx - 0.3, by - 0.3, 1.5, 0, Math.PI * 2);
+            offCtx.fillStyle = boltGrad;
             offCtx.fill();
           });
+        }
+        for (let by = PY + 30; by < 400 - PY - 20; by += 72) {
+          [PX - 1, 800 - PX + 1].forEach((bx) => {
+            offCtx.beginPath();
+            offCtx.arc(bx, by, 2, 0, Math.PI * 2);
+            offCtx.fillStyle = 'rgba(0,0,0,0.35)';
+            offCtx.fill();
+            offCtx.beginPath();
+            offCtx.arc(bx - 0.3, by - 0.3, 1.5, 0, Math.PI * 2);
+            offCtx.fillStyle = boltGrad;
+            offCtx.fill();
+          });
+        }
+        
+        // Cushion inner shadow (transition from cushion to felt)
+        const cushiShad = offCtx.createLinearGradient(PX, PY + 8, PX, PY + 18);
+        cushiShad.addColorStop(0, 'rgba(0,0,0,0.35)');
+        cushiShad.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = cushiShad;
+        offCtx.fillRect(PX + 4, PY + 8, PLAY_W - 8, 10);
+        offCtx.fillRect(PX + 4, 400 - PY - 18, PLAY_W - 8, 10);
+        offCtx.fillStyle = cushiShad;
+        offCtx.fillRect(PX + 8, PY + 4, 10, PLAY_H - 8);
+        offCtx.fillRect(800 - PX - 18, PY + 4, 10, PLAY_H - 8);
 
-          const voidGrad = offCtx.createRadialGradient(
-            p.x,
-            p.y,
-            3,
-            p.x,
-            p.y,
-            18
-          );
-          voidGrad.addColorStop(0, '#000000');
-          voidGrad.addColorStop(0.7, '#070a0f');
-          voidGrad.addColorStop(0.9, '#111827');
-          voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0.85)');
+        // Felt playing surface with rich green lighting
+        const feltSpotlight = offCtx.createRadialGradient(400, 200, 50, 400, 200, 440);
+        feltSpotlight.addColorStop(0, '#1ab896');
+        feltSpotlight.addColorStop(0.25, '#149c7e');
+        feltSpotlight.addColorStop(0.55, '#0e7a63');
+        feltSpotlight.addColorStop(0.8, '#0a5f4d');
+        feltSpotlight.addColorStop(1, '#064236');
+        offCtx.fillStyle = feltSpotlight;
+        offCtx.beginPath();
+        offCtx.roundRect(PX + 6, PY + 6, PLAY_W - 12, PLAY_H - 12, 4);
+        offCtx.fill();
 
+        // Felt texture (micro-fibers)
+        offCtx.fillStyle = 'rgba(255,255,255,0.015)';
+        for (let i = 0; i < 80; i++) {
+          const fx = PX + 8 + (i * 37) % (PLAY_W - 16);
+          const fy = PY + 8 + (i * 29) % (PLAY_H - 16);
+          const fw = 0.5 + Math.random() * 0.8;
+          const fh = 0.2 + Math.random() * 0.3;
+          offCtx.fillRect(fx - fw / 2, fy - fh / 2, fw, fh);
+        }
+
+        // Felt brush stroke marks (subtle directional)
+        offCtx.strokeStyle = 'rgba(255,255,255,0.012)';
+        offCtx.lineWidth = 0.5;
+        for (let i = 0; i < 25; i++) {
+          const bx = PX + 10 + Math.random() * (PLAY_W - 20);
+          const by = PY + 10 + Math.random() * (PLAY_H - 20);
+          const bLen = 5 + Math.random() * 20;
+          const bAng = Math.random() * Math.PI;
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 18, 0, Math.PI * 2);
-          offCtx.fillStyle = voidGrad;
-          offCtx.fill();
-
-          offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 18.5, p.ang - 0.75, p.ang + 0.75);
-          offCtx.lineWidth = 4;
-          offCtx.strokeStyle = '#05070a';
+          offCtx.moveTo(bx, by);
+          offCtx.lineTo(bx + Math.cos(bAng) * bLen, by + Math.sin(bAng) * bLen);
           offCtx.stroke();
-        });
+        }
 
-        const cornerPlates = [
-          { x: 0, y: 0, w: 25, h: 25, r: 0 },
-          { x: 800, y: 0, w: 25, h: 25, r: Math.PI * 0.5 },
-          { x: 0, y: 400, w: 25, h: 25, r: -Math.PI * 0.5 },
-          { x: 800, y: 400, w: 25, h: 25, r: Math.PI },
-        ];
-        cornerPlates.forEach((cp) => {
-          offCtx.save();
-          offCtx.translate(cp.x, cp.y);
-          offCtx.rotate(cp.r);
-          const brassGrad = offCtx.createLinearGradient(0, 0, 20, 20);
-          brassGrad.addColorStop(0, '#78350f');
-          brassGrad.addColorStop(0.4, '#fbbf24');
-          brassGrad.addColorStop(0.85, '#fef08a');
-          brassGrad.addColorStop(1, '#92400e');
-          offCtx.fillStyle = brassGrad;
-          offCtx.beginPath();
-          offCtx.moveTo(0, 0);
-          offCtx.lineTo(26, 0);
-          offCtx.bezierCurveTo(24, 15, 15, 24, 0, 26);
-          offCtx.closePath();
-          offCtx.fill();
-          offCtx.restore();
-        });
+        // Felt edge shadows (table depth effect)
+        const edgeShadowTop = offCtx.createLinearGradient(PX, PY + 6, PX, PY + 22);
+        edgeShadowTop.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowTop.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = edgeShadowTop;
+        offCtx.fillRect(PX + 8, PY + 6, PLAY_W - 16, 16);
 
-        offCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        const edgeShadowBot = offCtx.createLinearGradient(PX, 400 - PY - 6, PX, 400 - PY - 22);
+        edgeShadowBot.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowBot.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = edgeShadowBot;
+        offCtx.fillRect(PX + 8, 400 - PY - 22, PLAY_W - 16, 16);
+
+        const edgeShadowL = offCtx.createLinearGradient(PX + 6, PY, PX + 22, PY);
+        edgeShadowL.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowL.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = edgeShadowL;
+        offCtx.fillRect(PX + 6, PY + 8, 16, PLAY_H - 16);
+
+        const edgeShadowR = offCtx.createLinearGradient(800 - PX - 6, PY, 800 - PX - 22, PY);
+        edgeShadowR.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowR.addColorStop(1, 'rgba(0,0,0,0)');
+        offCtx.fillStyle = edgeShadowR;
+        offCtx.fillRect(800 - PX - 22, PY + 8, 16, PLAY_H - 16);
+
+        // Head string & foot spot marks
+        offCtx.strokeStyle = 'rgba(255,255,255,0.06)';
         offCtx.lineWidth = 1;
         offCtx.beginPath();
-        offCtx.moveTo(200, 21);
-        offCtx.lineTo(200, 379);
+        offCtx.moveTo(200, PY + 7);
+        offCtx.lineTo(200, 400 - PY - 7);
         offCtx.stroke();
 
-        offCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        offCtx.strokeStyle = 'rgba(255,255,255,0.06)';
         offCtx.beginPath();
         offCtx.arc(200, 200, 48, Math.PI * 0.5, Math.PI * 1.5, false);
         offCtx.stroke();
 
         offCtx.beginPath();
         offCtx.arc(200, 200, 3.5, 0, Math.PI * 2);
-        offCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        offCtx.fillStyle = 'rgba(255,255,255,0.10)';
         offCtx.fill();
         offCtx.beginPath();
         offCtx.arc(200, 200, 1.2, 0, Math.PI * 2);
-        offCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        offCtx.fillStyle = 'rgba(255,255,255,0.5)';
         offCtx.fill();
 
         offCtx.beginPath();
         offCtx.arc(600, 200, 3, 0, Math.PI * 2);
-        offCtx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        offCtx.fillStyle = 'rgba(255,255,255,0.10)';
         offCtx.fill();
         offCtx.beginPath();
         offCtx.arc(600, 200, 1, 0, Math.PI * 2);
-        offCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        offCtx.fillStyle = 'rgba(255,255,255,0.5)';
         offCtx.fill();
+
+        // Diamond markers (pearl inlays)
+        const diamondSpacingX = 800 / 8;
+        const pearlGrad = offCtx.createRadialGradient(0, 0, 0.5, 0, 0, 4);
+        pearlGrad.addColorStop(0, '#ffffff');
+        pearlGrad.addColorStop(0.4, '#f0f4f8');
+        pearlGrad.addColorStop(1, '#94a3b8');
+        const dY = RAIL_W / 2;
+
+        for (let i = 1; i <= 7; i++) {
+          if (i !== 4) {
+            [dY, 400 - dY].forEach((yPos) => {
+              offCtx.save();
+              offCtx.translate(i * diamondSpacingX, yPos);
+              offCtx.beginPath();
+              offCtx.moveTo(0, -3.5);
+              offCtx.lineTo(2.5, 0);
+              offCtx.lineTo(0, 3.5);
+              offCtx.lineTo(-2.5, 0);
+              offCtx.closePath();
+              offCtx.fillStyle = pearlGrad;
+              offCtx.fill();
+              offCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+              offCtx.lineWidth = 0.4;
+              offCtx.stroke();
+              offCtx.restore();
+            });
+          }
+        }
+        const diamondSpacingY = 400 / 4;
+        [RAIL_W / 2, 800 - RAIL_W / 2].forEach((xPos) => {
+          for (let j = 1; j <= 3; j++) {
+            offCtx.save();
+            offCtx.translate(xPos, j * diamondSpacingY);
+            offCtx.beginPath();
+            offCtx.moveTo(-3.5, 0);
+            offCtx.lineTo(0, -2.5);
+            offCtx.lineTo(3.5, 0);
+            offCtx.lineTo(0, 2.5);
+            offCtx.closePath();
+            offCtx.fillStyle = pearlGrad;
+            offCtx.fill();
+            offCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+            offCtx.lineWidth = 0.4;
+            offCtx.stroke();
+            offCtx.restore();
+          }
+        });
+
+        // ── POCKETS with 3D depth ──
+        const pockets = [
+          { x: PX, y: PY, ang: Math.PI * 0.25 },
+          { x: 400, y: PY - 4, ang: Math.PI * 0.5 },
+          { x: 800 - PX, y: PY, ang: Math.PI * 0.75 },
+          { x: PX, y: 400 - PY, ang: -Math.PI * 0.25 },
+          { x: 400, y: 400 - PY + 4, ang: -Math.PI * 0.5 },
+          { x: 800 - PX, y: 400 - PY, ang: -Math.PI * 0.75 },
+        ];
+
+        pockets.forEach((p) => {
+          // Outer shadow ring
+          const outerRing = offCtx.createRadialGradient(p.x, p.y, 20, p.x, p.y, 30);
+          outerRing.addColorStop(0, 'rgba(0,0,0,0)');
+          outerRing.addColorStop(0.5, 'rgba(0,0,0,0.15)');
+          outerRing.addColorStop(1, 'rgba(0,0,0,0)');
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 30, 0, Math.PI * 2);
+          offCtx.fillStyle = outerRing;
+          offCtx.fill();
+
+          // Dark pocket hole
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 27, 0, Math.PI * 2);
+          offCtx.fillStyle = 'rgba(0,0,0,0.8)';
+          offCtx.fill();
+
+          // Brass pocket rim (metallic ring)
+          const rimGrad = offCtx.createRadialGradient(p.x, p.y, 22, p.x, p.y, 26);
+          rimGrad.addColorStop(0, '#4a2810');
+          rimGrad.addColorStop(0.3, '#b8862d');
+          rimGrad.addColorStop(0.6, '#f5d97a');
+          rimGrad.addColorStop(0.8, '#c9952e');
+          rimGrad.addColorStop(1, '#5a3010');
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 26, 0, Math.PI * 2);
+          offCtx.strokeStyle = rimGrad;
+          offCtx.lineWidth = 3;
+          offCtx.stroke();
+
+          // Pocket inner darkness
+          const voidGrad = offCtx.createRadialGradient(p.x, p.y, 2, p.x, p.y, 19);
+          voidGrad.addColorStop(0, '#000000');
+          voidGrad.addColorStop(0.5, '#05080c');
+          voidGrad.addColorStop(0.85, '#0a1018');
+          voidGrad.addColorStop(1, 'rgba(0,0,0,0.9)');
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 19, 0, Math.PI * 2);
+          offCtx.fillStyle = voidGrad;
+          offCtx.fill();
+
+          // Pocket rim highlight (inner bevel)
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 22, p.ang - 0.6, p.ang + 0.6);
+          offCtx.strokeStyle = 'rgba(255,220,150,0.35)';
+          offCtx.lineWidth = 2;
+          offCtx.stroke();
+
+          // Screws on rim
+          offCtx.fillStyle = 'rgba(217, 119, 6, 0.85)';
+          const screwAngs = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+          screwAngs.forEach((sa) => {
+            const sx = p.x + Math.cos(sa) * 22;
+            const sy = p.y + Math.sin(sa) * 22;
+            offCtx.beginPath();
+            offCtx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+            offCtx.fill();
+            offCtx.beginPath();
+            offCtx.arc(sx - 0.3, sy - 0.3, 0.5, 0, Math.PI * 2);
+            offCtx.fillStyle = 'rgba(255,255,200,0.4)';
+            offCtx.fill();
+            offCtx.fillStyle = 'rgba(217, 119, 6, 0.85)';
+          });
+
+          // Pocket shadow (directional)
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 19, p.ang - 0.8, p.ang + 0.8);
+          offCtx.lineWidth = 5;
+          offCtx.strokeStyle = '#000';
+          offCtx.stroke();
+        });
+
+        // ── Brass corner plates ──
+        const cornerPlates = [
+          { x: 0, y: 0, w: 28, h: 28, r: 0 },
+          { x: 800, y: 0, w: 28, h: 28, r: Math.PI * 0.5 },
+          { x: 0, y: 400, w: 28, h: 28, r: -Math.PI * 0.5 },
+          { x: 800, y: 400, w: 28, h: 28, r: Math.PI },
+        ];
+        cornerPlates.forEach((cp) => {
+          offCtx.save();
+          offCtx.translate(cp.x, cp.y);
+          offCtx.rotate(cp.r);
+          // Shadow
+          offCtx.fillStyle = 'rgba(0,0,0,0.3)';
+          offCtx.beginPath();
+          offCtx.moveTo(1, 1);
+          offCtx.lineTo(29, 1);
+          offCtx.bezierCurveTo(27, 16, 16, 27, 1, 29);
+          offCtx.closePath();
+          offCtx.fill();
+
+          // Brass gradient
+          const brassGrad = offCtx.createLinearGradient(0, 0, 28, 28);
+          brassGrad.addColorStop(0, '#5a3010');
+          brassGrad.addColorStop(0.15, '#a07020');
+          brassGrad.addColorStop(0.4, '#f5d97a');
+          brassGrad.addColorStop(0.65, '#d4a53a');
+          brassGrad.addColorStop(0.85, '#f0cc60');
+          brassGrad.addColorStop(1, '#6a3810');
+          offCtx.fillStyle = brassGrad;
+          offCtx.beginPath();
+          offCtx.moveTo(0, 0);
+          offCtx.lineTo(28, 0);
+          offCtx.bezierCurveTo(26, 16, 16, 26, 0, 28);
+          offCtx.closePath();
+          offCtx.fill();
+
+          // Screw in corner plate
+          offCtx.beginPath();
+          offCtx.arc(7, 7, 1.8, 0, Math.PI * 2);
+          offCtx.fillStyle = '#3a1a08';
+          offCtx.fill();
+          offCtx.beginPath();
+          offCtx.arc(6.8, 6.8, 0.7, 0, Math.PI * 2);
+          offCtx.fillStyle = 'rgba(255,255,200,0.3)';
+          offCtx.fill();
+
+          offCtx.restore();
+        });
       }
       ctx.offscreenCanvasRef.current = offCanvas;
     }
@@ -569,136 +659,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.drawImage(ctx.offscreenCanvasRef.current, 0, 0);
       }
 
-      // 4.5. Render Sinking Balls with Ultimate Realism
-      ctx.sinkingBallsRef.current = ctx.sinkingBallsRef.current.filter(
-        (sb) => {
-          sb.progress += 1;
-          if (sb.progress >= sb.maxProgress) return false;
-
-          const t = sb.progress / sb.maxProgress;
-          const tEase = 1 - Math.pow(1 - t, 3);
-
-          const pullForce = tEase;
-          const currentX =
-            sb.ball.x + (sb.pocketX - sb.ball.x) * pullForce;
-          const currentY =
-            sb.ball.y + (sb.pocketY - sb.ball.y) * pullForce;
-
-          const scale = 1.0 - tEase * 0.45;
-
-          const alpha = 1.0 - Math.pow(t, 2);
-
-          const px = currentX;
-          const py = currentY;
-          const r = sb.ball.radius * scale;
-
-          ctx2d.save();
-          ctx2d.globalAlpha = alpha;
-
-          const pocketShadow = ctx2d.createRadialGradient(
-            px + 1.5,
-            py + 2.0,
-            1,
-            px + 1.5,
-            py + 2.0,
-            r * 1.5
-          );
-          pocketShadow.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-          pocketShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-          ctx2d.beginPath();
-          ctx2d.arc(px + 1.5, py + 2.0, r * 1.5, 0, Math.PI * 2);
-          ctx2d.fillStyle = pocketShadow;
-          ctx2d.fill();
-
-          ctx2d.beginPath();
-          ctx2d.arc(px, py, r, 0, Math.PI * 2);
-          ctx2d.fillStyle = sb.ball.color;
-          ctx2d.fill();
-
-          if (sb.ball.type === 'stripe') {
-            ctx2d.save();
-            ctx2d.beginPath();
-            ctx2d.arc(px, py, r, 0, Math.PI * 2);
-            ctx2d.clip();
-
-            ctx2d.fillStyle = '#fafaf9';
-            ctx2d.beginPath();
-            ctx2d.arc(px, py, r, 0, Math.PI * 2);
-            ctx2d.fill();
-
-            ctx2d.fillStyle = sb.ball.color;
-            ctx2d.beginPath();
-            ctx2d.ellipse(
-              px,
-              py,
-              r,
-              r * 0.6,
-              Math.PI * 0.15,
-              0,
-              Math.PI * 2
-            );
-            ctx2d.fill();
-            ctx2d.restore();
-          }
-
-          if (sb.ball.id !== 0 && sb.ball.number !== undefined) {
-            ctx2d.beginPath();
-            ctx2d.arc(px, py, r * 0.42, 0, Math.PI * 2);
-            ctx2d.fillStyle = '#fffaeb';
-            ctx2d.fill();
-            ctx2d.strokeStyle = '#000000';
-            ctx2d.lineWidth = 0.5 * scale;
-            ctx2d.stroke();
-
-            ctx2d.fillStyle = '#1e293b';
-            ctx2d.font = `bold ${Math.max(4, 5.5 * scale)}px "JetBrains Mono", Courier New, monospace`;
-            ctx2d.textAlign = 'center';
-            ctx2d.textBaseline = 'middle';
-            ctx2d.fillText(String(sb.ball.number), px, py + 0.35);
-          }
-
-          const levelDarkness = t * 0.92;
-          const depthShader = ctx2d.createRadialGradient(
-            px,
-            py,
-            0,
-            px,
-            py,
-            r
-          );
-          depthShader.addColorStop(0, `rgba(0, 0, 0, ${levelDarkness})`);
-          depthShader.addColorStop(
-            1,
-            `rgba(0, 0, 0, ${levelDarkness * 1.05})`
-          );
-          ctx2d.beginPath();
-          ctx2d.arc(px, py, r, 0, Math.PI * 2);
-          ctx2d.fillStyle = depthShader;
-          ctx2d.fill();
-
-          const localSpecular = ctx2d.createRadialGradient(
-            px - r * 0.35,
-            py - r * 0.35,
-            0.1,
-            px,
-            py,
-            r
-          );
-          localSpecular.addColorStop(
-            0,
-            `rgba(255, 255, 255, ${0.8 * (1 - t * 0.9)})`
-          );
-          localSpecular.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx2d.beginPath();
-          ctx2d.arc(px, py, r, 0, Math.PI * 2);
-          ctx2d.fillStyle = localSpecular;
-          ctx2d.fill();
-
-          ctx2d.restore();
-
-          return true;
-        }
-      );
+      // 4.5. Instant ball removal when pocketed (no sink animation)
+      ctx.sinkingBallsRef.current = [];
 
       // 5. Render All Balls using Ultra-Realistic 3D Spherical Glistening Shaders
       const eligibleIds = getEligibleBallIds(
@@ -899,16 +861,28 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             0,
             px + ballRadius * 0.1,
             py + ballRadius * 0.1,
-            ballRadius * 1.2
+            ballRadius * 1.3
           );
           cueGrad.addColorStop(0, '#ffffff');
-          cueGrad.addColorStop(0.15, '#fffefa');
-          cueGrad.addColorStop(0.4, '#faf5ea');
-          cueGrad.addColorStop(0.7, '#f0e8d8');
-          cueGrad.addColorStop(0.85, '#e0d5c0');
-          cueGrad.addColorStop(0.95, '#d0c4ae');
-          cueGrad.addColorStop(1, '#b8ab94');
+          cueGrad.addColorStop(0.2, '#fffefa');
+          cueGrad.addColorStop(0.45, '#f5f0e8');
+          cueGrad.addColorStop(0.7, '#ece4d8');
+          cueGrad.addColorStop(0.88, '#ddd0c0');
+          cueGrad.addColorStop(1, '#c8b8a4');
           ctx2d.fillStyle = cueGrad;
+          ctx2d.fill();
+
+          // Subsurface glow
+          const sssCue = ctx2d.createRadialGradient(
+            px - ballRadius * 0.25, py - ballRadius * 0.25, 0,
+            px, py, ballRadius * 0.8
+          );
+          sssCue.addColorStop(0, 'rgba(255,255,255,0.15)');
+          sssCue.addColorStop(0.5, 'rgba(255,240,220,0.05)');
+          sssCue.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx2d.fillStyle = sssCue;
+          ctx2d.beginPath();
+          ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
           ctx2d.fill();
 
           const measleDirs = [
@@ -923,8 +897,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             if (wz > 0) {
               const sx = px + wx * ballRadius;
               const sy = py + wy * ballRadius;
-              const dotSize = 1.8 * wz;
-              if (dotSize > 0.25) {
+              const dotSize = 2.0 * wz;
+              if (dotSize > 0.3) {
                 const dotGrad = ctx2d.createRadialGradient(sx, sy, 0, sx, sy, dotSize);
                 dotGrad.addColorStop(0, '#ef4444');
                 dotGrad.addColorStop(0.5, '#dc2626');
@@ -935,8 +909,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 ctx2d.fill();
 
                 ctx2d.beginPath();
-                ctx2d.arc(sx - dotSize * 0.15, sy - dotSize * 0.15, dotSize * 0.35, 0, Math.PI * 2);
-                ctx2d.fillStyle = 'rgba(255,200,200,0.35)';
+                ctx2d.arc(sx - dotSize * 0.2, sy - dotSize * 0.2, dotSize * 0.35, 0, Math.PI * 2);
+                ctx2d.fillStyle = 'rgba(255,200,200,0.4)';
                 ctx2d.fill();
               }
             }
@@ -948,57 +922,102 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
           ctx2d.clip();
 
+          // White/ivory base with radial gloss
           const ivoryGrad = ctx2d.createRadialGradient(
             px - ballRadius * 0.35,
             py - ballRadius * 0.35,
             0,
             px + ballRadius * 0.1,
             py + ballRadius * 0.1,
-            ballRadius * 1.2
+            ballRadius * 1.3
           );
           ivoryGrad.addColorStop(0, '#ffffff');
-          ivoryGrad.addColorStop(0.25, '#fcfaf5');
-          ivoryGrad.addColorStop(0.55, '#f2ecde');
-          ivoryGrad.addColorStop(0.8, '#e6ddcc');
-          ivoryGrad.addColorStop(0.95, '#d4cbb8');
-          ivoryGrad.addColorStop(1, '#c0b6a2');
+          ivoryGrad.addColorStop(0.2, '#fefcf8');
+          ivoryGrad.addColorStop(0.5, '#f5f0e8');
+          ivoryGrad.addColorStop(0.75, '#ece4d8');
+          ivoryGrad.addColorStop(0.9, '#ded3c0');
+          ivoryGrad.addColorStop(1, '#c8b8a4');
           ctx2d.fillStyle = ivoryGrad;
           ctx2d.fill();
 
-          const beltW = Math.abs(uy[2]);
-          const beltVisible = 0.08 + 0.58 * beltW;
+          // Stripe band - use uy as the stripe axis
+          // Project uy to screen space to determine stripe orientation
+          const syx = uy[0], syy = uy[1], syz = uy[2];
+          const stripeView = Math.abs(syz);
+          
+          // The stripe is a band around the equator (perpendicular to uy)
+          // Calculate visible stripe band properties
+          const beltVisible = 0.1 + 0.55 * stripeView;
           const minorR = ballRadius * beltVisible;
-          const beltAng = Math.atan2(uy[1], uy[0]) + Math.PI / 2;
-
-          ctx2d.fillStyle = 'rgba(0,0,0,0.20)';
+          // Rotation angle of the stripe in screen space
+          const stripeAngle = Math.atan2(syy, syx);
+          
+          // Draw shadow/glow behind stripe
+          ctx2d.fillStyle = 'rgba(0,0,0,0.15)';
           ctx2d.beginPath();
-          ctx2d.ellipse(px, py, ballRadius + 0.5, minorR + beltW * 1.4, beltAng, 0, Math.PI * 2);
+          ctx2d.ellipse(px + 0.5, py + 0.5, ballRadius + 1, minorR + stripeView * 1.8, stripeAngle, 0, Math.PI * 2);
           ctx2d.fill();
-
-          const beltGrad = ctx2d.createRadialGradient(
-            px - ballRadius * 0.2,
-            py - ballRadius * 0.2,
-            0,
-            px + ballRadius * 0.05,
-            py + ballRadius * 0.05,
-            ballRadius * 1.1
+          
+          // Main colored stripe band
+          const colLight = lightenColor(b.color, 35);
+          const colMid = b.color;
+          const colDark = darkenColor(b.color, 35);
+          
+          const beltGrad = ctx2d.createLinearGradient(
+            px - Math.cos(stripeAngle) * ballRadius,
+            py - Math.sin(stripeAngle) * ballRadius,
+            px + Math.cos(stripeAngle) * ballRadius,
+            py + Math.sin(stripeAngle) * ballRadius
           );
-          beltGrad.addColorStop(0, lightenColor(b.color, 30));
-          beltGrad.addColorStop(0.2, b.color);
-          beltGrad.addColorStop(0.65, b.color);
-          beltGrad.addColorStop(0.88, darkenColor(b.color, 40));
-          beltGrad.addColorStop(1, '#000000');
+          beltGrad.addColorStop(0, colLight);
+          beltGrad.addColorStop(0.15, colMid);
+          beltGrad.addColorStop(0.5, colMid);
+          beltGrad.addColorStop(0.85, colDark);
+          beltGrad.addColorStop(1, darkenColor(b.color, 50));
+          
           ctx2d.fillStyle = beltGrad;
           ctx2d.beginPath();
-          ctx2d.ellipse(px, py, ballRadius, minorR, beltAng, 0, Math.PI * 2);
+          ctx2d.ellipse(px, py, ballRadius, minorR, stripeAngle, 0, Math.PI * 2);
+          ctx2d.fill();
+          
+          // Stripe edge curvature - add spherical cap effect
+          // Darken stripe edges along the long axis
+          const edgeShade = ctx2d.createLinearGradient(
+            px - Math.cos(stripeAngle) * ballRadius * 0.9,
+            py - Math.sin(stripeAngle) * ballRadius * 0.9,
+            px + Math.cos(stripeAngle) * ballRadius * 0.9,
+            py + Math.sin(stripeAngle) * ballRadius * 0.9
+          );
+          edgeShade.addColorStop(0, 'rgba(0,0,0,0.3)');
+          edgeShade.addColorStop(0.15, 'rgba(0,0,0,0)');
+          edgeShade.addColorStop(0.5, 'rgba(0,0,0,0)');
+          edgeShade.addColorStop(0.85, 'rgba(0,0,0,0)');
+          edgeShade.addColorStop(1, 'rgba(0,0,0,0.35)');
+          ctx2d.fillStyle = edgeShade;
+          ctx2d.beginPath();
+          ctx2d.ellipse(px, py, ballRadius * 1.02, minorR + 1, stripeAngle, 0, Math.PI * 2);
+          ctx2d.fill();
+
+          // Subsurface glow
+          const sssStripe = ctx2d.createRadialGradient(
+            px - ballRadius * 0.25, py - ballRadius * 0.25, 0,
+            px, py, ballRadius * 0.8
+          );
+          sssStripe.addColorStop(0, 'rgba(255,255,255,0.12)');
+          sssStripe.addColorStop(0.5, 'rgba(255,240,220,0.04)');
+          sssStripe.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx2d.fillStyle = sssStripe;
+          ctx2d.beginPath();
+          ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
           ctx2d.fill();
 
           ctx2d.restore();
 
+          // Ball outline
           ctx2d.beginPath();
           ctx2d.arc(px, py, ballRadius - 0.2, 0, Math.PI * 2);
-          ctx2d.strokeStyle = 'rgba(0,0,0,0.15)';
-          ctx2d.lineWidth = 0.8;
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.2)';
+          ctx2d.lineWidth = 0.6;
           ctx2d.stroke();
         } else {
           ctx2d.save();
@@ -1009,30 +1028,30 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           const c = b.color;
           const isBlack = b.id === 8;
 
-          // Subsurface scattering base
+          // Main color gradient with rich 3D shading
           const solidGrad = ctx2d.createRadialGradient(
             px - ballRadius * 0.35,
             py - ballRadius * 0.35,
             0,
             px + ballRadius * 0.1,
             py + ballRadius * 0.1,
-            ballRadius * 1.2
+            ballRadius * 1.3
           );
           if (isBlack) {
-            solidGrad.addColorStop(0, '#2a2a2a');
-            solidGrad.addColorStop(0.2, '#1a1a1a');
-            solidGrad.addColorStop(0.5, '#111111');
-            solidGrad.addColorStop(0.85, '#080808');
+            solidGrad.addColorStop(0, '#3a3a3a');
+            solidGrad.addColorStop(0.15, '#222222');
+            solidGrad.addColorStop(0.4, '#151515');
+            solidGrad.addColorStop(0.7, '#0a0a0a');
             solidGrad.addColorStop(1, '#000000');
           } else {
-            const brightColor = lightenColor(c, 35);
+            const brightColor = lightenColor(c, 40);
             const midColor = c;
-            const darkColor = darkenColor(c, 30);
+            const darkColor = darkenColor(c, 35);
             solidGrad.addColorStop(0, brightColor);
-            solidGrad.addColorStop(0.15, midColor);
-            solidGrad.addColorStop(0.5, midColor);
-            solidGrad.addColorStop(0.78, darkColor);
-            solidGrad.addColorStop(0.92, '#111111');
+            solidGrad.addColorStop(0.12, midColor);
+            solidGrad.addColorStop(0.45, midColor);
+            solidGrad.addColorStop(0.7, darkColor);
+            solidGrad.addColorStop(0.88, '#111111');
             solidGrad.addColorStop(1, '#000000');
           }
           ctx2d.fillStyle = solidGrad;
@@ -1046,10 +1065,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               0,
               px,
               py,
-              ballRadius * 0.7
+              ballRadius * 0.75
             );
-            sssGlow.addColorStop(0, 'rgba(255,255,255,0.12)');
-            sssGlow.addColorStop(0.3, 'rgba(255,255,255,0.05)');
+            sssGlow.addColorStop(0, 'rgba(255,255,255,0.15)');
+            sssGlow.addColorStop(0.3, 'rgba(255,255,255,0.06)');
             sssGlow.addColorStop(0.7, 'rgba(255,255,255,0.01)');
             sssGlow.addColorStop(1, 'rgba(0,0,0,0)');
             ctx2d.fillStyle = sssGlow;
@@ -1062,8 +1081,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
           ctx2d.beginPath();
           ctx2d.arc(px, py, ballRadius - 0.3, 0, Math.PI * 2);
-          ctx2d.strokeStyle = isBlack ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.18)';
-          ctx2d.lineWidth = 0.8;
+          ctx2d.strokeStyle = isBlack ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.2)';
+          ctx2d.lineWidth = 0.6;
           ctx2d.stroke();
         }
 
@@ -1084,9 +1103,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         );
         tableReflect.addColorStop(0, 'rgba(0,0,0,0)');
         tableReflect.addColorStop(0.5, 'rgba(0,0,0,0)');
-        tableReflect.addColorStop(0.78, 'rgba(0,60,30,0.18)');
-        tableReflect.addColorStop(0.92, 'rgba(0,80,40,0.10)');
-        tableReflect.addColorStop(1, 'rgba(0,100,50,0.05)');
+        tableReflect.addColorStop(0.78, 'rgba(0,80,40,0.2)');
+        tableReflect.addColorStop(0.92, 'rgba(0,100,50,0.12)');
+        tableReflect.addColorStop(1, 'rgba(0,120,60,0.06)');
         ctx2d.fillStyle = tableReflect;
         ctx2d.fill();
 
@@ -1096,10 +1115,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           px, py, ballRadius
         );
         fresnelGrad.addColorStop(0, 'rgba(255,255,255,0)');
-        fresnelGrad.addColorStop(0.7, 'rgba(255,255,255,0)');
-        fresnelGrad.addColorStop(0.88, 'rgba(255,255,255,0.04)');
-        fresnelGrad.addColorStop(0.96, 'rgba(255,255,255,0.12)');
-        fresnelGrad.addColorStop(1, 'rgba(255,255,255,0.20)');
+        fresnelGrad.addColorStop(0.6, 'rgba(255,255,255,0)');
+        fresnelGrad.addColorStop(0.82, 'rgba(255,255,255,0.03)');
+        fresnelGrad.addColorStop(0.93, 'rgba(255,255,255,0.10)');
+        fresnelGrad.addColorStop(1, 'rgba(255,255,255,0.22)');
         ctx2d.fillStyle = fresnelGrad;
         ctx2d.fill();
 
@@ -1108,7 +1127,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           px, py + ballRadius * 0.6, 0,
           px, py + ballRadius * 0.4, ballRadius * 0.6
         );
-        rimLight.addColorStop(0, 'rgba(100,180,150,0.06)');
+        rimLight.addColorStop(0, 'rgba(80,180,140,0.08)');
         rimLight.addColorStop(1, 'rgba(0,0,0,0)');
         ctx2d.fillStyle = rimLight;
         ctx2d.beginPath();
@@ -1117,7 +1136,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
         ctx2d.restore();
 
-        // Primary specular highlight (sharp)
+        // Primary specular highlight (sharp) - enhanced
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         const specGrad = ctx2d.createRadialGradient(
@@ -1126,12 +1145,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           0,
           px - ballRadius * 0.25,
           py - ballRadius * 0.22,
-          ballRadius * 0.32
+          ballRadius * 0.35
         );
-        specGrad.addColorStop(0, 'rgba(255,255,255,0.95)');
-        specGrad.addColorStop(0.08, 'rgba(255,255,255,0.60)');
-        specGrad.addColorStop(0.2, 'rgba(255,255,255,0.20)');
-        specGrad.addColorStop(0.4, 'rgba(255,255,255,0.05)');
+        specGrad.addColorStop(0, 'rgba(255,255,255,0.98)');
+        specGrad.addColorStop(0.06, 'rgba(255,255,255,0.70)');
+        specGrad.addColorStop(0.15, 'rgba(255,255,255,0.25)');
+        specGrad.addColorStop(0.35, 'rgba(255,255,255,0.06)');
         specGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1148,11 +1167,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           0,
           px,
           py,
-          ballRadius * 0.75
+          ballRadius * 0.8
         );
-        softSpecGrad.addColorStop(0, 'rgba(255,255,255,0.15)');
-        softSpecGrad.addColorStop(0.4, 'rgba(255,255,255,0.05)');
-        softSpecGrad.addColorStop(0.7, 'rgba(255,255,255,0.02)');
+        softSpecGrad.addColorStop(0, 'rgba(255,255,255,0.18)');
+        softSpecGrad.addColorStop(0.3, 'rgba(255,255,255,0.06)');
+        softSpecGrad.addColorStop(0.6, 'rgba(255,255,255,0.02)');
         softSpecGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1169,18 +1188,18 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           0,
           px + ballRadius * 0.15,
           py - ballRadius * 0.15,
-          ballRadius * 0.30
+          ballRadius * 0.32
         );
-        envGrad.addColorStop(0, 'rgba(180,200,255,0.12)');
-        envGrad.addColorStop(0.3, 'rgba(160,190,255,0.05)');
-        envGrad.addColorStop(1, 'rgba(150,180,255,0)');
+        envGrad.addColorStop(0, 'rgba(200,220,255,0.14)');
+        envGrad.addColorStop(0.3, 'rgba(180,210,255,0.06)');
+        envGrad.addColorStop(1, 'rgba(160,200,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
         ctx2d.fillStyle = envGrad;
         ctx2d.fill();
         ctx2d.restore();
 
-        // Subtle light caustic (warm spot reflection)
+        // Warm caustic highlight
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         const warmGrad = ctx2d.createRadialGradient(
@@ -1189,69 +1208,82 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           0,
           px - ballRadius * 0.05,
           py - ballRadius * 0.3,
-          ballRadius * 0.20
+          ballRadius * 0.22
         );
-        warmGrad.addColorStop(0, 'rgba(255,220,180,0.06)');
-        warmGrad.addColorStop(1, 'rgba(255,200,150,0)');
+        warmGrad.addColorStop(0, 'rgba(255,230,190,0.08)');
+        warmGrad.addColorStop(1, 'rgba(255,210,160,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
         ctx2d.fillStyle = warmGrad;
         ctx2d.fill();
         ctx2d.restore();
 
-        // Number Badges
+        // Number Badges - improved 3D tracking
         if (b.id !== 0 && b.number) {
           const badgeDirs = [{ sign: 1 }, { sign: -1 }];
           badgeDirs.forEach(({ sign }) => {
-            const wx = sign * uz[0];
-            const wy = sign * uz[1];
-            const wz = sign * uz[2];
-            if (wz > 0.15) {
-              const bx = px + wx * ballRadius * 0.9;
-              const by = py + wy * ballRadius * 0.9;
-              const textAngle = Math.atan2(uy[1], uy[0]) - Math.PI / 2;
+            // Use uy axis for badge position (poles of the stripe axis)
+            const bwx = sign * uy[0];
+            const bwy = sign * uy[1];
+            const bwz = sign * uy[2];
+            if (bwz > 0.1) {
+              const bx = px + bwx * ballRadius * 0.88;
+              const by = py + bwy * ballRadius * 0.88;
+              
+              // Rotation angle for text to align with ball surface
+              const textAngle = Math.atan2(uy[1], uy[0]) + (sign > 0 ? -Math.PI / 2 : Math.PI / 2);
+              const perspScale = Math.max(bwz, 0.3);
 
               ctx2d.save();
               ctx2d.translate(bx, by);
               ctx2d.rotate(textAngle);
 
               const badgeR = 5.0;
-              const badgeScaleY = Math.max(wz, 0.4);
 
               // Badge shadow
               ctx2d.beginPath();
-              ctx2d.ellipse(0.6, 0.8, badgeR, badgeR * badgeScaleY, 0, 0, Math.PI * 2);
-              ctx2d.fillStyle = 'rgba(0,0,0,0.20)';
+              ctx2d.ellipse(0.6, 0.8, badgeR + 0.5, (badgeR + 0.5) * perspScale, 0, 0, Math.PI * 2);
+              ctx2d.fillStyle = 'rgba(0,0,0,0.25)';
               ctx2d.fill();
 
-              // Badge base
+              // Badge base with 3D gradient
               ctx2d.beginPath();
-              ctx2d.ellipse(0, 0, badgeR, badgeR * badgeScaleY, 0, 0, Math.PI * 2);
-              const badgeGrad = ctx2d.createRadialGradient(0, -badgeR * 0.2, 0, 0, 0, badgeR);
+              ctx2d.ellipse(0, 0, badgeR, badgeR * perspScale, 0, 0, Math.PI * 2);
+              const badgeGrad = ctx2d.createRadialGradient(0, -badgeR * 0.25 * perspScale, 0, 0, 0, badgeR);
               badgeGrad.addColorStop(0, '#ffffff');
-              badgeGrad.addColorStop(0.7, '#f8f6f0');
-              badgeGrad.addColorStop(1, '#e8e4da');
+              badgeGrad.addColorStop(0.5, '#faf8f2');
+              badgeGrad.addColorStop(0.85, '#ece8de');
+              badgeGrad.addColorStop(1, '#ddd8cc');
               ctx2d.fillStyle = badgeGrad;
               ctx2d.fill();
 
-              // Badge outline
-              ctx2d.strokeStyle = 'rgba(0,0,0,0.20)';
-              ctx2d.lineWidth = 0.5;
+              // Badge metallic outline
+              ctx2d.strokeStyle = 'rgba(80,60,30,0.2)';
+              ctx2d.lineWidth = 0.6;
               ctx2d.stroke();
 
-              // Number with better contrast
-              ctx2d.scale(1, badgeScaleY);
+              // Number text with perspective
+              ctx2d.save();
+              ctx2d.scale(1, perspScale);
               ctx2d.font = 'bold 9px "Segoe UI", Arial, sans-serif';
               ctx2d.textAlign = 'center';
               ctx2d.textBaseline = 'middle';
 
               // Text shadow
-              ctx2d.fillStyle = 'rgba(0,0,0,0.35)';
+              ctx2d.fillStyle = 'rgba(0,0,0,0.3)';
               ctx2d.fillText(String(b.number), 0.5, 0.6);
 
-              // Main text
-              ctx2d.fillStyle = '#000000';
+              // Main text with slight darkening
+              ctx2d.fillStyle = '#1a1a1a';
               ctx2d.fillText(String(b.number), 0, 0);
+              ctx2d.restore();
+
+              // Specular glint on badge (for glossy look)
+              ctx2d.beginPath();
+              ctx2d.ellipse(-badgeR * 0.3, -badgeR * 0.3 * perspScale, badgeR * 0.3, badgeR * 0.2 * perspScale, -0.5, 0, Math.PI * 2);
+              ctx2d.fillStyle = 'rgba(255,255,255,0.25)';
+              ctx2d.fill();
+
               ctx2d.restore();
             }
           });
@@ -3223,87 +3255,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             ctx.placedPosRef.current.y - 18
           );
         }
-      }
-
-      // ── POWER BAR (vertical, right side of table) ───────────
-      if (
-        ctx.isMyTurnRef.current &&
-        !ctx.isScratchPlacingRef.current &&
-        !ctx.isAnimatingRef.current
-      ) {
-        const barX = 785;
-        const barTop = 30;
-        const barBottom = 370;
-        const barH = barBottom - barTop;
-        const barW = 10;
-        const power =
-          ctx.shotPowerRef.current / 100;
-
-        ctx2d.save();
-        ctx2d.beginPath();
-        ctx2d.roundRect(
-          barX - barW / 2,
-          barTop,
-          barW,
-          barH,
-          4
-        );
-        ctx2d.fillStyle = 'rgba(0,0,0,0.55)';
-        ctx2d.fill();
-        ctx2d.strokeStyle =
-          'rgba(255,255,255,0.12)';
-        ctx2d.lineWidth = 1;
-        ctx2d.stroke();
-
-        const fillH = barH * power;
-        const barFillGrad =
-          ctx2d.createLinearGradient(
-            0,
-            barBottom,
-            0,
-            barBottom - fillH
-          );
-        barFillGrad.addColorStop(0, '#10b981');
-        barFillGrad.addColorStop(0.45, '#f59e0b');
-        barFillGrad.addColorStop(1, '#ef4444');
-        ctx2d.save();
-        ctx2d.beginPath();
-        ctx2d.roundRect(
-          barX - barW / 2,
-          barBottom - fillH,
-          barW,
-          fillH,
-          4
-        );
-        ctx2d.fillStyle = barFillGrad;
-        ctx2d.fill();
-
-        ctx2d.shadowColor =
-          power > 0.75
-            ? '#ef4444'
-            : power > 0.4
-              ? '#f59e0b'
-              : '#10b981';
-        ctx2d.shadowBlur = 8;
-        ctx2d.fill();
-        ctx2d.restore();
-
-        ctx2d.font =
-          'bold 8px monospace';
-        ctx2d.fillStyle =
-          'rgba(255,255,255,0.75)';
-        ctx2d.textAlign = 'center';
-        ctx2d.fillText(
-          `${Math.round(ctx.shotPowerRef.current)}%`,
-          barX,
-          barBottom + 11
-        );
-
-        ctx2d.font = '7px monospace';
-        ctx2d.fillStyle =
-          'rgba(255,255,255,0.4)';
-        ctx2d.fillText('PWR', barX, barTop - 5);
-        ctx2d.restore();
       }
 
       // ── GAME OVER OVERLAY ───────────────
