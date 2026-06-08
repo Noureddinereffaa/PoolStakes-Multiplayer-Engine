@@ -4,6 +4,8 @@ import { Ball, RoomState } from '../types';
 import { poolAudio } from '../utils/audio';
 import { BallRotationData } from './PoolTable/rotation';
 
+const haptic = (ms: number) => { try { navigator.vibrate?.(ms); } catch (_) {} };
+
 export interface PoolTableHandle {
   spinX: number;
   spinY: number;
@@ -73,7 +75,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const [isPulling, setIsPulling] = useState(false);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
-  const startDistFromCueRef = useRef(0);
+  const isBreakShotRef = useRef(false);
+  const initialAimAngleRef = useRef(0);
 
   const [hudNotification, setHudNotification] = useState<string | null>(null);
   const lastLogRef = useRef<string | null>(null);
@@ -214,9 +217,16 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             isCurrentlyStrikingBeforeContact = true;
           } else if (!strikeAnimRef.current.hasStruck) {
             strikeAnimRef.current.hasStruck = true;
-            poolAudio.playCueHit(strikeAnimRef.current.power);
-            triggerShootParticles(strikeAnimRef.current.power);
-            impactShakeRef.current = Math.min(14.0, 2.0 + (strikeAnimRef.current.power / 100) * 12.0);
+            poolAudio.playCueHit(strikeAnimRef.current.power); haptic(30);
+            isBreakShotRef.current = roomStateRef.current.balls.filter(b => b.id !== 0 && b.isPocketed).length === 0;
+            triggerShootParticles(strikeAnimRef.current.power, isBreakShotRef.current);
+            if (isBreakShotRef.current) {
+              impactShakeRef.current = Math.min(24.0, 6.0 + (strikeAnimRef.current.power / 100) * 18.0);
+              setHudNotification('💥 BREAK!');
+              setTimeout(() => setHudNotification(null), 2000);
+            } else {
+              impactShakeRef.current = Math.min(14.0, 2.0 + (strikeAnimRef.current.power / 100) * 12.0);
+            }
           }
         }
         if (isCurrentlyStrikingBeforeContact) {
@@ -241,7 +251,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               frame.forEach((bf) => {
                 const prevBf = prevFrame.find((b) => b.id === bf.id);
                 if (bf.isPocketed && prevBf && !prevBf.isPocketed) {
-                  poolAudio.playPocketIn();
+                  poolAudio.playPocketIn(); haptic(40);
                   const pCenters = [{ x: 22, y: 22 }, { x: 400, y: 18 }, { x: 778, y: 22 }, { x: 22, y: 378 }, { x: 400, y: 382 }, { x: 778, y: 378 }];
                   let closestP = pCenters[0]; let minDist = Infinity;
                   pCenters.forEach(p => { const d = Math.hypot(bf.x - p.x, bf.y - p.y); if (d < minDist) { minDist = d; closestP = p; } });
@@ -266,7 +276,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                         const speed1 = Math.sqrt((b1.x - prevB1.x) ** 2 + (b1.y - prevB1.y) ** 2);
                         const speed2 = Math.sqrt((b2.x - prevB2.x) ** 2 + (b2.y - prevB2.y) ** 2);
                         const totalSpeed = speed1 + speed2;
-                        poolAudio.playBallCollision(Math.max(0.15, totalSpeed));
+                        poolAudio.playBallCollision(Math.max(0.15, totalSpeed)); haptic(Math.min(20, Math.floor(5 + totalSpeed * 8)));
                         if (totalSpeed > 0.8) impactShakeRef.current = Math.min(10.0, impactShakeRef.current + totalSpeed * 1.65);
                         feltRipplesRef.current.push({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, radius: 3, maxRadius: Math.min(26, 11 + totalSpeed * 6), opacity: Math.min(0.75, 0.22 + totalSpeed * 0.12), color: 'rgba(255, 255, 255, 0.45)' });
                         const contactX = (b1.x + b2.x) / 2, contactY = (b1.y + b2.y) / 2;
@@ -288,7 +298,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                   if ((bf.x <= minX + 0.05 && prevBf.x > minX + 0.05) || (bf.x >= maxX - 0.05 && prevBf.x < maxX - 0.05)) hitCushion = true;
                   if ((bf.y <= minY + 0.05 && prevBf.y > minY + 0.05) || (bf.y >= maxY - 0.05 && prevBf.y < maxY - 0.05)) hitCushion = true;
                   if (hitCushion) {
-                    poolAudio.playCushionHit(speed);
+                    poolAudio.playCushionHit(speed); haptic(Math.min(15, Math.floor(3 + speed * 6)));
                     if (speed > 0.4) impactShakeRef.current = Math.min(8.0, impactShakeRef.current + speed * 1.5);
                     let contactX = bf.x, contactY = bf.y;
                     if (bf.x < minX + 1.0) contactX = 20; else if (bf.x > maxX - 1.0) contactX = 780;
@@ -399,16 +409,25 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     if (isMyTurn && !roomState.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed) {
-        const distFromCue = Math.hypot(coords.y - cueBall.y, coords.x - cueBall.x);
         if (isInitialDown) {
           pullStartPosRef.current = coords;
-          startDistFromCueRef.current = distFromCue;
           setIsPulling(true);
-          if (!isAimLocked) setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
+          if (!isAimLocked) {
+            const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+            setAimAngle(newAngle);
+            initialAimAngleRef.current = newAngle;
+          }
         } else if (pullStartPosRef.current) {
-          if (!isAimLocked) setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
-          const pullDistance = Math.max(0, distFromCue - startDistFromCueRef.current);
-          setShotPower(Math.min(100, Math.max(5, Math.floor(pullDistance / 1.7 + 5))));
+          if (!isAimLocked) {
+            const dx = coords.x - pullStartPosRef.current.x;
+            const dy = coords.y - pullStartPosRef.current.y;
+            const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
+            setAimAngle(initialAimAngleRef.current + orthoDrag * 0.003);
+          }
+          const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
+          const rawPower = Math.min(100, dragDist / 2.4);
+          const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
+          setShotPower(Math.min(100, Math.max(5, Math.floor(curvedPower))));
         } else if (!isAimLocked) {
           setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
         }
@@ -431,22 +450,23 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     }
   };
 
-  const triggerShootParticles = (power: number) => {
+  const triggerShootParticles = (power: number, isBreak = false) => {
     const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
     if (cueBall && !cueBall.isPocketed) {
       const bAngle = aimAngle + Math.PI;
       const hDx = Math.cos(bAngle), hDy = Math.sin(bAngle);
-      for (let i = 0; i < Math.min(25, Math.floor(10 + power * 0.25)); i++) {
-        const sa = bAngle + (Math.random() - 0.5) * 1.1;
-        const sp = (Math.random() * 2.5 + 0.8) * (power / 100 + 0.5);
-        chalkParticlesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, vx: Math.cos(sa) * sp, vy: Math.sin(sa) * sp, size: Math.random() * 2.0 + 0.6, opacity: 0.9, color: 'rgba(59, 130, 246, 0.8)' });
+      const mult = isBreak ? 2.5 : 1;
+      for (let i = 0; i < Math.min(Math.floor(25 * mult), Math.floor((10 + power * 0.25) * mult)); i++) {
+        const sa = bAngle + (Math.random() - 0.5) * (isBreak ? 1.8 : 1.1);
+        const sp = (Math.random() * 2.5 + 0.8) * (power / 100 + 0.5) * (isBreak ? 2.0 : 1);
+        chalkParticlesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, vx: Math.cos(sa) * sp, vy: Math.sin(sa) * sp, size: (Math.random() * 2.0 + 0.6) * (isBreak ? 1.5 : 1), opacity: 0.9, color: 'rgba(59, 130, 246, 0.8)' });
       }
-      for (let i = 0; i < Math.min(15, Math.floor(power * 0.15)); i++) {
-        const sa = bAngle + Math.PI + (Math.random() - 0.5) * 1.8;
-        const sp = (Math.random() * 4.0 + 1.5) * (power / 100 + 0.3);
-        chalkParticlesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, vx: Math.cos(sa) * sp, vy: Math.sin(sa) * sp, size: Math.random() * 1.5 + 0.8, opacity: 1.0, color: Math.random() > 0.4 ? 'rgba(245, 158, 11, 0.95)' : 'rgba(255, 230, 150, 0.95)' });
+      for (let i = 0; i < Math.min(Math.floor(15 * mult), Math.floor(power * 0.15 * mult)); i++) {
+        const sa = bAngle + Math.PI + (Math.random() - 0.5) * (isBreak ? 2.5 : 1.8);
+        const sp = (Math.random() * 4.0 + 1.5) * (power / 100 + 0.3) * (isBreak ? 2.5 : 1);
+        chalkParticlesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, vx: Math.cos(sa) * sp, vy: Math.sin(sa) * sp, size: (Math.random() * 1.5 + 0.8) * (isBreak ? 1.5 : 1), opacity: 1.0, color: Math.random() > 0.4 ? 'rgba(245, 158, 11, 0.95)' : 'rgba(255, 230, 150, 0.95)' });
       }
-      feltRipplesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, radius: 4, maxRadius: 28, opacity: 0.8, color: 'rgba(59, 130, 246, 0.5)' });
+      feltRipplesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, radius: isBreak ? 12 : 4, maxRadius: isBreak ? 60 : 28, opacity: isBreak ? 1.0 : 0.8, color: 'rgba(59, 130, 246, 0.5)' });
     }
   };
 

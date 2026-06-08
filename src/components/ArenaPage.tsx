@@ -311,6 +311,14 @@ export default function ArenaPage({
     if (isGameOver) poolAudio.playWin();
   }, [isGameOver]);
 
+  const prevTimerRef = useRef(timerVal);
+  useEffect(() => {
+    if (timerVal <= 10 && timerVal > 0 && timerVal !== prevTimerRef.current && isMyTurn) {
+      poolAudio.playCountdown();
+    }
+    prevTimerRef.current = timerVal;
+  }, [timerVal, isMyTurn]);
+
   if (!roomState) {
     return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-gradient-to-b from-[#0a0604] to-black flex items-center justify-center">

@@ -44,6 +44,9 @@ interface RenderContext {
     | undefined;
 }
 
+const ballTrails = new Map<number, { x: number; y: number }[]>();
+const TRAIL_LENGTH = 6;
+
 function lightenColor(hex: string, percent: number): string {
   const num = parseInt(hex.replace('#', ''), 16);
   const r = Math.min(255, (num >> 16) + Math.round(255 * percent / 100));
@@ -659,8 +662,56 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.drawImage(ctx.offscreenCanvasRef.current, 0, 0);
       }
 
-      // 4.5. Instant ball removal when pocketed (no sink animation)
-      ctx.sinkingBallsRef.current = [];
+      // 4.5. Sinking ball animation — balls shrink + fade as they fall into pocket
+      const aliveSink: SinkingBall[] = [];
+      for (const sb of ctx.sinkingBallsRef.current) {
+        sb.progress += 1.2;
+        if (sb.progress >= sb.maxProgress) continue;
+        const t = sb.progress / sb.maxProgress;
+        const sx = sb.ball.x + (sb.pocketX - sb.ball.x) * t;
+        const sy = sb.ball.y + (sb.pocketY - sb.ball.y) * t;
+        const scale = 1 - t * 0.7;
+        const alpha = 1 - t * t;
+        const r = (sb.ball.radius || 10) * scale;
+        ctx2d.save();
+        ctx2d.globalAlpha = alpha;
+        ctx2d.beginPath();
+        ctx2d.arc(sx + 2 * t, sy + 2 * t, r * 1.8, 0, Math.PI * 2);
+        ctx2d.fillStyle = `rgba(0,0,0,${0.4 * (1 - t)})`;
+        ctx2d.fill();
+        const grad = ctx2d.createRadialGradient(sx - r * 0.25, sy - r * 0.25, 0, sx, sy, r);
+        grad.addColorStop(0, lightenColor(sb.ball.color, 40));
+        grad.addColorStop(0.5, sb.ball.color);
+        grad.addColorStop(1, darkenColor(sb.ball.color, 50));
+        ctx2d.beginPath();
+        ctx2d.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx2d.fillStyle = grad;
+        ctx2d.fill();
+        ctx2d.restore();
+        aliveSink.push(sb);
+      }
+      ctx.sinkingBallsRef.current = aliveSink;
+
+      // 4.6. Ball trail — fading motion streaks behind moving balls
+      for (const b of ctx.animatedBallsRef.current) {
+        if (b.isPocketed) { ballTrails.delete(b.id); continue; }
+        const trail = ballTrails.get(b.id) || [];
+        trail.push({ x: b.x, y: b.y });
+        if (trail.length > TRAIL_LENGTH) trail.shift();
+        ballTrails.set(b.id, trail);
+      }
+      ctx2d.save();
+      for (const [, trail] of ballTrails) {
+        for (let i = 0; i < trail.length; i++) {
+          const alpha = (i + 1) / trail.length * 0.25;
+          const r = 10 * ((i + 1) / trail.length) * 0.6;
+          ctx2d.beginPath();
+          ctx2d.arc(trail[i].x, trail[i].y, r, 0, Math.PI * 2);
+          ctx2d.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx2d.fill();
+        }
+      }
+      ctx2d.restore();
 
       // 5. Render All Balls using Ultra-Realistic 3D Spherical Glistening Shaders
       const eligibleIds = getEligibleBallIds(

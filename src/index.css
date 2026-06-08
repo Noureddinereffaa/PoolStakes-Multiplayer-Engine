@@ -7,14 +7,9 @@
 canvas {
   image-rendering: auto;
 }
-html {
-  background: #000;
-  overflow: hidden;
-  -webkit-tap-highlight-color: transparent;
-}
 body {
+  -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
-  -webkit-overflow-scrolling: auto;
   -webkit-user-select: none;
   user-select: none;
 }
