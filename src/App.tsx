@@ -1,13 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { RoomState, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import RulesPage from './components/RulesPage';
 import MemberDashboard from './components/MemberDashboard';
 import ArenaPage from './components/ArenaPage';
-import { ShieldAlert, LogOut, User, CheckCircle2 } from 'lucide-react';
+import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
 
+interface ToastItem {
+  id: number;
+  type: 'success' | 'error';
+  message: string;
+}
 
 interface UserSession {
   id: string;
@@ -16,6 +21,8 @@ interface UserSession {
   email?: string;
   walletAddress?: string;
 }
+
+let toastIdCounter = 0;
 
 export default function App() {
   // Authentication & session state
@@ -39,8 +46,15 @@ export default function App() {
   const [matchHistory, setMatchHistory] = useState<MatchType[]>([]);
 
   // Client UI States
-  const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const addToast = useCallback((type: 'success' | 'error', message: string, durationMs = 4000) => {
+    const id = ++toastIdCounter;
+    setToasts(prev => [...prev, { id, type, message }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), durationMs);
+  }, []);
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
   const [chatMessage, setChatMessage] = useState('');
   const [joinDifficulty, setJoinDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [currentPage, setCurrentPage] = useState<'home' | 'rules' | 'dashboard' | 'arena'>('home');
@@ -101,7 +115,7 @@ export default function App() {
     username: userSession?.username,
     fetchLaravelUsers,
     setApiLogs,
-    setErrorBanner
+    setErrorBanner: (msg: string) => addToast('error', msg, 5000)
   });
 
   // Check saved session on load
@@ -153,7 +167,6 @@ export default function App() {
     e.preventDefault();
     if (!regUser.trim() || !regPass) return;
     setIsAuthLoading(true);
-    setErrorBanner(null);
 
     try {
       const response = await fetch('/api/laravel/auth/register', {
@@ -180,15 +193,14 @@ export default function App() {
         localStorage.setItem('billiards_session', JSON.stringify(session));
         setCurrentPage('dashboard');
 
-        setSuccessBanner('Account Welcome Pack Loaded! You received 500.00 USDT credit bonus!');
-        setTimeout(() => setSuccessBanner(null), 5000);
+        addToast('success', 'Account Welcome Pack Loaded! You received 500.00 USDT credit bonus!', 5000);
         
         fetchLaravelUsers();
       } else {
-        setErrorBanner(data.error || 'Registration failed. Choose a different username.');
+        addToast('error', data.error || 'Registration failed. Choose a different username.');
       }
     } catch (e) {
-      setErrorBanner('Backend servers unresponsive. Try again.');
+      addToast('error', 'Backend servers unresponsive. Try again.');
     } finally {
       setIsAuthLoading(false);
     }
@@ -199,7 +211,6 @@ export default function App() {
     e.preventDefault();
     if (!loginUser.trim() || !loginPass) return;
     setIsAuthLoading(true);
-    setErrorBanner(null);
 
     try {
       const response = await fetch('/api/laravel/auth/login', {
@@ -224,15 +235,14 @@ export default function App() {
         localStorage.setItem('billiards_session', JSON.stringify(session));
         setCurrentPage('dashboard');
 
-        setSuccessBanner(`Welcome back standard player ${session.username}! Lounge access granted.`);
-        setTimeout(() => setSuccessBanner(null), 4000);
+        addToast('success', `Welcome back ${session.username}! Lounge access granted.`);
         
         fetchLaravelUsers();
       } else {
-        setErrorBanner(data.error || 'Password mismatch or user doesn\'t exist.');
+        addToast('error', data.error || 'Password mismatch or user doesn\'t exist.');
       }
     } catch (e) {
-      setErrorBanner('Network API endpoint offline.');
+      addToast('error', 'Network API endpoint offline.');
     } finally {
       setIsAuthLoading(false);
     }
@@ -251,8 +261,7 @@ export default function App() {
     setUserSession(session);
     localStorage.setItem('billiards_session', JSON.stringify(session));
     setCurrentPage('dashboard');
-    setSuccessBanner('Logged in as Guest and credited 350.00 USDT practice points successfully!');
-    setTimeout(() => setSuccessBanner(null), 4000);
+    addToast('success', 'Logged in as Guest and credited 350.00 USDT practice points successfully!');
     fetchLaravelUsers();
   };
 
@@ -262,18 +271,15 @@ export default function App() {
     setUserSession(null);
     setCurrentPage('home');
     localStorage.removeItem('billiards_session');
-    setSuccessBanner('Secure logout complete. Your USDT balance is archived.');
-    setTimeout(() => setSuccessBanner(null), 3000);
+    addToast('success', 'Secure logout complete. Your USDT balance is archived.');
   };
 
   const handleCopyRoomCode = () => {
     if (!roomState) return;
     navigator.clipboard.writeText(roomState.roomId).then(() => {
-      setSuccessBanner('Room access code copied. Share it with your opponent!');
-      setTimeout(() => setSuccessBanner(null), 3000);
+      addToast('success', 'Room access code copied. Share it with your opponent!');
     }).catch(() => {
-      setErrorBanner('Unable to copy invite code automatically.');
-      setTimeout(() => setErrorBanner(null), 3000);
+      addToast('error', 'Unable to copy invite code automatically.');
     });
   };
 
@@ -286,8 +292,7 @@ export default function App() {
   const onQuitRoomClick = () => {
     handleQuitRoom();
     setCurrentPage('dashboard');
-    setSuccessBanner('Successfully exited Room. Your assets have returned safely to wallet ledger.');
-    setTimeout(() => setSuccessBanner(null), 3000);
+    addToast('success', 'Successfully exited Room. Your assets have returned safely to wallet ledger.');
   };
 
   const handleModifyBalance = async (userId: string, delta: number) => {
@@ -392,20 +397,17 @@ export default function App() {
         onDeposit={(amount, address, method) => {
           if (userSession) {
             handleModifyBalance(userSession.id, amount); // amount is a delta (positive)
-            setSuccessBanner(`Deposit confirmed: ${amount} USDT credited to your account.`);
-            setTimeout(() => setSuccessBanner(null), 4000);
+            addToast('success', `Deposit confirmed: ${amount} USDT credited to your account.`);
           }
         }}
         onWithdraw={(amount, address, method) => {
           if (userSession) {
             if (userSession.balance < amount) {
-              setErrorBanner('Insufficient balance for this withdrawal.');
-              setTimeout(() => setErrorBanner(null), 4000);
+              addToast('error', 'Insufficient balance for this withdrawal.');
               return;
             }
             handleModifyBalance(userSession.id, -amount); // delta (negative)
-            setSuccessBanner(`Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
-            setTimeout(() => setSuccessBanner(null), 5000);
+            addToast('success', `Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
           }
         }}
       />
@@ -446,21 +448,36 @@ export default function App() {
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full filter blur-[140px] pointer-events-none" />
 
-      {/* Security alert / Success alerts panel */}
-      {errorBanner && (
-        <div className="fixed bottom-6 right-6 z-50 bg-red-950 border border-red-500/40 text-red-200 p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-fadeIn max-w-md">
-          <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 animate-pulse" />
-          <div className="text-xs font-mono">{errorBanner}</div>
-        </div>
-      )}
-
-      {/* Success notification panel */}
-      {successBanner && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-950 border border-emerald-500/40 text-emerald-300 p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-fadeIn max-w-md">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 animate-bounce" />
-          <div className="text-xs font-mono">{successBanner}</div>
-        </div>
-      )}
+      {/* Toast notification stack */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`relative p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-fadeIn border overflow-hidden ${
+              toast.type === 'error'
+                ? 'bg-red-950 border-red-500/40 text-red-200'
+                : 'bg-gradient-to-r from-amber-950 to-amber-900 border-amber-500/40 text-amber-200'
+            }`}
+          >
+            {toast.type === 'error' ? (
+              <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 animate-pulse" />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-xs shrink-0">✓</div>
+            )}
+            <div className="text-xs font-mono flex-1">{toast.message}</div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="text-current/50 hover:text-current/80 transition shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {/* Gold progress bar for success */}
+            {toast.type === 'success' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-amber-300 animate-shrink-right" style={{animationDuration: '4s'}} />
+            )}
+          </div>
+        ))}
+      </div>
 
       {/* Header element */}
       <header className="border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">

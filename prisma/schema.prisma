@@ -3,19 +3,20 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String   @id @default(uuid())
-  username      String   @unique
-  email         String?  @unique
-  password      String
-  balance       Float    @default(500.0)
-  walletAddress String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String    @id @default(uuid())
+  username        String    @unique
+  email           String?   @unique
+  password        String
+  balance         Float     @default(500.0)
+  walletAddress   String?
+  guestExpiresAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   escrowsAsP1   Escrow[]      @relation("Player1")
   escrowsAsP2   Escrow[]      @relation("Player2")
@@ -68,6 +69,17 @@ model Transaction {
 
   loserId     String?
   loser       User?    @relation("Loser", fields: [loserId], references: [id])
+}
+
+model RoomSnapshot {
+  id          String   @id @default(uuid())
+  roomId      String   @unique
+  name        String
+  stake       Float
+  status      String
+  state       String   // JSON-serialized full RoomState (players, balls, turn, etc.)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ApiLog {

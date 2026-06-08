@@ -53,6 +53,7 @@ export interface RoomState {
   serverSeed?: string;
   commissionRate?: number;
   turnTimer?: number; // active player turn timer in seconds (e.g., 40 to 0)
+  animVersion?: number; // incremented each shot to invalidate stale timeouts
 }
 
 export interface GameConfig {

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { RoomState } from './types';
+import { RoomState, Ball } from './types';
+import { simulatePhysicsStep, isAnyBallMoving, captureFrame, powerToVelocity } from './server/physics';
 
 interface UseBilliardsSocketProps {
   username?: string;
@@ -20,6 +21,9 @@ export function useBilliardsSocket({
   const [opponentAim, setOpponentAim] = useState<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | 'easy' | 'medium' | 'hard' } | null>(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // استخدام المراجع (Refs) لحفظ أحدث القيم للدوال لتجنب الإغلاقات القديمة (Stale Closures) داخل الـ WebSocket
   const fetchRef = useRef(fetchLaravelUsers);
@@ -37,8 +41,15 @@ export function useBilliardsSocket({
     setOpponentAim(null);
   }, [roomState?.currentTurn, roomState?.status]);
 
-  const handleJoinRoom = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | 'easy' | 'medium' | 'hard' = false) => {
-    setRoomId(targetRoomId);
+  const connect = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | 'easy' | 'medium' | 'hard' = false, isReconnect = false) => {
+    if (!isReconnect) {
+      reconnectAttemptRef.current = 0;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
     setPhysicsFrames(null);
 
     if (wsRef.current) {
@@ -95,6 +106,8 @@ export function useBilliardsSocket({
     }, 1000);
 
     ws.onopen = () => {
+      clearTimeout(fallbackTimer);
+      reconnectAttemptRef.current = 0;
       ws.send(JSON.stringify({
         type: 'join',
         roomId: targetRoomId,
@@ -120,7 +133,12 @@ export function useBilliardsSocket({
             }
             break;
           case 'physics_frames':
-            setPhysicsFrames(msg.frames);
+            // تحويل من مصفوفات مضغوطة [id, x, y, isPocketed] إلى كائنات
+            setPhysicsFrames(
+              (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
+                frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
+              )
+            );
             break;
           case 'preview_aim':
             setOpponentAim({
@@ -143,9 +161,31 @@ export function useBilliardsSocket({
       }
     };
 
+    ws.onclose = () => {
+      // Exponential backoff reconnection (1s, 2s, 4s, 8s, max 30s)
+      if (reconnectRef.current && reconnectAttemptRef.current < 5) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+        reconnectAttemptRef.current++;
+        setErrorRef.current(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...`);
+        reconnectTimerRef.current = setTimeout(() => {
+          if (reconnectRef.current) {
+            connect(reconnectRef.current.targetRoomId, reconnectRef.current.customStake, reconnectRef.current.autoJoinAI, true);
+          }
+        }, delay);
+      } else {
+        reconnectRef.current = null;
+      }
+    };
+
     ws.onerror = () => {
     };
   }, []);
+
+  const handleJoinRoom = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | 'easy' | 'medium' | 'hard' = false) => {
+    reconnectRef.current = { targetRoomId, customStake, autoJoinAI };
+    reconnectAttemptRef.current = 0;
+    connect(targetRoomId, customStake, autoJoinAI);
+  }, [connect]);
 
   const handlePreviewAim = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -157,132 +197,10 @@ export function useBilliardsSocket({
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }));
     } else {
-      // محاكاة إطلاق الكرة بفيزياء ثنائية الأبعاد للحصول على تصادم واقعي (محلياً)
+      // Offline mode using the same shared physics as the server
       setRoomState((prev: any) => {
         if (!prev) return prev;
-
-        // نسخ الكرات للبدء في حسابات الحركة
-        const balls = prev.balls.map((b: any) => ({ ...b, vx: 0, vy: 0 }));
-        const cueBall = balls.find((b: any) => b.id === 0);
-        if (!cueBall) return prev;
-
-        // تحويل قوة الضربة إلى سرعة مبدئية للكرة البيضاء
-        cueBall.vx = Math.cos(angle) * (power * 0.4);
-        cueBall.vy = Math.sin(angle) * (power * 0.4);
-
-        const mockFrames = [];
-        const BALL_RADIUS = 10;
-        const TABLE_WIDTH = 800; // العرض الافتراضي
-        const TABLE_HEIGHT = 400; // الطول الافتراضي
-        const FRICTION = 0.985; // معامل الاحتكاك (Friction)
-        const CUSHION = 20; // عرض حافة الطاولة
-        const POCKET_RADIUS = 24; // نصف قطر فتحة الحفرة
-
-        // إحداثيات مراكز الحفر الستة
-        const pocketCenters = [
-          { x: CUSHION + 4, y: CUSHION + 4 },
-          { x: TABLE_WIDTH / 2, y: CUSHION + 1 },
-          { x: TABLE_WIDTH - CUSHION - 4, y: CUSHION + 4 },
-          { x: CUSHION + 4, y: TABLE_HEIGHT - CUSHION - 4 },
-          { x: TABLE_WIDTH / 2, y: TABLE_HEIGHT - CUSHION - 1 },
-          { x: TABLE_WIDTH - CUSHION - 4, y: TABLE_HEIGHT - CUSHION - 4 }
-        ];
-
-        let isMoving = true;
-        let iter = 0;
-
-        mockFrames.push(balls.map((b: any) => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed })));
-
-        // حلقة محاكاة الفيزياء حتى تتوقف جميع الكرات
-        while (isMoving && iter < 500) {
-          isMoving = false;
-          iter++;
-
-          for (const b of balls) {
-            if (b.isPocketed) continue;
-
-            b.x += b.vx;
-            b.y += b.vy;
-            b.vx *= FRICTION;
-            b.vy *= FRICTION;
-
-            if (Math.abs(b.vx) > 0.05 || Math.abs(b.vy) > 0.05) isMoving = true;
-            else { b.vx = 0; b.vy = 0; }
-
-            // التحقق من سقوط الكرة في إحدى الحفر
-            for (const pocket of pocketCenters) {
-              const dx = b.x - pocket.x;
-              const dy = b.y - pocket.y;
-              if (dx * dx + dy * dy < POCKET_RADIUS * POCKET_RADIUS) {
-                b.isPocketed = true;
-                b.vx = 0;
-                b.vy = 0;
-                break;
-              }
-            }
-            if (b.isPocketed) continue; // إذا سقطت الكرة، تخطى حسابات الارتداد
-
-            // الارتداد من حواف الطاولة
-            const minX = CUSHION + BALL_RADIUS;
-            const maxX = TABLE_WIDTH - CUSHION - BALL_RADIUS;
-            const minY = CUSHION + BALL_RADIUS;
-            const maxY = TABLE_HEIGHT - CUSHION - BALL_RADIUS;
-            if (b.x < minX) { b.x = minX; b.vx *= -1; } else if (b.x > maxX) { b.x = maxX; b.vx *= -1; }
-            if (b.y < minY) { b.y = minY; b.vy *= -1; } else if (b.y > maxY) { b.y = maxY; b.vy *= -1; }
-          }
-
-          // حساب اصطدام الكرات ببعضها (Elastic Collisions)
-          for (let i = 0; i < balls.length; i++) {
-            for (let j = i + 1; j < balls.length; j++) {
-              const b1 = balls[i];
-              const b2 = balls[j];
-              if (b1.isPocketed || b2.isPocketed) continue;
-
-              const dx = b2.x - b1.x;
-              const dy = b2.y - b1.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-
-              if (dist < BALL_RADIUS * 2) {
-                // تصحيح تداخل الكرات
-                const overlap = (BALL_RADIUS * 2 - dist) / 2;
-                const nx = dx / dist;
-                const ny = dy / dist;
-                b1.x -= nx * overlap;
-                b1.y -= ny * overlap;
-                b2.x += nx * overlap;
-                b2.y += ny * overlap;
-
-                // تبادل قوة الدفع بين الكرتين
-                const kx = b1.vx - b2.vx;
-                const ky = b1.vy - b2.vy;
-                const p = (nx * kx + ny * ky);
-
-                b1.vx -= p * nx;
-                b1.vy -= p * ny;
-                b2.vx += p * nx;
-                b2.vy += p * ny;
-              }
-            }
-          }
-
-          // تسجيل الإحداثيات بمعدل معين لتخفيف الضغط على واجهة المستخدم
-          if (iter % 3 === 0) {
-            mockFrames.push(balls.map((b: any) => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed })));
-          }
-        }
-
-        // الإطار النهائي
-        mockFrames.push(balls.map((b: any) => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed })));
-        setPhysicsFrames(mockFrames as any);
-
-        const nextTurn = prev.currentTurn === prev.players[0]?.id ? (prev.players[1]?.id || prev.players[0].id) : prev.players[0]?.id;
-
-        return {
-          ...prev,
-          currentTurn: nextTurn,
-          balls: balls.map((b: any) => ({ ...b, vx: 0, vy: 0 })), // تحديث مواقع الكرات وإيقاف سرعتها بالكامل
-          log: [...prev.log, `[Offline] Shot fired with ${power}% power.`]
-        };
+        return { ...prev, _pendingOfflineShot: { angle, power } };
       });
     }
   }, []);
@@ -321,6 +239,57 @@ export function useBilliardsSocket({
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
+
+  // معالجة التسديد في وضع الأوفلاين خارج setState (React-correct pattern)
+  useEffect(() => {
+    if (!roomState || !('_pendingOfflineShot' in roomState)) return;
+    const pending = (roomState as any)._pendingOfflineShot;
+    if (!pending) return;
+
+    // إزالة الحالة المعلقة
+    setRoomState((prev: any) => {
+      if (!prev) return prev;
+      const { _pendingOfflineShot, ...rest } = prev;
+      return rest;
+    });
+
+    const angle = pending.angle;
+    const power = pending.power;
+    const balls: Ball[] = roomState.balls.map((b: any) => ({ ...b, vx: 0, vy: 0 }));
+    const cueBall = balls.find(b => b.id === 0);
+    if (!cueBall) return;
+
+    const forceMag = powerToVelocity(power);
+    cueBall.vx = Math.cos(angle) * forceMag;
+    cueBall.vy = Math.sin(angle) * forceMag;
+
+    const mockFrames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> = [];
+    mockFrames.push(captureFrame(balls));
+
+    let iter = 0;
+    while (iter < 1200) {
+      simulatePhysicsStep(balls);
+      mockFrames.push(captureFrame(balls));
+      iter++;
+      if (!isAnyBallMoving(balls)) break;
+    }
+
+    setPhysicsFrames(mockFrames);
+
+    const nextTurn = roomState.currentTurn === roomState.players[0]?.id
+      ? (roomState.players[1]?.id || roomState.players[0].id)
+      : roomState.players[0]?.id;
+
+    setRoomState((prev: any) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        currentTurn: nextTurn,
+        balls: balls.map((b: Ball) => ({ ...b, vx: 0, vy: 0 })),
+        log: [...prev.log, `[Offline] Shot fired with ${power}% power.`]
+      };
+    });
+  }, [roomState]);
 
   return {
     roomId,

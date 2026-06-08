@@ -1,11 +1,23 @@
-import { Express } from 'express';
+import { randomUUID } from 'crypto';
+import { Express, Request, Response, NextFunction } from 'express';
 import { WebSocket } from 'ws';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { prisma } from './db';
+import { logger } from './logger';
 
-const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secure-pool-betting-secret-999';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  logger.error('FATAL: JWT_SECRET environment variable is not set');
+  process.exit(1);
+}
+if (JWT_SECRET === 'CHANGE_ME_TO_A_RANDOM_SECRET_IN_PRODUCTION') {
+  logger.error('FATAL: JWT_SECRET is still set to the default placeholder value. Generate a strong random secret and update .env');
+  process.exit(1);
+}
+if (JWT_SECRET.length < 32) {
+  logger.warn('JWT_SECRET is less than 32 characters — consider using a longer, more secure secret');
+}
 
 // Seed initial bots if they don't exist
 async function seedBots() {
@@ -22,9 +34,66 @@ async function seedBots() {
   }
 }
 
-seedBots();
+seedBots().catch(err => logger.error('Failed to seed bots', { error: String(err) }));
 
-export async function logLaravelApi(broadcastToAllWebSockets: (messageObj: any) => void, apiName: string, reqBody: any, response: any) {
+// ── Expired Guest Cleanup (every 30 minutes) ───────────────
+const GUEST_CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
+setInterval(async () => {
+  try {
+    const result = await prisma.user.deleteMany({
+      where: { guestExpiresAt: { lte: new Date() } }
+    });
+    if (result.count > 0) {
+      logger.info('Cleaned up expired guest accounts', { count: result.count });
+    }
+  } catch (err) {
+    logger.error('Guest cleanup failed', { error: String(err) });
+  }
+}, GUEST_CLEANUP_INTERVAL_MS);
+
+// ── JWT Authentication Middleware ──────────────────────────
+function authenticateToken(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Access denied. No token provided.' });
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+    (req as any).user = decoded;
+    next();
+  } catch {
+    return res.status(403).json({ success: false, error: 'Invalid or expired token.' });
+  }
+}
+
+// ── Simple In-Memory Rate Limiter ──────────────────────────
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 100; // max requests per window per IP
+
+function rateLimiter(req: Request, res: Response, next: NextFunction) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    next();
+    return;
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({ success: false, error: 'Too many requests. Please slow down.' });
+  }
+  next();
+}
+
+export async function logLaravelApi(
+  broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void,
+  apiName: string,
+  reqBody: Record<string, unknown>,
+  response: Record<string, unknown>
+) {
   try {
     const logItem = await prisma.apiLog.create({
       data: {
@@ -43,22 +112,43 @@ export async function logLaravelApi(broadcastToAllWebSockets: (messageObj: any) 
       timestamp: logItem.timestamp.toISOString()
     });
   } catch (error) {
-    console.error('Failed to write API log:', error);
+    logger.error('Failed to write API log', { error: String(error) });
   }
 }
 
-export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (messageObj: any) => void) {
-  const logLocalLaravelApi = (apiName: string, reqBody: any, response: any) =>
+export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void) {
+  const logLocalLaravelApi = (apiName: string, reqBody: Record<string, unknown>, response: Record<string, unknown>) =>
     logLaravelApi(broadcastToAllWebSockets, apiName, reqBody, response);
 
-  app.get('/api/laravel/users', async (req, res) => {
+  // Health check (no rate limit, no auth)
+  app.get('/api/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+
+  // Rate limiter on all routes
+  app.use('/api/laravel', rateLimiter);
+
+  // Public routes (no JWT required)
+  app.post('/api/laravel/auth/guest', async (req, res) => {
     try {
-      const users = await prisma.user.findMany({
-        select: { id: true, username: true, email: true, balance: true, walletAddress: true }
+      const guestName = 'Guest_' + Date.now();
+      const guestExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h TTL
+      const guest = await prisma.user.create({
+        data: {
+          id: 'guest-' + randomUUID(),
+          username: guestName,
+          email: `${guestName}@guest.local`,
+          password: randomUUID(),
+          balance: 350.0,
+          walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest',
+          guestExpiresAt,
+        }
       });
-      res.json({ users });
+      const token = jwt.sign({ id: guest.id, username: guest.username }, JWT_SECRET, { expiresIn: '1d' });
+      res.json({
+        success: true, token,
+        user: { id: guest.id, username: guest.username, balance: guest.balance, email: guest.email, walletAddress: guest.walletAddress }
+      });
     } catch (error) {
-      res.status(500).json({ error: 'Database error' });
+      res.status(500).json({ success: false, error: 'Guest login failed.' });
     }
   });
 
@@ -67,13 +157,16 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
     if (!username) {
       return res.status(400).json({ success: false, error: 'Username is required' });
     }
+    if (!password || password.length < 4) {
+      return res.status(400).json({ success: false, error: 'Password is required and must be at least 4 characters' });
+    }
 
     try {
       const exists = await prisma.user.findFirst({
         where: {
           OR: [
             { username: { equals: username } },
-            { email: { equals: email || '' } } // Only checks if email provided
+            { email: { equals: email || '' } }
           ]
         }
       });
@@ -82,7 +175,7 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
         return res.status(400).json({ success: false, error: 'Username or Email already registered' });
       }
 
-      const hashedPassword = await bcrypt.hash(password || '123456', 10);
+      const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await prisma.user.create({
         data: {
           username,
@@ -100,6 +193,23 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
 
     } catch (error) {
       res.status(500).json({ success: false, error: 'Registration failed due to server error.' });
+    }
+  });
+
+  // ── Protected routes (JWT required) ─────────────────────
+  app.use('/api/laravel/users', authenticateToken);
+  app.use('/api/laravel/escrow', authenticateToken);
+  app.use('/api/laravel/crypto', authenticateToken);
+  app.use('/api/laravel/logs', authenticateToken);
+
+  app.get('/api/laravel/users', async (req, res) => {
+    try {
+      const users = await prisma.user.findMany({
+        select: { id: true, username: true, email: true, balance: true, walletAddress: true }
+      });
+      res.json({ users });
+    } catch (error) {
+      res.status(500).json({ error: 'Database error' });
     }
   });
 

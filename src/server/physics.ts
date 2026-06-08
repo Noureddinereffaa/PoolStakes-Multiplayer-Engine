@@ -1,287 +1,426 @@
 import { Ball } from '../types';
 
-export const TABLE_W = 800;
-export const TABLE_H = 400;
-export const CUSHION = 20;
-export const BALL_R = 10;
-export const HEAD_STRING_X = CUSHION + 220;
-export const RACK_APEX_X = 550;
-export const RACK_APEX_Y = 200;
-export const RACK_COL_SPACING = BALL_R * 1.732;
-export const FOOT_SPOT_X = RACK_APEX_X + 2 * RACK_COL_SPACING;
-export const FOOT_SPOT_Y = RACK_APEX_Y;
-export const POCKET_RADIUS = 24;
+// ═══════════════════════════════════════════════════════
+//  TABLE GEOMETRY
+// ═══════════════════════════════════════════════════════
+export const TABLE_W          = 800;
+export const TABLE_H          = 400;
+export const CUSHION          = 20;
+export const BALL_R           = 10;
+export const HEAD_STRING_X    = CUSHION + 220;
+export const RACK_APEX_X      = 550;
+export const RACK_APEX_Y      = 200;
+export const RACK_COL_SPACING = BALL_R * 1.732050808;
+export const FOOT_SPOT_X      = RACK_APEX_X + 2 * RACK_COL_SPACING;
+export const FOOT_SPOT_Y      = RACK_APEX_Y;
+export const POCKET_RADIUS    = 20;
 
-const pocketCenters = [
-  { x: CUSHION + 4, y: CUSHION + 4 },
-  { x: TABLE_W / 2, y: CUSHION + 1 },
-  { x: TABLE_W - CUSHION - 4, y: CUSHION + 4 },
-  { x: CUSHION + 4, y: TABLE_H - CUSHION - 4 },
-  { x: TABLE_W / 2, y: TABLE_H - CUSHION - 1 },
-  { x: TABLE_W - CUSHION - 4, y: TABLE_H - CUSHION - 4 }
+// Bounds (ball center must stay within)
+export const MIN_X = CUSHION + BALL_R;
+export const MAX_X = TABLE_W - CUSHION - BALL_R;
+export const MIN_Y = CUSHION + BALL_R;
+export const MAX_Y = TABLE_H - CUSHION - BALL_R;
+
+// ═══════════════════════════════════════════════════════
+//  PHYSICS CONSTANTS (Aramith Pro Cup calibrated)
+// ═══════════════════════════════════════════════════════
+const COR       = 0.93;   // ball-ball COR
+const COR_R     = 0.79;   // ball-rail COR
+const MU_B      = 0.20;   // ball-ball friction
+const MU_RR     = 0.9968; // rolling friction/frame
+const MU_RS     = 0.9910; // sliding friction/frame
+const V_S       = 0.40;   // slide→roll transition
+const MU_RT     = 0.15;   // rail tangential friction
+const SUB       = 48;     // sub-steps
+const S_IT      = 8;      // solver iterations
+
+const K_CURVE   = 0.028;  // English curve
+const K_LONG    = 0.035;  // Draw/Follow
+const SPIN_DEC  = 0.997;  // spin decay/frame
+
+// Ball-ball Coulomb impulse multiplier
+const COR_TERM  = -(1 + COR) * 0.5;
+
+// ═══════════════════════════════════════════════════════
+//  POCKETS
+// ═══════════════════════════════════════════════════════
+const POCKET_POS = [
+  { x: CUSHION + 3,           y: CUSHION + 3           },
+  { x: TABLE_W / 2,           y: CUSHION               },
+  { x: TABLE_W - CUSHION - 3, y: CUSHION + 3           },
+  { x: CUSHION + 3,           y: TABLE_H - CUSHION - 3 },
+  { x: TABLE_W / 2,           y: TABLE_H - CUSHION     },
+  { x: TABLE_W - CUSHION - 3, y: TABLE_H - CUSHION - 3 },
 ];
 
-const colColors: { [key: number]: string } = {
-  1: '#CFAF30',
-  2: '#1B4CA7',
-  3: '#B12724',
-  4: '#5F3E9C',
-  5: '#C86414',
-  6: '#0F7B4D',
-  7: '#7A1E2A',
-  8: '#111111',
-  9: '#D7B037',
-  10: '#4A76C8',
-  11: '#D45851',
-  12: '#9D6FD1',
-  13: '#D28D3E',
-  14: '#3CA972',
-  15: '#8A1A24'
+const R2      = POCKET_RADIUS ** 2;
+const INNER2  = (POCKET_RADIUS * 0.6) ** 2;
+const MAX_COS = Math.cos(65 * Math.PI / 180);
+
+// ═══════════════════════════════════════════════════════
+//  BALL COLORS
+// ═══════════════════════════════════════════════════════
+const BALL_COLORS: Record<number, string> = {
+  1: '#E8C830',  2: '#2255C8',  3: '#CC3028',  4: '#6E44B8',
+  5: '#E07018',  6: '#148B58',  7: '#8A2230',  8: '#111111',
+  9: '#E8C030', 10: '#5580D8', 11: '#DD6058', 12: '#AD80D8',
+ 13: '#DD9830', 14: '#48B880', 15: '#9A2028',
 };
 
+// ═══════════════════════════════════════════════════════
+//  INITIAL SETUP
+// ═══════════════════════════════════════════════════════
 export function getInitialBalls(): Ball[] {
   const balls: Ball[] = [];
   balls.push({
-    id: 0,
-    x: 200,
-    y: 200,
-    vx: 0,
-    vy: 0,
-    radius: BALL_R,
-    isPocketed: false,
-    type: 'cue',
-    color: '#FAF9F6'
+    id: 0, x: 200, y: TABLE_H / 2,
+    vx: 0, vy: 0, radius: BALL_R,
+    isPocketed: false, type: 'cue', color: '#FEFCFA',
+    spinX: 0, spinY: 0,
   });
 
-  const startX = RACK_APEX_X;
-  const startY = RACK_APEX_Y;
-  const colSpacing = BALL_R * 1.732;
-  const rowSpacing = BALL_R * 2;
-
-  const rackBallIds = [
-    1,
-    9, 2,
-    10, 8, 3,
+  const rackIds = [
+    1, 9, 2, 10, 8, 3,
     4, 11, 5, 12,
-    13, 6, 14, 7, 15
+    13, 6, 14, 7, 15,
   ];
 
   let idx = 0;
   for (let col = 0; col < 5; col++) {
-    const rx = startX + col * colSpacing;
+    const rx = RACK_APEX_X + col * RACK_COL_SPACING;
     for (let row = 0; row <= col; row++) {
-      const ballId = rackBallIds[idx++];
-      const ry = startY + (row - col / 2) * rowSpacing;
+      const id = rackIds[idx++];
+      const ry = RACK_APEX_Y + (row - col * 0.5) * (BALL_R * 2);
       balls.push({
-        id: ballId,
-        x: rx,
-        y: ry,
-        vx: 0,
-        vy: 0,
-        radius: BALL_R,
+        id, x: rx, y: ry,
+        vx: 0, vy: 0, radius: BALL_R,
         isPocketed: false,
-        type: ballId === 8 ? 'black' : (ballId <= 7 ? 'solid' : 'stripe'),
-        color: colColors[ballId],
-        number: ballId
+        type: id === 8 ? 'black' : id <= 7 ? 'solid' : 'stripe',
+        color: BALL_COLORS[id],
+        number: id,
+        spinX: 0, spinY: 0,
       });
     }
   }
-
   return balls;
 }
 
-export function simulatePhysicsStep(
-  balls: Ball[],
-  friction = 0.997,
-  elasticLoss = 0.92,
-  tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }
-) {
-  const S = 16;
-  const subSlideFriction = Math.pow(0.9935, 1 / S);
-  const subRollFriction = Math.pow(0.9975, 1 / S);
-  const spinCurveMax = 0.06;
-  const slidingThreshold = 0.28;
+// ═══════════════════════════════════════════════════════
+//  POWER → VELOCITY
+//  Shared function for both server and client
+// ═══════════════════════════════════════════════════════
+export function powerToVelocity(powerPercent: number): number {
+  const p = Math.max(0, Math.min(100, powerPercent)) / 100;
+  return Math.min(26, Math.pow(p, 1.15) * 26);
+}
 
-  for (let s = 0; s < S; s++) {
-    for (let i = 0; i < balls.length; i++) {
-      const b = balls[i];
-      if (b.isPocketed) continue;
+// ═══════════════════════════════════════════════════════
+//  SUB-STEP FUNCTIONS
+// ═══════════════════════════════════════════════════════
 
-      if (b.id === 0) {
-        const spinX = b.spinX || 0;
-        const spinY = b.spinY || 0;
-        const speed = Math.hypot(b.vx, b.vy);
+function applyFrictionAndSpin(balls: Ball[], dt: number): void {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.isPocketed) continue;
 
-        if (speed > 0.08) {
-          const nx = -b.vy / speed;
-          const ny = b.vx / speed;
-          const curveForce = Math.max(-spinCurveMax, Math.min(spinCurveMax, spinX * 0.05 * Math.min(speed, 6) / S));
-          b.vx += nx * curveForce;
-          b.vy += ny * curveForce;
-          const rollForce = Math.max(-spinCurveMax, Math.min(spinCurveMax, spinY * 0.026 / S));
-          b.vx += (b.vx / speed) * rollForce;
-          b.vy += (b.vy / speed) * rollForce;
-        }
+    const vx = b.vx;
+    const vy = b.vy;
+    const spdSq = vx * vx + vy * vy;
 
-        b.spinX = spinX * Math.pow(0.95, 1 / S);
-        b.spinY = spinY * Math.pow(0.95, 1 / S);
-      }
-
-      b.x += b.vx / S;
-      b.y += b.vy / S;
-
-      const speed = Math.hypot(b.vx, b.vy);
-      const frictionFactor = speed > slidingThreshold ? subSlideFriction : subRollFriction;
-      b.vx *= frictionFactor;
-      b.vy *= frictionFactor;
-
-      if (Math.abs(b.vx) < 0.04) b.vx = 0;
-      if (Math.abs(b.vy) < 0.04) b.vy = 0;
-
-      const minX = CUSHION + BALL_R;
-      const maxX = TABLE_W - CUSHION - BALL_R;
-      const minY = CUSHION + BALL_R;
-      const maxY = TABLE_H - CUSHION - BALL_R;
-
-      if (b.x < minX) {
-        b.x = minX;
-        b.vx = -b.vx * elasticLoss;
-        if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
-        if (b.id === 0) {
-          const spinX = b.spinX || 0;
-          const tangentX = 0;
-          const tangentY = -1;
-          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
-          b.vx += tangentX * spinEffect;
-          b.vy += tangentY * spinEffect;
-          b.spinX = -spinX * 0.42;
-        }
-      } else if (b.x > maxX) {
-        b.x = maxX;
-        b.vx = -b.vx * elasticLoss;
-        if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
-        if (b.id === 0) {
-          const spinX = b.spinX || 0;
-          const tangentX = 0;
-          const tangentY = 1;
-          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
-          b.vx += tangentX * spinEffect;
-          b.vy += tangentY * spinEffect;
-          b.spinX = -spinX * 0.42;
-        }
-      }
-
-      if (b.y < minY) {
-        b.y = minY;
-        b.vy = -b.vy * elasticLoss;
-        if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
-        if (b.id === 0) {
-          const spinX = b.spinX || 0;
-          const tangentX = 1;
-          const tangentY = 0;
-          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
-          b.vx += tangentX * spinEffect;
-          b.vy += tangentY * spinEffect;
-          b.spinX = -spinX * 0.42;
-        }
-      } else if (b.y > maxY) {
-        b.y = maxY;
-        b.vy = -b.vy * elasticLoss;
-        if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
-        if (b.id === 0) {
-          const spinX = b.spinX || 0;
-          const tangentX = -1;
-          const tangentY = 0;
-          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
-          b.vx += tangentX * spinEffect;
-          b.vy += tangentY * spinEffect;
-          b.spinX = -spinX * 0.42;
-        }
-      }
-
-      for (const pocket of pocketCenters) {
-        const dx = b.x - pocket.x;
-        const dy = b.y - pocket.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < POCKET_RADIUS * POCKET_RADIUS) {
-          b.isPocketed = true;
-          b.vx = 0;
-          b.vy = 0;
-          b.spinX = 0;
-          b.spinY = 0;
-          break;
-        }
-      }
+    // Dead-ball stop
+    if (spdSq < 0.01) {
+      b.vx = 0;
+      b.vy = 0;
+      continue;
     }
 
-    for (let i = 0; i < balls.length; i++) {
+    // Gradual slide→roll friction
+    const spd = Math.sqrt(spdSq);
+    const t = Math.min(1, spd / V_S);
+    const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
+    const f = Math.pow(mu, dt);
+    b.vx = vx * f;
+    b.vy = vy * f;
+
+    // Cue ball spin
+    if (b.id === 0) {
+      const sx = b.spinX || 0;
+      const sy = b.spinY || 0;
+
+      if (spd > 0.05 && (sx !== 0 || sy !== 0)) {
+        const nvx = b.vx;
+        const nvy = b.vy;
+        const nspd = Math.sqrt(nvx * nvx + nvy * nvy);
+        if (nspd > 0.05) {
+          const px = -nvy / nspd;
+          const py =  nvx / nspd;
+
+          const curve = sx * K_CURVE * nspd * dt;
+          b.vx = nvx + px * curve;
+          b.vy = nvy + py * curve;
+
+          const le = sy * K_LONG * nspd * dt;
+          b.vx += (nvx / nspd) * le;
+          b.vy += (nvy / nspd) * le;
+        }
+      }
+
+      const sd = Math.pow(SPIN_DEC, dt);
+      b.spinX = (b.spinX || 0) * sd;
+      b.spinY = (b.spinY || 0) * sd;
+    }
+  }
+}
+
+function integrate(balls: Ball[], dt: number): void {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.isPocketed) continue;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+  }
+}
+
+function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.isPocketed) continue;
+
+    const sx = b.spinX || 0;
+    let hit = false;
+
+    // اختر الحافة الأكثر اختراقاً لمنع معالجة زاويتين في نفس sub-step
+    let maxOverlap = 0;
+    let rail: 'left' | 'right' | 'top' | 'bottom' | null = null;
+
+    if (b.x < MIN_X && b.vx < 0) {
+      const o = MIN_X - b.x;
+      if (o > maxOverlap) { maxOverlap = o; rail = 'left'; }
+    }
+    if (b.x > MAX_X && b.vx > 0) {
+      const o = b.x - MAX_X;
+      if (o > maxOverlap) { maxOverlap = o; rail = 'right'; }
+    }
+    if (b.y < MIN_Y && b.vy < 0) {
+      const o = MIN_Y - b.y;
+      if (o > maxOverlap) { maxOverlap = o; rail = 'top'; }
+    }
+    if (b.y > MAX_Y && b.vy > 0) {
+      const o = b.y - MAX_Y;
+      if (o > maxOverlap) { maxOverlap = o; rail = 'bottom'; }
+    }
+
+    if (rail === 'left') {
+      b.x = MIN_X;
+      const vn = b.vx;
+      b.vx = -vn * COR_R;
+      const tang = b.vy;
+      const dt_t = MU_RT * Math.abs(vn);
+      b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
+      if (b.id === 0) { b.vy -= sx * 1.1; b.spinX = -sx * 0.30; }
+      hit = true;
+    } else if (rail === 'right') {
+      b.x = MAX_X;
+      const vn = b.vx;
+      b.vx = -vn * COR_R;
+      const tang = b.vy;
+      const dt_t = MU_RT * Math.abs(vn);
+      b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
+      if (b.id === 0) { b.vy += sx * 1.1; b.spinX = -sx * 0.30; }
+      hit = true;
+    } else if (rail === 'top') {
+      b.y = MIN_Y;
+      const vn = b.vy;
+      b.vy = -vn * COR_R;
+      const tang = b.vx;
+      const dt_t = MU_RT * Math.abs(vn);
+      b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
+      if (b.id === 0) { b.vx += sx * 1.1; b.spinX = -sx * 0.30; }
+      hit = true;
+    } else if (rail === 'bottom') {
+      b.y = MAX_Y;
+      const vn = b.vy;
+      b.vy = -vn * COR_R;
+      const tang = b.vx;
+      const dt_t = MU_RT * Math.abs(vn);
+      b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
+      if (b.id === 0) { b.vx -= sx * 1.1; b.spinX = -sx * 0.30; }
+      hit = true;
+    }
+
+    if (hit && tracker && tracker.firstContactBallId !== null) {
+      tracker.cushionContactOccurred = true;
+    }
+  }
+}
+
+function detectPockets(balls: Ball[]): void {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.isPocketed) continue;
+
+    for (let pi = 0; pi < POCKET_POS.length; pi++) {
+      const p = POCKET_POS[pi];
+      const dx = b.x - p.x;
+      const dy = b.y - p.y;
+      const d2 = dx * dx + dy * dy;
+
+      if (d2 >= R2) continue;
+
+      if (d2 >= INNER2) {
+        const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (spd > 0.3) {
+          const dot = -(b.vx * dx + b.vy * dy) / (spd * Math.sqrt(d2));
+          if (dot < MAX_COS) continue;
+        }
+      }
+
+      b.isPocketed = true;
+      b.vx = 0;
+      b.vy = 0;
+      b.spinX = 0;
+      b.spinY = 0;
+      break;
+    }
+  }
+}
+
+function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
+  const n = balls.length;
+  const MIN_D2 = (BALL_R * 2) ** 2; // 400 — all balls share the same radius
+
+  for (let iter = 0; iter < S_IT; iter++) {
+    let anyOverlap = false;
+
+    for (let i = 0; i < n - 1; i++) {
       const b1 = balls[i];
       if (b1.isPocketed) continue;
 
-      for (let j = i + 1; j < balls.length; j++) {
+      for (let j = i + 1; j < n; j++) {
         const b2 = balls[j];
         if (b2.isPocketed) continue;
 
         const dx = b2.x - b1.x;
         const dy = b2.y - b1.y;
-        const distSq = dx * dx + dy * dy;
-        const minDist = b1.radius + b2.radius;
-        if (distSq < minDist * minDist) {
-          const dist = Math.sqrt(distSq) || minDist;
-          const overlap = minDist - dist;
-          const nx = dx / dist;
-          const ny = dy / dist;
+        const d2 = dx * dx + dy * dy;
 
-          b1.x -= nx * overlap * 0.5;
-          b1.y -= ny * overlap * 0.5;
-          b2.x += nx * overlap * 0.5;
-          b2.y += ny * overlap * 0.5;
+        if (d2 >= MIN_D2) continue;
 
-          const relVx = b1.vx - b2.vx;
-          const relVy = b1.vy - b2.vy;
-          const relSpeed = relVx * nx + relVy * ny;
+        anyOverlap = true;
+        const dist = Math.sqrt(d2) || 1e-8;
+        const nx   = dx / dist;
+        const ny   = dy / dist;
+        const tx   = -ny;
+        const ty   =  nx;
 
-          if (relSpeed < 0) {
-            const impulse = -(1 + elasticLoss) * relSpeed * 0.5;
-            b1.vx += impulse * nx;
-            b1.vy += impulse * ny;
-            b2.vx -= impulse * nx;
-            b2.vy -= impulse * ny;
+        // Position correction (50%)
+        const minD = BALL_R * 2;
+        const overlap = (minD - dist) * 0.50;
+        b1.x -= nx * overlap;
+        b1.y -= ny * overlap;
+        b2.x += nx * overlap;
+        b2.y += ny * overlap;
 
-            const tangentX = -ny;
-            const tangentY = nx;
-            const relTangent = relVx * tangentX + relVy * tangentY;
-            const frictionImpulse = relTangent * 0.08;
-            b1.vx -= frictionImpulse * tangentX;
-            b1.vy -= frictionImpulse * tangentY;
-            b2.vx += frictionImpulse * tangentX;
-            b2.vy += frictionImpulse * tangentY;
+        // Recalculate normal after position correction
+        const rdx  = b2.x - b1.x;
+        const rdy  = b2.y - b1.y;
+        const rd   = Math.sqrt(rdx * rdx + rdy * rdy) || 1e-8;
+        const rnx  = rdx / rd;
+        const rny  = rdy / rd;
 
-            const cueSpinBall = b1.id === 0 ? b1 : b2.id === 0 ? b2 : null;
-            if (cueSpinBall) {
-              const spinX = cueSpinBall.spinX || 0;
-              const spinY = cueSpinBall.spinY || 0;
-              const impactDir = cueSpinBall === b1 ? 1 : -1;
-              cueSpinBall.vx += nx * spinY * 4.2 * impactDir + tangentX * spinX * 2.3 * impactDir;
-              cueSpinBall.vy += ny * spinY * 4.2 * impactDir + tangentY * spinX * 2.3 * impactDir;
-              cueSpinBall.spinY *= 0.12;
-              cueSpinBall.spinX *= 0.22;
+        // Normal relative velocity
+        const rvx  = b1.vx - b2.vx;
+        const rvy  = b1.vy - b2.vy;
+        const vn   = rvx * rnx + rvy * rny;
 
-              const targetBall = cueSpinBall === b1 ? b2 : b1;
-              targetBall.vx += tangentX * spinX * 1.1 * impactDir;
-              targetBall.vy += tangentY * spinX * 1.1 * impactDir;
-            }
+        if (vn < 0) continue;
+
+        // Normal impulse (COR)
+        const jn = COR_TERM * vn;
+        b1.vx += jn * rnx;
+        b1.vy += jn * rny;
+        b2.vx -= jn * rnx;
+        b2.vy -= jn * rny;
+
+        // Tangential impulse (Coulomb friction)
+        const rvx2 = b1.vx - b2.vx;
+        const rvy2 = b1.vy - b2.vy;
+        const vt   = rvx2 * tx + rvy2 * ty;
+
+        const jt_raw = -vt * 0.5;
+        const jt     = Math.max(-MU_B * Math.abs(jn), Math.min(MU_B * Math.abs(jn), jt_raw));
+        b1.vx += jt * tx;
+        b1.vy += jt * ty;
+        b2.vx -= jt * tx;
+        b2.vy -= jt * ty;
+
+        // Cue spin transfer (conservative model)
+        if (iter === 0 && (b1.id === 0 || b2.id === 0)) {
+          const cue    = b1.id === 0 ? b1 : b2;
+          const tgt    = b1.id === 0 ? b2 : b1;
+          const dir    = b1.id === 0 ? 1 : -1;
+          const sx     = cue.spinX || 0;
+          const sy     = cue.spinY || 0;
+          const spd    = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy + b2.vx * b2.vx + b2.vy * b2.vy);
+
+          // Spin → velocity transfer proportional to relative speed
+          if (spd > 0.1) {
+            const transfer = Math.min(1.0, spd * 0.08);
+            tgt.vx += rnx * (sy * 1.2 * dir * transfer);
+            tgt.vy += rny * (sy * 1.2 * dir * transfer);
+            tgt.vx += tx  * (sx * 0.8 * dir * transfer);
+            tgt.vy += ty  * (sx * 0.8 * dir * transfer);
           }
 
-          if (tracker && tracker.firstContactBallId === null) {
-            if (b1.id === 0) {
-              tracker.firstContactBallId = b2.id;
-            } else if (b2.id === 0) {
-              tracker.firstContactBallId = b1.id;
-            }
-          }
+          // Spin conservation: cue retains most, target gets residual
+          cue.spinY = sy * 0.65;
+          cue.spinX = sx * 0.70;
+          tgt.spinY = (tgt.spinY || 0) + sy * 0.12 * dir;
+          tgt.spinX = (tgt.spinX || 0) + sx * 0.08 * dir;
+        }
+
+        // Track first contact
+        if (iter === 0 && tracker && tracker.firstContactBallId === null) {
+          if (b1.id === 0) tracker.firstContactBallId = b2.id;
+          else if (b2.id === 0) tracker.firstContactBallId = b1.id;
         }
       }
     }
+
+    if (!anyOverlap) break;
   }
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAIN PHYSICS STEP
+// ═══════════════════════════════════════════════════════
+export function simulatePhysicsStep(
+  balls: Ball[],
+  tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }
+): void {
+  const dt = 1 / SUB;
+  for (let s = 0; s < SUB; s++) {
+    applyFrictionAndSpin(balls, dt);
+    integrate(balls, dt);
+    handleRails(balls, tracker);
+    detectPockets(balls);
+    resolveCollisions(balls, tracker);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SINGLE-FRAME SIMULATION (for client offline mode)
+//  Runs one full frame with friction, spin, collisions.
+//  Returns the number of frames simulated.
+// ═══════════════════════════════════════════════════════
+export function simulateOneFrame(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
+  simulatePhysicsStep(balls, tracker);
+}
+
+export function isAnyBallMoving(balls: Ball[]): boolean {
+  return balls.some(b => !b.isPocketed && (Math.abs(b.vx) > 0.05 || Math.abs(b.vy) > 0.05));
+}
+
+export function captureFrame(balls: Ball[]): Array<{ id: number; x: number; y: number; isPocketed: boolean }> {
+  return balls.map(b => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed }));
 }

@@ -1,10 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import crypto from 'crypto';
 import { RoomState, Player } from '../types';
 import { logLaravelApi } from './laravel';
-import { broadcastToAllWebSockets } from './state';
-
-const prisma = new PrismaClient();
+import { broadcastToAllWebSockets, pushRoomLog } from './state';
+import { prisma } from './db';
+import type { User } from '@prisma/client';
 
 export async function ensureLaravelUser(username: string) {
   let user = await prisma.user.findUnique({ where: { username } });
@@ -20,7 +19,7 @@ export async function ensureLaravelUser(username: string) {
   return user;
 }
 
-export function createPlayerFromUser(user: any, stake: number): Player {
+export function createPlayerFromUser(user: User, stake: number): Player {
   return {
     id: user.id,
     username: user.username,
@@ -94,7 +93,7 @@ export async function lockRoomEscrow(room: RoomState, apiName: string, reqPayloa
     const escrowHash = crypto.createHash('sha256').update(serverSeed).digest('hex');
     room.serverSeed = serverSeed;
     room.escrowHash = escrowHash;
-    room.log.push(`Escrow successfully locked: Balance check verified. Transaction ID: ${result.escrowId}`);
+    pushRoomLog(room, `Escrow successfully locked: Balance check verified. Transaction ID: ${result.escrowId}`);
     room.status = 'playing';
     room.currentTurn = room.players[0].id;
 

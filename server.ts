@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
@@ -8,6 +9,10 @@ import { registerLaravelRoutes } from './src/server/laravel';
 import { broadcastToAllWebSockets } from './src/server/state';
 import { attachWebSocketHandlers } from './src/server/websocket';
 import { startTurnTimer } from './src/server/turnTimer';
+import { logger } from './src/server/logger';
+import { xssSanitize } from './src/server/sanitize';
+import { requestLogger } from './src/server/logger';
+import { restoreRoomSnapshots, startSnapshotInterval, stopSnapshotInterval } from './src/server/persist';
 
 // Webpack/Esbuild-compatible paths config
 const PORT = Number(process.env.PORT ?? 3000);
@@ -17,6 +22,25 @@ const server = createServer(app);
 
 // Enable JSON parser with 50kb body limit to prevent large-payload DoS
 app.use(express.json({ limit: '50kb' }));
+
+// Security headers via Helmet (CSP relaxed for dev WebSocket/Vite HMR)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'", 'ws://localhost:*', 'http://localhost:*'],
+      imgSrc: ["'self'", 'data:'],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+    },
+  },
+}));
+
+// XSS sanitization for all JSON body string fields
+app.use(xssSanitize);
+
+// Request/response logging
+app.use(requestLogger);
 
 registerLaravelRoutes(app, broadcastToAllWebSockets);
 
@@ -35,7 +59,7 @@ server.on('upgrade', (request, socket, head) => {
       });
     }
   } catch (err) {
-    console.error('WebSocket upgrade error:', err);
+    logger.error('WebSocket upgrade error', { error: String(err) });
   }
 });
 
@@ -66,15 +90,19 @@ async function getAvailablePort(requestedPort: number, host: string) {
 async function startServer() {
   const requestedPort = Number(process.env.PORT ?? 3000);
   const host = process.env.HOST ?? '0.0.0.0';
+
+  // Restore rooms from DB snapshots before server starts
+  await restoreRoomSnapshots();
+
   const serverPort = await getAvailablePort(requestedPort, host);
   if (serverPort !== requestedPort) {
-    console.warn(`Port ${requestedPort} was unavailable. Falling back to available port ${serverPort}.`);
+    logger.warn(`Port ${requestedPort} was unavailable. Falling back to available port ${serverPort}.`);
   }
 
   const hmrRequestedPort = Number(process.env.VITE_HMR_PORT ?? 24678);
   const hmrPort = await getAvailablePort(hmrRequestedPort, host);
   if (hmrPort !== hmrRequestedPort) {
-    console.warn(`HMR port ${hmrRequestedPort} was unavailable. Using fallback HMR port ${hmrPort}.`);
+    logger.warn(`HMR port ${hmrRequestedPort} was unavailable. Using fallback HMR port ${hmrPort}.`);
   }
 
   // Vite middleware for lightning-fast HMR and building
@@ -99,10 +127,25 @@ async function startServer() {
   }
 
   server.listen(serverPort, host, () => {
-    console.log(`Pool autorative game & betting platform server starts at http://${host === '0.0.0.0' ? 'localhost' : host}:${serverPort}`);
+    logger.info(`Server started at http://${host === '0.0.0.0' ? 'localhost' : host}:${serverPort}`);
+    startSnapshotInterval();
   }).on('error', (err) => {
-    console.error(`Server failed to start on ${host}:${serverPort}:`, err);
+    logger.error('Server failed to start', { host, port: serverPort, error: String(err) });
   });
 }
+
+// Graceful shutdown: save final snapshots and clean up
+process.on('SIGINT', async () => {
+  logger.info('Shutting down...');
+  stopSnapshotInterval();
+  const { activeRooms } = require('./src/server/state');
+  const { saveRoomSnapshot } = require('./src/server/persist');
+  for (const room of activeRooms.values()) {
+    if (room.status === 'playing' || room.status === 'waiting') {
+      await saveRoomSnapshot(room);
+    }
+  }
+  process.exit(0);
+});
 
 startServer();

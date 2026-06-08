@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import { RoomState, Player, SocketMessage } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, simulatePhysicsStep } from './physics';
-import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreateRoom, broadcastRoom } from './state';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
+import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreateRoom, broadcastRoom, pushRoomLog } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
 
@@ -35,11 +35,11 @@ export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { ty
 
   const player = createPlayerFromUser(walletUser, stake);
   room.players.push(player);
-  room.log.push(`${username} entered table. Stake: $${stake}`);
+  pushRoomLog(room, `${username} entered table. Stake: $${stake}`);
 
   if (room.players.length === 2 && room.status === 'waiting') {
     room.status = 'ready';
-    room.log.push('Players joined! Validating and locking stakes in secure Laravel wallet escrow...');
+    pushRoomLog(room, 'Players joined! Validating and locking stakes in secure Laravel wallet escrow...');
 
     const escrowResult = await lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock', {
       roomName: room.name,
@@ -49,9 +49,9 @@ export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { ty
     });
 
     if (escrowResult.success) {
-      room.log.push(`Current turn: ${room.players[0].username} (Shooter). Aim at cue ball.`);
+      pushRoomLog(room, `Current turn: ${room.players[0].username} (Shooter). Aim at cue ball.`);
     } else {
-      room.log.push(`Escrow validation failed: ${escrowResult.message || 'Insufficient wallet funds.'}`);
+      pushRoomLog(room, `Escrow validation failed: ${escrowResult.message || 'Insufficient wallet funds.'}`);
       room.players.pop();
       room.status = 'waiting';
       ws.send(JSON.stringify({ type: 'error', message: escrowResult.message || 'Unable to lock stakes for this table.' }));
@@ -74,7 +74,7 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
 
   const userWallet = await ensureLaravelUser(room.players[0].username);
   if (userWallet.balance < room.stake) {
-    room.log.push(`AI match blocked: ${userWallet.username} has insufficient balance for a $${room.stake} stake.`);
+    pushRoomLog(room, `AI match blocked: ${userWallet.username} has insufficient balance for a $${room.stake} stake.`);
     room.status = 'waiting';
     broadcastRoom(roomId);
     return;
@@ -87,7 +87,7 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
 
   const aiPlayer = createAiPlayer(diffLevel, room.stake);
   room.players.push(aiPlayer);
-  room.log.push(`AI Opponent (${diffLevel.toUpperCase()} Bot) has accepted the stakes!`);
+  pushRoomLog(room, `AI Opponent (${diffLevel.toUpperCase()} Bot) has accepted the stakes!`);
   room.status = 'ready';
 
   const escrowResult = await lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock (AI match)', {
@@ -99,13 +99,13 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
   });
 
   if (escrowResult.success) {
-    room.log.push(`🔒 ESCROW SECURED: Verified by peer-signing. Tx ID: ${escrowResult.escrowId}`);
-    room.log.push(`🛡️ Integrity Hash: ${escrowResult.escrowHash}`);
-    room.log.push(`Match active! Current turn: ${room.players[0].username}. Let the high-stakes game begin!`);
+    pushRoomLog(room, `🔒 ESCROW SECURED: Verified by peer-signing. Tx ID: ${escrowResult.escrowId}`);
+    pushRoomLog(room, `🛡️ Integrity Hash: ${escrowResult.escrowHash}`);
+    pushRoomLog(room, `Match active! Current turn: ${room.players[0].username}. Let the high-stakes game begin!`);
   } else {
     room.players.pop();
     room.status = 'waiting';
-    room.log.push(`Balance Error: ${escrowResult.message || 'Your wallet does not have enough funds to play against the AI.'}`);
+    pushRoomLog(room, `Balance Error: ${escrowResult.message || 'Your wallet does not have enough funds to play against the AI.'}`);
   }
 
   broadcastRoom(roomId);
@@ -145,12 +145,41 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
     return;
   }
 
+  if (animatingRoomIds.has(roomId)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Shot ignored — room is still animating.' }));
+    return;
+  }
   const objectBallsLeft = room.balls.filter(b => b.id !== 0 && !b.isPocketed).length;
   const isBreakShot = objectBallsLeft === 15;
   animatingRoomIds.add(roomId);
 
   const shooterName = room.players.find(p => p.id === playerId)?.username || 'Unknown';
-  room.log.push(`${shooterName} triggers a shot with Power: ${Math.round(msg.power)}% at Angular Offset: ${msg.angle.toFixed(2)} rad.`);
+
+  // ── Input Validation (C3: Anti-cheat) ──
+  const rawPower = msg.power;
+  if (!isFinite(rawPower) || rawPower < 0 || rawPower > 100) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid shot power.' }));
+    animatingRoomIds.delete(roomId);
+    return;
+  }
+  const rawAngle = msg.angle;
+  if (!isFinite(rawAngle)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid shot angle.' }));
+    animatingRoomIds.delete(roomId);
+    return;
+  }
+  const clampedAngle = ((rawAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const clampedPower = Math.max(0, Math.min(100, rawPower));
+
+  // Increment animation version to invalidate stale timeouts (M5)
+  room.animVersion = (room.animVersion || 0) + 1;
+  const currentAnimVersion = room.animVersion;
+
+  if (isBreakShot) {
+    pushRoomLog(room, `💥 ${shooterName} executes the BREAK SHOT! (WPA Rule 3.4 — Minimum 4 balls must hit cushions or a ball must be pocketed)`);
+  } else {
+    pushRoomLog(room, `${shooterName} triggers a shot with Power: ${Math.round(clampedPower)}% at Angular Offset: ${clampedAngle.toFixed(2)} rad.`);
+  }
 
   const cueBall = room.balls[0];
   const sX = Math.max(-1, Math.min(1, msg.spinX || 0));
@@ -158,25 +187,23 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   cueBall.spinX = sX;
   cueBall.spinY = sY;
 
-  const normPower = msg.power / 100;
-  const powerCurve = Math.pow(normPower, 1.35);
-  const forceMagnitude = powerCurve * 22;
-  cueBall.vx = Math.cos(msg.angle) * forceMagnitude;
-  cueBall.vy = Math.sin(msg.angle) * forceMagnitude;
+  // ── Force to velocity using shared formula ──
+  const forceMag = powerToVelocity(clampedPower);
+  cueBall.vx = Math.cos(clampedAngle) * forceMag;
+  cueBall.vy = Math.sin(clampedAngle) * forceMag;
 
   const frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> = [];
-  frames.push(room.balls.map(b => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed })));
+  frames.push(captureFrame(room.balls));
 
   let iterations = 0;
-  let anyBallMoving = true;
   const maxStepsLimit = 1200;
   const ballsPocketedThisShot: number[] = [];
   let cueBallPocketed = false;
   const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
 
-  while (anyBallMoving && iterations < maxStepsLimit) {
+  while (iterations < maxStepsLimit) {
     const preStates = room.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
-    simulatePhysicsStep(room.balls, 0.995, 0.92, contactTracker);
+          simulatePhysicsStep(room.balls, contactTracker);
 
     for (let i = 0; i < room.balls.length; i++) {
       const currentB = room.balls[i];
@@ -190,12 +217,15 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
       }
     }
 
-    anyBallMoving = room.balls.some(b => !b.isPocketed && (Math.abs(b.vx) > 0.05 || Math.abs(b.vy) > 0.05));
-    frames.push(room.balls.map(b => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed })));
+    frames.push(captureFrame(room.balls));
     iterations++;
+
+    if (!isAnyBallMoving(room.balls)) break;
   }
 
-  const framePayload = JSON.stringify({ type: 'physics_frames', frames });
+  // إرسال مضغوط: مصفوفات [id, x, y, isPocketed] بدلاً من كائنات لتقليل حجم JSON
+  const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
+  const framePayload = JSON.stringify({ type: 'physics_frames', frames: compactFrames });
   const roomWssSet = clientsByRoom.get(roomId) || [];
   for (const client of roomWssSet) {
     if (client.readyState === WebSocket.OPEN) {
@@ -207,6 +237,10 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   const animationDurationMs = (frames.length * 16.66) / basePlayMultiplier + 150;
 
   setTimeout(() => {
+    // Stale animation check (M5): ignore if a newer shot was taken
+    if ((room.animVersion || 0) !== currentAnimVersion) return;
+    if (room.status !== 'playing') return;
+
     animatingRoomIds.delete(roomId);
     room.turnTimer = 60;
     evaluateShotRules(room, ballsPocketedThisShot, cueBallPocketed, contactTracker.firstContactBallId, shooterName, playerId, isBreakShot, contactTracker.cushionContactOccurred);
@@ -238,7 +272,7 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
     const headStringMaxX = HEAD_STRING_X - BALL_R;
     if (targetX > headStringMaxX) {
       ws.send(JSON.stringify({ type: 'error', message: 'Invalid placement: ball must be behind the head string after a break foul.' }));
-      room.log.push(`Invalid head-string placement attempted by ${room.players.find(p => p.id === playerId)?.username}.`);
+      pushRoomLog(room, `Invalid head-string placement attempted by ${room.players.find(p => p.id === playerId)?.username}.`);
       broadcastRoom(roomId);
       return;
     }
@@ -253,7 +287,7 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
 
   if (overlapsOtherBall) {
     ws.send(JSON.stringify({ type: 'error', message: 'Invalid cue ball placement: cannot place over another ball.' }));
-    room.log.push(`Invalid cue ball placement attempted by ${room.players.find(p => p.id === playerId)?.username}. Choose a clear spot.`);
+    pushRoomLog(room, `Invalid cue ball placement attempted by ${room.players.find(p => p.id === playerId)?.username}. Choose a clear spot.`);
     broadcastRoom(roomId);
     return;
   }
@@ -267,7 +301,7 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
 
   room.scratchOccurred = false;
   room.ballInHandRestriction = undefined;
-  room.log.push(`${room.players.find(p => p.id === playerId)?.username} placed the cue ball at a valid location.`);
+  pushRoomLog(room, `${room.players.find(p => p.id === playerId)?.username} placed the cue ball at a valid location.`);
   broadcastRoom(roomId);
 }
 
@@ -280,7 +314,7 @@ export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'c
 
   const playerId = mapping.playerId;
   const sender = room.players.find(p => p.id === playerId)?.username || 'Spectator';
-  room.log.push(`[Chat] ${sender}: ${msg.message}`);
+  pushRoomLog(room, `[Chat] ${sender}: ${msg.message}`);
   broadcastRoom(roomId);
 }
 
@@ -297,7 +331,7 @@ export function handleDisconnect(ws: WebSocket) {
   const pIdx = room.players.findIndex(p => p.id === playerId);
   if (pIdx !== -1) {
     const quittingPlayer = room.players[pIdx];
-    room.log.push(`Disconnect Alert: ${quittingPlayer.username} left the server.`);
+    pushRoomLog(room, `Disconnect Alert: ${quittingPlayer.username} left the server.`);
 
     if (room.status === 'playing') {
       const remainingPlayer = room.players.find(p => p.id !== playerId);
