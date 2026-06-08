@@ -66,13 +66,18 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
   if (!mapping) return;
   const { roomId } = mapping;
   const room = activeRooms.get(roomId);
-  if (!room || room.players.length !== 1) return;
+  // Ensure room exists and there's exactly one player (the human player) before adding AI
+  if (!room || room.players.length !== 1) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid room state to add AI opponent.' }));
+    return;
+  }
 
+  const humanPlayer = room.players[0]; // The human player should always be the first in an AI match
   const diffLevel = msg.difficulty || 'medium';
   room.aiDifficulty = diffLevel;
   room.commissionRate = 0.05;
 
-  const userWallet = await ensureLaravelUser(room.players[0].username);
+  const userWallet = await ensureLaravelUser(humanPlayer.username);
   if (userWallet.balance < room.stake) {
     pushRoomLog(room, `AI match blocked: ${userWallet.username} has insufficient balance for a $${room.stake} stake.`);
     room.status = 'waiting';
@@ -80,7 +85,7 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
     return;
   }
 
-  room.players[0].walletBalance = userWallet.balance;
+  humanPlayer.walletBalance = userWallet.balance;
 
   const aiWallet = await getAiUser();
   await ensureMinimumBalance(aiWallet.id, 10000.0);
