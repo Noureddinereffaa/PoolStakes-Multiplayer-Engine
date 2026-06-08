@@ -39,25 +39,32 @@ export default function PoolTable({
   const [isScratchPlacing, setIsScratchPlacing] = useState(false);
   const [placedPos, setPlacedPos] = useState({ x: 200, y: 200 });
 
-  const isPlacementInvalid = () => {
-    if (!isScratchPlacing) return false;
-    // Check overlapping other balls on the table
+  const HEAD_STRING_LINE = 220;
+  const placementErrorMessage = () => {
+    if (!isScratchPlacing) return null;
+
     const overOtherBall = roomState.balls.some((b) => {
       if (b.id === 0 || b.isPocketed) return false;
       const dx = placedPos.x - b.x;
       const dy = placedPos.y - b.y;
       const dist = Math.hypot(dx, dy);
-      return dist < 20.0; // Two radii (10 + 10 = 20)
+      return dist < 20.0;
     });
-    // Check out of bounds
+
     const minX = 30 + 10;
     const maxX = 770 - 10;
     const minY = 30 + 10;
     const maxY = 370 - 10;
     const outBounds = placedPos.x < minX || placedPos.x > maxX || placedPos.y < minY || placedPos.y > maxY;
-    
-    return overOtherBall || outBounds;
+    const behindHeadStringInvalid = roomState.ballInHandRestriction === 'behind_head_string' && placedPos.x > HEAD_STRING_LINE - 10;
+
+    if (overOtherBall) return 'Cannot place cue ball over another ball.';
+    if (outBounds) return 'Placement must remain inside the table boundaries.';
+    if (behindHeadStringInvalid) return 'Head-string placement required after a break foul.';
+    return null;
   };
+
+  const isPlacementInvalid = () => Boolean(placementErrorMessage());
 
   const getEligibleBallIds = (room: typeof roomState, activePlayerId: string): number[] => {
     if (room.status !== 'playing') return [];
@@ -1407,21 +1414,25 @@ export default function PoolTable({
 
       // Helper to generate a gorgeous 3D radial gradient for ball pigment with premium varnish depth
       const getBallBaseGradient = (color: string, radius: number): CanvasGradient => {
-        const highlightColor = blendColor(color, '#ffffff', 0.55); // vivid highlight
-        const shadowColor = blendColor(color, '#000000', 0.52); // rich deep shadow
+        const highlightColor = blendColor(color, '#ffffff', 0.18); // softer, more believable white specular
+        const coreTone = blendColor(color, '#111111', 0.14);
+        const shadowColor = blendColor(color, '#000000', 0.82); // rich edge depth
+        const rimGlow = blendColor(color, '#ffffff', 0.08); // subtle reflection rim
+
         const grad = ctx.createRadialGradient(
-          px - radius * 0.35,
-          py - radius * 0.35,
-          0.8,
+          px - radius * 0.34,
+          py - radius * 0.34,
+          Math.max(1.2, radius * 0.18),
           px,
           py,
           radius
         );
         grad.addColorStop(0, highlightColor);
-        grad.addColorStop(0.32, color);
-        grad.addColorStop(0.85, shadowColor);
-        // Fresnel edge reflection/gloss
-        grad.addColorStop(1, blendColor(color, '#ffffff', 0.18));
+        grad.addColorStop(0.18, color);
+        grad.addColorStop(0.42, coreTone);
+        grad.addColorStop(0.72, shadowColor);
+        grad.addColorStop(0.9, rimGlow);
+        grad.addColorStop(1, blendColor(color, '#000000', 0.92));
         return grad;
       };
 
@@ -1440,8 +1451,8 @@ export default function PoolTable({
           b.radius
         );
         ivoryGrad.addColorStop(0, '#ffffff');
-        ivoryGrad.addColorStop(0.68, '#fafaf9');
-        ivoryGrad.addColorStop(1, '#e2dfdc'); // realistic ivory edge shadow
+        ivoryGrad.addColorStop(0.6, '#f7f4ef');
+        ivoryGrad.addColorStop(1, '#d9d4cb'); // warmer ivory edge shadow
         
         ctx.fillStyle = ivoryGrad;
         ctx.fill();
@@ -1457,7 +1468,7 @@ export default function PoolTable({
         const beltAngle = Math.atan2(uy[1], uy[0]) + Math.PI / 2;
 
         // Draw micro-embossed shadow seam (3D edge line where stripe meets ivory on the sphere)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
         ctx.beginPath();
         ctx.ellipse(px, py, b.radius + 0.35, minorRadius + 0.35, beltAngle, 0, Math.PI * 2);
         ctx.fill();
@@ -1469,12 +1480,39 @@ export default function PoolTable({
         ctx.fill();
 
         // High gloss inner highlight inside stripe belt
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-        ctx.lineWidth = 1.0;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.ellipse(px, py, b.radius * 0.9, minorRadius * 0.9, beltAngle, 0, Math.PI * 2);
         ctx.stroke();
 
+        ctx.restore();
+
+        // Add a subtle dark rim for stronger depth
+        ctx.beginPath();
+        ctx.arc(px, py, b.radius - 0.5, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // Soft highlight overlay for polished resin finish
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const stripeHighlight = ctx.createRadialGradient(
+          px - b.radius * 0.32,
+          py - b.radius * 0.34,
+          0,
+          px - b.radius * 0.16,
+          py - b.radius * 0.18,
+          b.radius * 0.55
+        );
+        stripeHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.42)');
+        stripeHighlight.addColorStop(0.35, 'rgba(255, 255, 255, 0.12)');
+        stripeHighlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = stripeHighlight;
+        ctx.beginPath();
+        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       } else {
         // Solid or Cue Ball: base is filled with premium 3D radial color gradient
@@ -1482,6 +1520,41 @@ export default function PoolTable({
         ctx.arc(px, py, b.radius, 0, Math.PI * 2);
         ctx.fillStyle = getBallBaseGradient(b.color, b.radius);
         ctx.fill();
+
+        // Add a subtle dark rim for stronger depth on solids/cue
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // Add a strong directional specular highlight
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const whiteGlare = ctx.createRadialGradient(
+          px - b.radius * 0.34,
+          py - b.radius * 0.28,
+          0,
+          px - b.radius * 0.26,
+          py - b.radius * 0.24,
+          b.radius * 0.38
+        );
+        whiteGlare.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+        whiteGlare.addColorStop(0.18, 'rgba(255, 255, 255, 0.26)');
+        whiteGlare.addColorStop(0.42, 'rgba(255, 255, 255, 0.06)');
+        whiteGlare.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = whiteGlare;
+        ctx.beginPath();
+        ctx.arc(px, py, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Fine edge rim highlight for a polished glass-like border
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.arc(px, py, b.radius - 0.6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
 
       // If it is a cue ball (id === 0), render high-fidelity "Measle Dots" to make spin visible!
@@ -1769,6 +1842,41 @@ export default function PoolTable({
         ctx.lineTo(contactX, contactY);
         ctx.stroke();
         ctx.restore();
+
+        if (Math.abs(activeSpinX) > 0.05 || Math.abs(activeSpinY) > 0.05) {
+          const spinIndicatorRadius = 14;
+          const spinDirection = Math.atan2(-activeSpinY, activeSpinX);
+          ctx.save();
+          ctx.translate(cueBall.x, cueBall.y);
+          ctx.strokeStyle = 'rgba(248, 113, 113, 0.95)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.arc(0, 0, spinIndicatorRadius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          const arrowTipX = Math.cos(spinDirection) * spinIndicatorRadius;
+          const arrowTipY = Math.sin(spinDirection) * spinIndicatorRadius;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(arrowTipX, arrowTipY);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(248, 113, 113, 0.75)';
+          ctx.beginPath();
+          ctx.arc(arrowTipX, arrowTipY, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          ctx.save();
+          ctx.font = '600 10px sans-serif';
+          ctx.fillStyle = 'rgba(248, 113, 113, 0.92)';
+          ctx.textAlign = 'center';
+          const spinLabel = activeSpinY > 0 ? 'FOLLOW' : activeSpinY < 0 ? 'DRAW' : 'NEUTRAL';
+          const englishLabel = activeSpinX > 0 ? 'RIGHT ENGLISH' : activeSpinX < 0 ? 'LEFT ENGLISH' : 'CENTER';
+          ctx.fillText(`${spinLabel} • ${englishLabel}`, cueBall.x, cueBall.y + 44);
+          ctx.restore();
+        }
 
         if (difficultyRef.current !== 'hard') {
           // Animated target pulse rings radiating from collision points
@@ -2578,11 +2686,39 @@ export default function PoolTable({
                             placedPosRef.current.y > maxY_ghost;
       
       const isInvalidPos = isOverlapping || isOutOfBounds;
+      const behindHeadStringRestriction = roomStateRef.current.ballInHandRestriction === 'behind_head_string';
+      const headStringLineX = 220;
+      const isHeadStringOutOfBounds = behindHeadStringRestriction && placedPosRef.current.x > headStringLineX - 10;
+      const finalInvalid = isInvalidPos || isHeadStringOutOfBounds;
 
       // Draw placing boundary canvas highlights
-      ctx.strokeStyle = isInvalidPos ? 'rgba(239, 68, 68, 0.45)' : 'rgba(16, 185, 129, 0.35)';
+      ctx.strokeStyle = finalInvalid ? 'rgba(239, 68, 68, 0.45)' : 'rgba(16, 185, 129, 0.35)';
       ctx.lineWidth = 2;
       ctx.strokeRect(20, 20, 760, 360);
+
+      if (behindHeadStringRestriction) {
+        ctx.beginPath();
+        ctx.moveTo(headStringLineX, 20);
+        ctx.lineTo(headStringLineX, 380);
+        ctx.strokeStyle = finalInvalid ? 'rgba(239, 68, 68, 0.55)' : 'rgba(59, 130, 246, 0.55)';
+        ctx.setLineDash([6, 6]);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.save();
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillStyle = finalInvalid ? '#f87171' : '#60a5fa';
+        ctx.textAlign = 'center';
+        ctx.fillText('HEAD STRING', headStringLineX, 18);
+        ctx.fillText('BALL-IN-HAND ZONE', headStringLineX, 34);
+        ctx.restore();
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.08)';
+        ctx.fillRect(22, 20, headStringLineX - 22, 360);
+        ctx.restore();
+      }
 
       // ghost cue ball with glowing pulse
       const pulseRatio = (Date.now() % 800) / 800;
@@ -2657,8 +2793,9 @@ export default function PoolTable({
     if (!coords) return;
 
     if (isScratchPlacing) {
+      const maxXAllowed = roomStateRef.current.ballInHandRestriction === 'behind_head_string' ? HEAD_STRING_LINE - 10 : 765;
       setPlacedPos({
-        x: Math.max(35, Math.min(coords.x, 765)),
+        x: Math.max(35, Math.min(coords.x, maxXAllowed)),
         y: Math.max(35, Math.min(coords.y, 365)),
       });
       return;
@@ -2878,21 +3015,21 @@ export default function PoolTable({
   };
 
   const standardBallsList = [
-    { id: 1, number: 1, type: 'solid', color: '#F5C518', nameAr: 'الصفراء المصمتة', nameEn: 'Yellow Solid' },
-    { id: 2, number: 2, type: 'solid', color: '#0A4FD5', nameAr: 'الزرقاء المصمتة', nameEn: 'Blue Solid' },
-    { id: 3, number: 3, type: 'solid', color: '#D91A1A', nameAr: 'الحمراء المصمتة', nameEn: 'Red Solid' },
-    { id: 4, number: 4, type: 'solid', color: '#5E239D', nameAr: 'البنفسجية المصمتة', nameEn: 'Purple Solid' },
-    { id: 5, number: 5, type: 'solid', color: '#F25C05', nameAr: 'البرتقالية المصمتة', nameEn: 'Orange Solid' },
-    { id: 6, number: 6, type: 'solid', color: '#0D8A50', nameAr: 'الخضراء المصمتة', nameEn: 'Green Solid' },
-    { id: 7, number: 7, type: 'solid', color: '#8A1525', nameAr: 'العنابية المصمتة', nameEn: 'Maroon Solid' },
-    { id: 8, number: 8, type: 'black', color: '#0F1015', nameAr: 'السوداء 8', nameEn: 'Black 8-Ball' },
-    { id: 9, number: 9, type: 'stripe', color: '#F5C518', nameAr: 'الصفراء المخططة', nameEn: 'Yellow Stripe' },
-    { id: 10, number: 10, type: 'stripe', color: '#0A4FD5', nameAr: 'الزرقاء المخططة', nameEn: 'Blue Stripe' },
-    { id: 11, number: 11, type: 'stripe', color: '#D91A1A', nameAr: 'الحمراء المخططة', nameEn: 'Red Stripe' },
-    { id: 12, number: 12, type: 'stripe', color: '#5E239D', nameAr: 'البنفسجية المخططة', nameEn: 'Purple Stripe' },
-    { id: 13, number: 13, type: 'stripe', color: '#F25C05', nameAr: 'البرتقالية المخططة', nameEn: 'Orange Stripe' },
-    { id: 14, number: 14, type: 'stripe', color: '#0D8A50', nameAr: 'الخضراء المخططة', nameEn: 'Green Stripe' },
-    { id: 15, number: 15, type: 'stripe', color: '#8A1525', nameAr: 'العنابية المخططة', nameEn: 'Maroon Stripe' },
+    { id: 1, number: 1, type: 'solid', color: '#CFAF30', nameAr: 'الصفراء المصمتة', nameEn: 'Yellow Solid' },
+    { id: 2, number: 2, type: 'solid', color: '#1B4CA7', nameAr: 'الزرقاء المصمتة', nameEn: 'Blue Solid' },
+    { id: 3, number: 3, type: 'solid', color: '#B12724', nameAr: 'الحمراء المصمتة', nameEn: 'Red Solid' },
+    { id: 4, number: 4, type: 'solid', color: '#5F3E9C', nameAr: 'البنفسجية المصمتة', nameEn: 'Purple Solid' },
+    { id: 5, number: 5, type: 'solid', color: '#C86414', nameAr: 'البرتقالية المصمتة', nameEn: 'Orange Solid' },
+    { id: 6, number: 6, type: 'solid', color: '#0F7B4D', nameAr: 'الخضراء المصمتة', nameEn: 'Green Solid' },
+    { id: 7, number: 7, type: 'solid', color: '#7A1E2A', nameAr: 'العنابية المصمتة', nameEn: 'Maroon Solid' },
+    { id: 8, number: 8, type: 'black', color: '#111111', nameAr: 'السوداء 8', nameEn: 'Black 8-Ball' },
+    { id: 9, number: 9, type: 'stripe', color: '#D7B037', nameAr: 'الصفراء المخططة', nameEn: 'Yellow Stripe' },
+    { id: 10, number: 10, type: 'stripe', color: '#4A76C8', nameAr: 'الزرقاء المخططة', nameEn: 'Blue Stripe' },
+    { id: 11, number: 11, type: 'stripe', color: '#D45851', nameAr: 'الحمراء المخططة', nameEn: 'Red Stripe' },
+    { id: 12, number: 12, type: 'stripe', color: '#9D6FD1', nameAr: 'البنفسجية المخططة', nameEn: 'Purple Stripe' },
+    { id: 13, number: 13, type: 'stripe', color: '#D28D3E', nameAr: 'البرتقالية المخططة', nameEn: 'Orange Stripe' },
+    { id: 14, number: 14, type: 'stripe', color: '#3CA972', nameAr: 'الخضراء المخططة', nameEn: 'Green Stripe' },
+    { id: 15, number: 15, type: 'stripe', color: '#8A1A24', nameAr: 'العنابية المخططة', nameEn: 'Maroon Stripe' },
   ];
 
   const myPlayerObj = roomState.players.find((p) => p.id === myPlayerId);
@@ -3235,20 +3372,24 @@ export default function PoolTable({
         {isScratchPlacing ? (
           (() => {
             const invalidPlacing = isPlacementInvalid();
+            const errorMessage = placementErrorMessage();
             return (
               <button
                 onClick={handleConfirmPlacement}
                 disabled={invalidPlacing}
-                className={`w-full max-w-sm py-3 px-6 text-white font-bold font-mono rounded-lg transition-all shadow-lg text-xs flex items-center justify-center gap-1.5 ${
+                className={`w-full max-w-sm py-3 px-6 text-white font-bold font-mono rounded-lg transition-all shadow-lg text-xs flex flex-col items-center justify-center gap-1.5 ${
                   invalidPlacing 
                     ? 'bg-slate-800 border border-slate-700 text-slate-400 cursor-not-allowed' 
                     : 'bg-red-650 hover:bg-red-700 focus:ring-2 focus:ring-red-400 cursor-pointer animate-pulse'
                 }`}
               >
-                <RotateCcw className="w-4 h-4" /> 
-                {invalidPlacing 
-                  ? 'OVERLAPPING ANOTHER BALL' 
-                  : 'CONFIRM CUE PLACEMENT'}
+                <span className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4" /> 
+                  {invalidPlacing ? 'INVALID PLACEMENT' : 'CONFIRM CUE PLACEMENT'}
+                </span>
+                {invalidPlacing && errorMessage && (
+                  <span className="text-[10px] text-slate-300/90">{errorMessage}</span>
+                )}
               </button>
             );
           })()
@@ -3268,7 +3409,21 @@ export default function PoolTable({
                   WAITING RESUMPTION...
                 </span>
               )}
-              {isMyTurn && !isAnimating && roomState.status === 'playing' && (
+              {roomState.scratchOccurred && (
+                <span className="text-xs font-black tracking-wide flex items-center gap-1.5 text-white">
+                  <span className={`w-2.5 h-2.5 rounded-full shadow-lg ${roomState.ballInHandRestriction === 'behind_head_string' ? 'bg-cyan-400 animate-pulse' : 'bg-emerald-400 animate-ping'}`} />
+                  {isMyTurn ? (
+                    roomState.ballInHandRestriction === 'behind_head_string' ?
+                      'BREAK FOUL: Place the cue ball behind the head string.' :
+                      'BALL-IN-HAND: Place the cue ball anywhere.'
+                  ) : (
+                    roomState.ballInHandRestriction === 'behind_head_string' ?
+                      'Opponent has ball-in-hand behind the head string.' :
+                      'Opponent has ball-in-hand anywhere.'
+                  )}
+                </span>
+              )}
+              {!roomState.scratchOccurred && isMyTurn && !isAnimating && roomState.status === 'playing' && (
                 <span className="text-xs font-black text-emerald-400 tracking-wide animate-pulse flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] animate-ping" />
                   YOUR TURN • Drag cue ball back to aim and release to shoot

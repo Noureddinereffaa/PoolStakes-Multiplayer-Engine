@@ -68,6 +68,7 @@ export function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any
   room.players[1].walletBalance = player2.balance;
 
   const escrowId = `escrow-${Math.floor(Math.random() * 89999 + 10000)}`;
+  const escrowHash = `HASH-${Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase()}`;
   laravelDb.escrows.push({
     escrowId,
     roomName: room.name,
@@ -77,6 +78,7 @@ export function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any
     status: 'locked'
   });
 
+  room.escrowHash = escrowHash;
   room.log.push(`Escrow successfully locked: Balance check verified. Transaction ID: ${escrowId}`);
   room.status = 'playing';
   room.currentTurn = room.players[0].id;
@@ -84,10 +86,11 @@ export function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any
   const response = {
     success: true,
     escrowId,
+    escrowHash,
     lockedAmount: room.stake * 2,
     balances: { [player1.id]: player1.balance, [player2.id]: player2.balance }
   };
   logLaravelApi(broadcastToAllWebSockets, apiName, reqPayload, response);
 
-  return { success: true, escrowId };
+  return { success: true, escrowId, escrowHash };
 }

@@ -25,7 +25,9 @@ export function getOrCreateRoom(roomId: string, name: string, stake = 10): RoomS
     assignedSides: false,
     scratchOccurred: false,
     pocketedThisTurn: false,
-    log: ['Lobby created. Waiting for betting players.']
+    ballInHandRestriction: undefined,
+    log: ['Lobby created. Waiting for betting players.'],
+    commissionRate: 0.05
   };
 
   activeRooms.set(roomId, newRoom);

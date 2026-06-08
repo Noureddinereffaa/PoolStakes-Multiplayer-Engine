@@ -1,7 +1,7 @@
 import { RoomState, Player, MatchHistory } from '../types';
 import { animatingRoomIds, clientsByRoom, broadcastRoom, matchLogs } from './state';
 import { laravelDb, logLaravelApi } from './laravel';
-import { simulatePhysicsStep } from './physics';
+import { simulatePhysicsStep, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y } from './physics';
 import { WebSocket } from 'ws';
 
 export function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string) {
@@ -76,6 +76,7 @@ export function evaluateShotRules(
 
   room.pocketedThisTurn = false;
   room.scratchOccurred = false;
+  room.ballInHandRestriction = undefined;
 
   let isFoul = false;
   let foulReason = '';
@@ -123,16 +124,36 @@ export function evaluateShotRules(
     }
   }
 
-  if (!isFoul && firstContactBallId !== null && pocketedIds.length === 0 && !isBreakShot) {
+  if (!isFoul && firstContactBallId !== null && pocketedIds.length === 0) {
     if (!cushionContactOccurred) {
       isFoul = true;
-      foulReason = 'WPA Cushion Contact Foul (خطأ عدم ضرب الحواجز): After striking the ball, no ball was pocketed and no ball contacted a cushion rail.';
+      foulReason = 'WPA Cushion Contact Foul: After striking the ball, no ball was pocketed and no ball contacted a cushion rail.';
     }
   }
 
   if (pocketedIds.includes(8)) {
+    if (isFoul && isBreakShot) {
+      const blackBall = room.balls.find(b => b.id === 8);
+      if (blackBall) {
+        blackBall.isPocketed = false;
+        blackBall.vx = 0;
+        blackBall.vy = 0;
+        blackBall.x = FOOT_SPOT_X;
+        blackBall.y = FOOT_SPOT_Y;
+      }
+
+      room.scratchOccurred = true;
+      room.ballInHandRestriction = 'behind_head_string';
+      room.currentTurn = otherPlayer.id;
+      room.assignedSides = false;
+      room.log.push(`⚠️ Break foul: ${shooterName} pocketed the Black 8-Ball with a foul. ${otherPlayer.username} receives ball-in-hand behind the head string and the 8-Ball is re-spotted.`);
+      return;
+    }
+
     if (isFoul) {
       concludeMatch(room, otherPlayer, currentActivePlayer, `Defeat! ${shooterName} pocketed the Black 8-Ball, but committed a FOUL [${foulReason}].`);
+    } else if (!room.assignedSides && isBreakShot) {
+      concludeMatch(room, currentActivePlayer, otherPlayer, `🎉 ${shooterName} wins on a legal break by pocketing the 8-Ball!`);
     } else if (!room.assignedSides) {
       concludeMatch(room, otherPlayer, currentActivePlayer, `Defeat! ${shooterName} pocketed the Black 8-Ball illegally on an open table.`);
     } else {
@@ -155,7 +176,11 @@ export function evaluateShotRules(
 
   if (isFoul) {
     room.scratchOccurred = true;
-    room.log.push(`⚠️ FOUL DETECTED: [${foulReason}] Turn is handed over to ${otherPlayer.username} with FREE Cue Ball placement anywhere!`);
+    room.ballInHandRestriction = isBreakShot ? 'behind_head_string' : 'anywhere';
+    if (isBreakShot) {
+      room.log.push(`⚠️ BREAK FOUL: ${otherPlayer.username} receives ball-in-hand behind the head string.`);
+    }
+    room.log.push(`⚠️ FOUL DETECTED: [${foulReason}] Turn is handed over to ${otherPlayer.username} with FREE Cue Ball placement ${room.ballInHandRestriction === 'behind_head_string' ? 'behind the head string' : 'anywhere'}!`);
     room.currentTurn = otherPlayer.id;
   } else {
     if (pocketedIds.length > 0) {
@@ -284,7 +309,7 @@ export function triggerAiShot(room: RoomState) {
 
       while (anyBallMoving && iterations < maxStepsLimit) {
         const preStates = room.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
-        simulatePhysicsStep(room.balls, 0.988, 0.95, contactTracker);
+        simulatePhysicsStep(room.balls, 0.995, 0.92, contactTracker);
 
         for (let i = 0; i < room.balls.length; i++) {
           const currentB = room.balls[i];

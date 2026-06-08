@@ -1,47 +1,25 @@
-// Gracefully suppress benign Vite HMR / WebSocket connection errors in sandboxed preview environments
+// Filter only genuine Vite HMR infrastructure noise in sandboxed environments.
+// Uses strict pattern matching to avoid swallowing real application errors.
 if (typeof window !== 'undefined') {
-  const suppressPatterns = ['websocket', 'hmr', 'vite', 'ws://', 'wss://', 'failed to connect', 'closed without opened'];
-
-  const shouldSuppress = (val: any): boolean => {
+  const isHmrNoise = (val: unknown): boolean => {
     if (!val) return false;
-    const str = String(val).toLowerCase();
-    return suppressPatterns.some(p => str.includes(p));
+    const s = String(val).toLowerCase();
+    // Only suppress Vite-internal HMR connection errors, not app WS errors
+    return (
+      (s.includes('vite') || s.includes('[hmr]')) &&
+      (s.includes('failed to connect') || s.includes('closed without opened') || s.includes('websocket'))
+    );
   };
 
-  window.addEventListener('unhandledrejection', (event) => {
-    if (shouldSuppress(event.reason) || (event.reason && shouldSuppress(event.reason.message))) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+  window.addEventListener('unhandledrejection', (e) => {
+    if (isHmrNoise(e.reason) || isHmrNoise(e.reason?.message)) {
+      e.preventDefault();
     }
   });
-
-  window.addEventListener('error', (event) => {
-    if (shouldSuppress(event.message) || shouldSuppress(event.filename)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  }, true);
-
-  // Suppress from console logging to maintain a completely clean workspace
-  const originalError = console.error;
-  console.error = function (...args: any[]) {
-    if (args.some(arg => shouldSuppress(arg) || (arg && shouldSuppress(arg.message)))) {
-      return;
-    }
-    originalError.apply(console, args);
-  };
-
-  const originalWarn = console.warn;
-  console.warn = function (...args: any[]) {
-    if (args.some(arg => shouldSuppress(arg) || (arg && shouldSuppress(arg.message)))) {
-      return;
-    }
-    originalWarn.apply(console, args);
-  };
 }
 
-import {StrictMode} from 'react';
-import {createRoot} from 'react-dom/client';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
@@ -50,4 +28,3 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
-

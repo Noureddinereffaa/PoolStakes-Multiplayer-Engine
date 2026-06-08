@@ -18,6 +18,8 @@ export interface Ball {
   type: 'cue' | 'black' | 'solid' | 'stripe';
   color: string;
   number?: number;
+  spinX?: number;
+  spinY?: number;
 }
 
 export interface MatchHistory {
@@ -44,6 +46,7 @@ export interface RoomState {
   assignedSides: boolean;
   scratchOccurred: boolean;
   pocketedThisTurn: boolean;
+  ballInHandRestriction?: 'anywhere' | 'behind_head_string';
   log: string[];
   aiDifficulty?: 'easy' | 'medium' | 'hard';
   escrowHash?: string;

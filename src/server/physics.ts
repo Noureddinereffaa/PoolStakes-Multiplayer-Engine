@@ -4,6 +4,12 @@ export const TABLE_W = 800;
 export const TABLE_H = 400;
 export const CUSHION = 20;
 export const BALL_R = 10;
+export const HEAD_STRING_X = CUSHION + 220;
+export const RACK_APEX_X = 550;
+export const RACK_APEX_Y = 200;
+export const RACK_COL_SPACING = BALL_R * 1.732;
+export const FOOT_SPOT_X = RACK_APEX_X + 2 * RACK_COL_SPACING;
+export const FOOT_SPOT_Y = RACK_APEX_Y;
 export const POCKET_RADIUS = 24;
 
 const pocketCenters = [
@@ -16,21 +22,21 @@ const pocketCenters = [
 ];
 
 const colColors: { [key: number]: string } = {
-  1: '#F59E0B',
-  2: '#3B82F6',
-  3: '#EF4444',
-  4: '#8B5CF6',
-  5: '#F97316',
-  6: '#10B981',
-  7: '#7F1D1D',
-  8: '#111827',
-  9: '#FBBF24',
-  10: '#60A5FA',
-  11: '#FCA5A5',
-  12: '#C084FC',
-  13: '#FEB08A',
-  14: '#34D399',
-  15: '#991B1B'
+  1: '#CFAF30',
+  2: '#1B4CA7',
+  3: '#B12724',
+  4: '#5F3E9C',
+  5: '#C86414',
+  6: '#0F7B4D',
+  7: '#7A1E2A',
+  8: '#111111',
+  9: '#D7B037',
+  10: '#4A76C8',
+  11: '#D45851',
+  12: '#9D6FD1',
+  13: '#D28D3E',
+  14: '#3CA972',
+  15: '#8A1A24'
 };
 
 export function getInitialBalls(): Ball[] {
@@ -47,8 +53,8 @@ export function getInitialBalls(): Ball[] {
     color: '#FAF9F6'
   });
 
-  const startX = 550;
-  const startY = 200;
+  const startX = RACK_APEX_X;
+  const startY = RACK_APEX_Y;
   const colSpacing = BALL_R * 1.732;
   const rowSpacing = BALL_R * 2;
 
@@ -86,12 +92,15 @@ export function getInitialBalls(): Ball[] {
 
 export function simulatePhysicsStep(
   balls: Ball[],
-  friction = 0.988,
-  elasticLoss = 0.95,
+  friction = 0.997,
+  elasticLoss = 0.92,
   tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }
 ) {
-  const S = 10;
-  const subFriction = Math.pow(friction, 1 / S);
+  const S = 16;
+  const subSlideFriction = Math.pow(0.9935, 1 / S);
+  const subRollFriction = Math.pow(0.9975, 1 / S);
+  const spinCurveMax = 0.06;
+  const slidingThreshold = 0.28;
 
   for (let s = 0; s < S; s++) {
     for (let i = 0; i < balls.length; i++) {
@@ -99,32 +108,35 @@ export function simulatePhysicsStep(
       if (b.isPocketed) continue;
 
       if (b.id === 0) {
-        const bX = (b as any).spinX || 0;
-        const bY = (b as any).spinY || 0;
-        const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        const spinX = b.spinX || 0;
+        const spinY = b.spinY || 0;
+        const speed = Math.hypot(b.vx, b.vy);
 
         if (speed > 0.08) {
           const nx = -b.vy / speed;
           const ny = b.vx / speed;
-          const curveForce = bX * 0.048 * Math.min(speed, 5.5) / S;
+          const curveForce = Math.max(-spinCurveMax, Math.min(spinCurveMax, spinX * 0.05 * Math.min(speed, 6) / S));
           b.vx += nx * curveForce;
           b.vy += ny * curveForce;
-          const rollForce = bY * 0.024 / S;
+          const rollForce = Math.max(-spinCurveMax, Math.min(spinCurveMax, spinY * 0.026 / S));
           b.vx += (b.vx / speed) * rollForce;
           b.vy += (b.vy / speed) * rollForce;
         }
 
-        if ((b as any).spinX) (b as any).spinX *= Math.pow(0.98, 1 / S);
-        if ((b as any).spinY) (b as any).spinY *= Math.pow(0.98, 1 / S);
+        b.spinX = spinX * Math.pow(0.95, 1 / S);
+        b.spinY = spinY * Math.pow(0.95, 1 / S);
       }
 
       b.x += b.vx / S;
       b.y += b.vy / S;
-      b.vx *= subFriction;
-      b.vy *= subFriction;
 
-      if (Math.abs(b.vx) < 0.05) b.vx = 0;
-      if (Math.abs(b.vy) < 0.05) b.vy = 0;
+      const speed = Math.hypot(b.vx, b.vy);
+      const frictionFactor = speed > slidingThreshold ? subSlideFriction : subRollFriction;
+      b.vx *= frictionFactor;
+      b.vy *= frictionFactor;
+
+      if (Math.abs(b.vx) < 0.04) b.vx = 0;
+      if (Math.abs(b.vy) < 0.04) b.vy = 0;
 
       const minX = CUSHION + BALL_R;
       const maxX = TABLE_W - CUSHION - BALL_R;
@@ -136,18 +148,26 @@ export function simulatePhysicsStep(
         b.vx = -b.vx * elasticLoss;
         if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
         if (b.id === 0) {
-          const sX = (b as any).spinX || 0;
-          b.vy -= sX * 1.5 * Math.abs(b.vx);
-          (b as any).spinX *= -0.4;
+          const spinX = b.spinX || 0;
+          const tangentX = 0;
+          const tangentY = -1;
+          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
+          b.vx += tangentX * spinEffect;
+          b.vy += tangentY * spinEffect;
+          b.spinX = -spinX * 0.42;
         }
       } else if (b.x > maxX) {
         b.x = maxX;
         b.vx = -b.vx * elasticLoss;
         if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
         if (b.id === 0) {
-          const sX = (b as any).spinX || 0;
-          b.vy += sX * 1.5 * Math.abs(b.vx);
-          (b as any).spinX *= -0.4;
+          const spinX = b.spinX || 0;
+          const tangentX = 0;
+          const tangentY = 1;
+          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
+          b.vx += tangentX * spinEffect;
+          b.vy += tangentY * spinEffect;
+          b.spinX = -spinX * 0.42;
         }
       }
 
@@ -156,18 +176,26 @@ export function simulatePhysicsStep(
         b.vy = -b.vy * elasticLoss;
         if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
         if (b.id === 0) {
-          const sX = (b as any).spinX || 0;
-          b.vx += sX * 1.5 * Math.abs(b.vy);
-          (b as any).spinX *= -0.4;
+          const spinX = b.spinX || 0;
+          const tangentX = 1;
+          const tangentY = 0;
+          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
+          b.vx += tangentX * spinEffect;
+          b.vy += tangentY * spinEffect;
+          b.spinX = -spinX * 0.42;
         }
       } else if (b.y > maxY) {
         b.y = maxY;
         b.vy = -b.vy * elasticLoss;
         if (tracker && tracker.firstContactBallId !== null) tracker.cushionContactOccurred = true;
         if (b.id === 0) {
-          const sX = (b as any).spinX || 0;
-          b.vx -= sX * 1.5 * Math.abs(b.vy);
-          (b as any).spinX *= -0.4;
+          const spinX = b.spinX || 0;
+          const tangentX = -1;
+          const tangentY = 0;
+          const spinEffect = spinX * 1.55 * Math.min(1, speed / 6);
+          b.vx += tangentX * spinEffect;
+          b.vy += tangentY * spinEffect;
+          b.spinX = -spinX * 0.42;
         }
       }
 
@@ -179,6 +207,8 @@ export function simulatePhysicsStep(
           b.isPocketed = true;
           b.vx = 0;
           b.vy = 0;
+          b.spinX = 0;
+          b.spinY = 0;
           break;
         }
       }
@@ -197,7 +227,7 @@ export function simulatePhysicsStep(
         const distSq = dx * dx + dy * dy;
         const minDist = b1.radius + b2.radius;
         if (distSq < minDist * minDist) {
-          const dist = Math.sqrt(distSq) || 0.001;
+          const dist = Math.sqrt(distSq) || minDist;
           const overlap = minDist - dist;
           const nx = dx / dist;
           const ny = dy / dist;
@@ -207,28 +237,40 @@ export function simulatePhysicsStep(
           b2.x += nx * overlap * 0.5;
           b2.y += ny * overlap * 0.5;
 
-          const kx = b1.vx - b2.vx;
-          const ky = b1.vy - b2.vy;
-          const p = nx * kx + ny * ky;
+          const relVx = b1.vx - b2.vx;
+          const relVy = b1.vy - b2.vy;
+          const relSpeed = relVx * nx + relVy * ny;
 
-          if (p > 0) {
-            const impulse = p * elasticLoss;
-            b1.vx -= impulse * nx;
-            b1.vy -= impulse * ny;
-            b2.vx += impulse * nx;
-            b2.vy += impulse * ny;
-          }
+          if (relSpeed < 0) {
+            const impulse = -(1 + elasticLoss) * relSpeed * 0.5;
+            b1.vx += impulse * nx;
+            b1.vy += impulse * ny;
+            b2.vx -= impulse * nx;
+            b2.vy -= impulse * ny;
 
-          if (b1.id === 0) {
-            const sY = (b1 as any).spinY || 0;
-            b1.vx += nx * sY * 4.8;
-            b1.vy += ny * sY * 4.8;
-            (b1 as any).spinY *= 0.1;
-          } else if (b2.id === 0) {
-            const sY = (b2 as any).spinY || 0;
-            b2.vx -= nx * sY * 4.8;
-            b2.vy -= ny * sY * 4.8;
-            (b2 as any).spinY *= 0.1;
+            const tangentX = -ny;
+            const tangentY = nx;
+            const relTangent = relVx * tangentX + relVy * tangentY;
+            const frictionImpulse = relTangent * 0.08;
+            b1.vx -= frictionImpulse * tangentX;
+            b1.vy -= frictionImpulse * tangentY;
+            b2.vx += frictionImpulse * tangentX;
+            b2.vy += frictionImpulse * tangentY;
+
+            const cueSpinBall = b1.id === 0 ? b1 : b2.id === 0 ? b2 : null;
+            if (cueSpinBall) {
+              const spinX = cueSpinBall.spinX || 0;
+              const spinY = cueSpinBall.spinY || 0;
+              const impactDir = cueSpinBall === b1 ? 1 : -1;
+              cueSpinBall.vx += nx * spinY * 4.2 * impactDir + tangentX * spinX * 2.3 * impactDir;
+              cueSpinBall.vy += ny * spinY * 4.2 * impactDir + tangentY * spinX * 2.3 * impactDir;
+              cueSpinBall.spinY *= 0.12;
+              cueSpinBall.spinX *= 0.22;
+
+              const targetBall = cueSpinBall === b1 ? b2 : b1;
+              targetBall.vx += tangentX * spinX * 1.1 * impactDir;
+              targetBall.vy += tangentY * spinX * 1.1 * impactDir;
+            }
           }
 
           if (tracker && tracker.firstContactBallId === null) {

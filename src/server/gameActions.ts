@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { RoomState, Player, SocketMessage } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, simulatePhysicsStep } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, simulatePhysicsStep } from './physics';
 import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreateRoom, broadcastRoom } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
@@ -18,21 +18,28 @@ export function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'j
   const resolvedPlayerId = walletUser.id;
   playerRoomMap.set(ws, { roomId, playerId: resolvedPlayerId });
 
-  const player = createPlayerFromUser(walletUser, stake);
-
-  if (room.players.length < 2) {
-    if (!room.players.some(p => p.username === username)) {
-      room.players.push(player);
-      room.log.push(`${username} entered table. Stake: $${stake}`);
-    }
-  } else {
-    ws.send(JSON.stringify({ type: 'error', message: 'Room has already peaked at 2 players.' }));
+  if (room.players.some(p => p.username === username)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'You already occupy a seat at this table.' }));
     return;
   }
 
+  if (room.players.length >= 2 || room.status === 'playing') {
+    ws.send(JSON.stringify({ type: 'error', message: 'This room is full or already in play. Choose another table.' }));
+    return;
+  }
+
+  if (room.players.length === 1 && stake !== room.stake) {
+    ws.send(JSON.stringify({ type: 'error', message: `Stake mismatch. Existing room requires $${room.stake} USDT per player.` }));
+    return;
+  }
+
+  const player = createPlayerFromUser(walletUser, stake);
+  room.players.push(player);
+  room.log.push(`${username} entered table. Stake: $${stake}`);
+
   if (room.players.length === 2 && room.status === 'waiting') {
     room.status = 'ready';
-    room.log.push('Players joined! Locking stakes in secure Laravel wallet escrow...');
+    room.log.push('Players joined! Validating and locking stakes in secure Laravel wallet escrow...');
 
     const escrowResult = lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock', {
       roomName: room.name,
@@ -44,8 +51,10 @@ export function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'j
     if (escrowResult.success) {
       room.log.push(`Current turn: ${room.players[0].username} (Shooter). Aim at cue ball.`);
     } else {
-      room.log.push(`Validation Failed: ${escrowResult.message || 'Insufficient funds in betting wallets.'}`);
+      room.log.push(`Escrow validation failed: ${escrowResult.message || 'Insufficient wallet funds.'}`);
+      room.players.pop();
       room.status = 'waiting';
+      ws.send(JSON.stringify({ type: 'error', message: escrowResult.message || 'Unable to lock stakes for this table.' }));
     }
   }
 
@@ -64,7 +73,13 @@ export function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, {
   room.commissionRate = 0.05;
 
   const userWallet = ensureLaravelUser(room.players[0].username);
-  ensureMinimumBalance(userWallet, Math.max(2000.0, room.stake));
+  if (userWallet.balance < room.stake) {
+    room.log.push(`AI match blocked: ${userWallet.username} has insufficient balance for a $${room.stake} stake.`);
+    room.status = 'waiting';
+    broadcastRoom(roomId);
+    return;
+  }
+
   room.players[0].walletBalance = userWallet.balance;
 
   const aiWallet = getAiUser();
@@ -141,10 +156,10 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   room.log.push(`${shooterName} triggers a shot with Power: ${Math.round(msg.power)}% at Angular Offset: ${msg.angle.toFixed(2)} rad.`);
 
   const cueBall = room.balls[0];
-  const sX = msg.spinX || 0;
-  const sY = msg.spinY || 0;
-  (cueBall as any).spinX = sX;
-  (cueBall as any).spinY = sY;
+  const sX = Math.max(-1, Math.min(1, msg.spinX || 0));
+  const sY = Math.max(-1, Math.min(1, msg.spinY || 0));
+  cueBall.spinX = sX;
+  cueBall.spinY = sY;
 
   const normPower = msg.power / 100;
   const powerCurve = Math.pow(normPower, 1.35);
@@ -164,7 +179,7 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
 
   while (anyBallMoving && iterations < maxStepsLimit) {
     const preStates = room.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
-    simulatePhysicsStep(room.balls, 0.988, 0.95, contactTracker);
+    simulatePhysicsStep(room.balls, 0.995, 0.92, contactTracker);
 
     for (let i = 0; i < room.balls.length; i++) {
       const currentB = room.balls[i];
@@ -215,15 +230,47 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
   if (room.currentTurn !== playerId) return;
   if (!room.scratchOccurred) return;
 
+  const minX = CUSHION + BALL_R + 2;
+  const maxX = TABLE_W - CUSHION - BALL_R - 2;
+  const minY = CUSHION + BALL_R + 2;
+  const maxY = TABLE_H - CUSHION - BALL_R - 2;
+  const targetX = Math.max(minX, Math.min(msg.x, maxX));
+  const targetY = Math.max(minY, Math.min(msg.y, maxY));
+
+  if (room.ballInHandRestriction === 'behind_head_string') {
+    const headStringMaxX = HEAD_STRING_X - BALL_R;
+    if (targetX > headStringMaxX) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Invalid placement: ball must be behind the head string after a break foul.' }));
+      room.log.push(`Invalid head-string placement attempted by ${room.players.find(p => p.id === playerId)?.username}.`);
+      broadcastRoom(roomId);
+      return;
+    }
+  }
+
+  const overlapsOtherBall = room.balls.some((b) => {
+    if (b.id === 0 || b.isPocketed) return false;
+    const dx = targetX - b.x;
+    const dy = targetY - b.y;
+    return Math.hypot(dx, dy) < BALL_R * 2.0;
+  });
+
+  if (overlapsOtherBall) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid cue ball placement: cannot place over another ball.' }));
+    room.log.push(`Invalid cue ball placement attempted by ${room.players.find(p => p.id === playerId)?.username}. Choose a clear spot.`);
+    broadcastRoom(roomId);
+    return;
+  }
+
   const cb = room.balls[0];
-  cb.x = Math.max(CUSHION + BALL_R + 10, Math.min(msg.x, TABLE_W - CUSHION - BALL_R - 10));
-  cb.y = Math.max(CUSHION + BALL_R + 10, Math.min(msg.y, TABLE_H - CUSHION - BALL_R - 10));
+  cb.x = targetX;
+  cb.y = targetY;
   cb.isPocketed = false;
   cb.vx = 0;
   cb.vy = 0;
 
   room.scratchOccurred = false;
-  room.log.push(`${room.players.find(p => p.id === playerId)?.username} placed cue ball.`);
+  room.ballInHandRestriction = undefined;
+  room.log.push(`${room.players.find(p => p.id === playerId)?.username} placed the cue ball at a valid location.`);
   broadcastRoom(roomId);
 }
 
@@ -234,7 +281,8 @@ export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'c
   const room = activeRooms.get(roomId);
   if (!room) return;
 
-  const sender = room.players.find(p => p.id === playerRoomMap.get(ws)?.playerId)?.username || 'Spectator';
+  const playerId = mapping.playerId;
+  const sender = room.players.find(p => p.id === playerId)?.username || 'Spectator';
   room.log.push(`[Chat] ${sender}: ${msg.message}`);
   broadcastRoom(roomId);
 }
