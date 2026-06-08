@@ -7,6 +7,7 @@ import {
   handleShoot,
   handleResetCueBall,
   handleChat,
+  handleRematch,
   handleDisconnect
 } from './gameActions';
 
@@ -29,6 +30,9 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage) {
       break;
     case 'chat':
       handleChat(ws, msg);
+      break;
+    case 'rematch':
+      handleRematch(ws);
       break;
     case 'leave':
       handleDisconnect(ws);

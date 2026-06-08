@@ -1,1 +1,24 @@
 @import "tailwindcss";
+
+/* ── Fullscreen & mobile safe-area ── */
+:fullscreen, ::backdrop {
+  background: #000 !important;
+}
+canvas {
+  image-rendering: auto;
+}
+html {
+  background: #000;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Hide scrollbar everywhere */
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; }

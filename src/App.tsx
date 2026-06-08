@@ -110,6 +110,7 @@ export default function App() {
     handleResetCueBall,
     handleJoinAI,
     handleSendChat,
+    handleRematch,
     handleQuitRoom
   } = useBilliardsSocket({
     username: userSession?.username,
@@ -580,6 +581,7 @@ export default function App() {
             opponentAim={opponentAim}
             handlePreviewAim={handlePreviewAim}
             handleJoinAI={handleJoinAI}
+            handleRematch={handleRematch}
             chatMessage={chatMessage}
             setChatMessage={setChatMessage}
             handleSendChat={handleSendChat}

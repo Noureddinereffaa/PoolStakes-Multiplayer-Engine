@@ -73,6 +73,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const [isPulling, setIsPulling] = useState(false);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const startDistFromCueRef = useRef(0);
 
   const [hudNotification, setHudNotification] = useState<string | null>(null);
   const lastLogRef = useRef<string | null>(null);
@@ -398,20 +399,16 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     if (isMyTurn && !roomState.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed) {
+        const distFromCue = Math.hypot(coords.y - cueBall.y, coords.x - cueBall.x);
         if (isInitialDown) {
           pullStartPosRef.current = coords;
+          startDistFromCueRef.current = distFromCue;
           setIsPulling(true);
           if (!isAimLocked) setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
         } else if (pullStartPosRef.current) {
-          const dx = coords.x - pullStartPosRef.current.x, dy = coords.y - pullStartPosRef.current.y;
-          const baseAngle = Math.atan2(pullStartPosRef.current.y - cueBall.y, pullStartPosRef.current.x - cueBall.x);
-          const projectionPull = -(dx * Math.cos(baseAngle) + dy * Math.sin(baseAngle));
-          setShotPower(Math.min(100, Math.max(5, Math.floor(Math.max(0, projectionPull) / 1.7) + 5)));
-          if (!isAimLocked) {
-            const orthogonalDrag = -dx * Math.sin(baseAngle) + dy * Math.cos(baseAngle);
-            const sensitivityFactor = Math.max(0.0002, 0.0028 * Math.exp(-shotPower * 0.024));
-            setAimAngle(baseAngle + orthogonalDrag * sensitivityFactor);
-          }
+          if (!isAimLocked) setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
+          const pullDistance = Math.max(0, distFromCue - startDistFromCueRef.current);
+          setShotPower(Math.min(100, Math.max(5, Math.floor(pullDistance / 1.7 + 5))));
         } else if (!isAimLocked) {
           setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
         }

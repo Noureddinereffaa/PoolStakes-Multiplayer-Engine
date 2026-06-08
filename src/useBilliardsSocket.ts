@@ -223,6 +223,32 @@ export function useBilliardsSocket({
     }
   }, []);
 
+  const handleRematch = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'rematch' }));
+    } else {
+      // Offline rematch — reset balls locally
+      setRoomState((prev: any) => {
+        if (!prev) return prev;
+        const { getInitialBalls } = require('./server/physics');
+        return {
+          ...prev,
+          balls: getInitialBalls(),
+          status: 'playing',
+          currentTurn: prev.players[0]?.id || 'local-1',
+          assignedSides: false,
+          scratchOccurred: false,
+          pocketedThisTurn: false,
+          ballInHandRestriction: undefined,
+          winnerId: undefined,
+          turnTimer: 60,
+          log: ['🔄 Rematch! New game started.'],
+        };
+      });
+      setPhysicsFrames(null);
+    }
+  }, []);
+
   const handleQuitRoom = useCallback(() => {
     if (wsRef.current) {
       wsRef.current.close();
@@ -304,6 +330,7 @@ export function useBilliardsSocket({
     handleResetCueBall,
     handleJoinAI,
     handleSendChat,
+    handleRematch,
     handleQuitRoom
   };
 }

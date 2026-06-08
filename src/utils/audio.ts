@@ -3,6 +3,11 @@
 
 class SoundSynth {
   private ctx: AudioContext | null = null;
+  private _muted = false;
+
+  get muted() { return this._muted; }
+  set muted(v: boolean) { this._muted = v; }
+  toggle() { this._muted = !this._muted; return this._muted; }
 
   private initCtx() {
     if (!this.ctx) {
@@ -19,6 +24,7 @@ class SoundSynth {
 
   // Transient high-impact white wood strike on phenolic resin ball
   public playCueHit(powerPercent: number) {
+    if (this._muted) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -66,6 +72,7 @@ class SoundSynth {
 
   // Sharp bright click of two pool balls colliding
   public playBallCollision(speedFactor = 1) {
+    if (this._muted) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -111,6 +118,7 @@ class SoundSynth {
 
   // Thick dull thud of a ball bumping into a cloth-bound rubber cushion
   public playCushionHit(speedFactor = 1) {
+    if (this._muted) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -140,6 +148,7 @@ class SoundSynth {
 
   // Smooth hollow sound of a ball slipping over the rim and dropping into leather pocket
   public playPocketIn() {
+    if (this._muted) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -185,6 +194,7 @@ class SoundSynth {
 
   // Warning synth bell notifying warning/foul
   public playFoul() {
+    if (this._muted) return;
     try {
       this.initCtx();
       if (!this.ctx) return;
@@ -222,6 +232,7 @@ class SoundSynth {
 
   // Win triumph jingle/sound
   public playWin() {
+    if (this._muted) return;
     try {
       this.initCtx();
       if (!this.ctx) return;

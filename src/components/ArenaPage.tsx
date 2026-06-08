@@ -2,25 +2,27 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState } from '../types';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
-  Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot
+  Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot, Volume2, VolumeX
 } from 'lucide-react';
 import { ProvablyFairVerify } from './ProvablyFairVerify';
+import { poolAudio } from '../utils/audio';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ArenaPageProps {
   roomState: RoomState | null;
-  userSession: any;
+  userSession: { id: string; username: string; balance: number; email?: string; walletAddress?: string };
   language: 'en' | 'ar';
   onQuitRoom: () => void;
-  myPlayerObj: any;
+  myPlayerObj: { id: string; username: string; walletBalance: number; bettingStake: number; side?: 'solids' | 'stripes'; isConnected: boolean } | undefined;
   isMyTurn: boolean;
-  physicsFrames: any;
-  setPhysicsFrames: (f: any) => void;
-  handleShoot: any;
-  handleResetCueBall: any;
-  opponentAim: any;
-  handlePreviewAim: any;
-  handleJoinAI: any;
+  physicsFrames: Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null;
+  setPhysicsFrames: (f: Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null) => void;
+  handleShoot: (angle: number, power: number, spinX?: number, spinY?: number) => void;
+  handleResetCueBall: (x: number, y: number) => void;
+  opponentAim: { angle: number; power: number; spinX?: number; spinY?: number } | null | undefined;
+  handlePreviewAim: (angle: number, power: number, spinX?: number, spinY?: number) => void;
+  handleJoinAI: (difficulty?: 'easy' | 'medium' | 'hard') => void;
+  handleRematch: () => void;
   chatMessage: string;
   setChatMessage: (msg: string) => void;
   handleSendChat: (msg: string) => void;
@@ -119,9 +121,9 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
 }
 
 function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage, setChatMessage, handleSendChat, handleJoinAI, chatRef, onClose }: {
-  roomState: RoomState; userSession: any; language: 'en' | 'ar'; activeEscrow: number;
+  roomState: RoomState; userSession: { id: string; username: string; balance: number; email?: string; walletAddress?: string }; language: 'en' | 'ar'; activeEscrow: number;
   chatMessage: string; setChatMessage: (v: string) => void; handleSendChat: (v: string) => void;
-  handleJoinAI: any; chatRef: React.RefObject<HTMLDivElement | null>; onClose: () => void;
+  handleJoinAI: (difficulty?: 'easy' | 'medium' | 'hard') => void; chatRef: React.RefObject<HTMLDivElement | null>; onClose: () => void;
 }) {
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0806] to-black border-l border-amber-900/30 overflow-hidden">
@@ -133,7 +135,7 @@ function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage
         <div className="rounded-xl border border-amber-900/30 bg-black/40 p-3">
           <div className="text-[10px] text-amber-600 font-bold mb-2 font-mono tracking-wider">{language === 'ar' ? 'اللاعبون' : 'Players'}</div>
           <div className="space-y-2">
-            {roomState.players.map((p: any, i: number) => (
+            {roomState.players.map((p: { id: string; username: string; walletBalance: number; side?: 'solids' | 'stripes'; isConnected: boolean }, i: number) => (
               <div key={p.id}
                 className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-all ${p.username === userSession!.username ? 'border-amber-500/40 bg-amber-500/10' : 'border-amber-900/20 bg-black/30'}`}
               >
@@ -206,23 +208,29 @@ function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage
 export default function ArenaPage({
   roomState, userSession, language, onQuitRoom, myPlayerObj, isMyTurn,
   physicsFrames, setPhysicsFrames, handleShoot, handleResetCueBall, opponentAim,
-  handlePreviewAim, handleJoinAI, chatMessage, setChatMessage, handleSendChat
+  handlePreviewAim, handleJoinAI, handleRematch, chatMessage, setChatMessage, handleSendChat
 }: ArenaPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<PoolTableHandle>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
-  const overlayTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [isMuted, setIsMuted] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(() => window.innerHeight > window.innerWidth);
+  const overlayTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const [isMobile, setIsMobile] = useState(() => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
 
   useEffect(() => {
-    const check = () => setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
-    check();
     enterFullscreen();
-    window.addEventListener('resize', check);
-    return () => { exitFullscreen(); window.removeEventListener('resize', check); };
+    const checkMobile = () => setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
+    const checkOrientation = () => setIsPortrait(window.innerHeight > window.innerWidth);
+    const onResize = () => { checkMobile(); checkOrientation(); };
+    checkMobile();
+    checkOrientation();
+    window.addEventListener('resize', onResize);
+    return () => { exitFullscreen(); window.removeEventListener('resize', onResize); };
   }, []);
 
   useEffect(() => {
@@ -241,7 +249,7 @@ export default function ArenaPage({
     if (!containerRef.current) return;
     try {
       await containerRef.current.requestFullscreen();
-      if (isMobile) try { await screen.orientation?.lock('landscape-primary'); } catch (_) {}
+      if (isMobile) try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
     } catch (_) {}
   };
   const exitFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {} };
@@ -286,6 +294,23 @@ export default function ArenaPage({
   const setIsAimLocked = (v: boolean) => tableRef.current?.setIsAimLocked(v);
   const handleShootClick = () => tableRef.current?.handleShoot();
 
+  const isGameOver = roomState?.status === 'gameover';
+  const isWinner = isGameOver && roomState.winnerId === myPlayerObj?.id;
+  const winnerName = isGameOver ? roomState.players.find(p => p.id === roomState.winnerId)?.username || 'Player' : '';
+
+  const myPocketCount = mySide ? roomState.balls.filter(b => {
+    if (b.id === 0 || b.id === 8 || !b.isPocketed) return false;
+    return (mySide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
+  }).length : 0;
+  const oppPocketCount = opponentSide ? roomState.balls.filter(b => {
+    if (b.id === 0 || b.id === 8 || !b.isPocketed) return false;
+    return (opponentSide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
+  }).length : 0;
+
+  useEffect(() => {
+    if (isGameOver) poolAudio.playWin();
+  }, [isGameOver]);
+
   if (!roomState) {
     return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-gradient-to-b from-[#0a0604] to-black flex items-center justify-center">
@@ -305,6 +330,20 @@ export default function ArenaPage({
       ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden"
       onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
     >
+      {/* Portrait orientation overlay */}
+      {isMobile && isPortrait && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4">
+          <div className="text-5xl animate-pulse rotate-90">🎱</div>
+          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'دور الهاتف' : 'ROTATE DEVICE'}</div>
+          <div className="text-xs text-amber-600/80 font-mono text-center px-8">{language === 'ar' ? 'الرجاء تدوير الهاتف إلى الوضع الأفقي للعب' : 'Please rotate your phone to landscape'}</div>
+          <div className="mt-4 w-16 h-16 rounded-2xl border-2 border-amber-500/40 flex items-center justify-center animate-pulse">
+            <svg className="w-10 h-10 text-amber-400 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
+        </div>
+      )}
+
       {/* Header - ultra compact single row */}
       <AnimatePresence>
         {showOverlay && (
@@ -336,9 +375,9 @@ export default function ArenaPage({
                   <span className="text-[8px] font-bold text-amber-200 font-mono truncate max-w-[60px]">{opponent?.username || 'Waiting...'}</span>
                   <div className={`w-1 h-1 rounded-full shrink-0 ${!isMyTurn && roomState.status === 'playing' ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
                 </div>
-                <button onClick={toggleFullscreen} className="p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Minimize className="w-2.5 h-2.5" /></button>
+                <button onClick={toggleFullscreen} className="hidden md:inline-flex p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Minimize className="w-2.5 h-2.5" /></button>
                 <button onClick={() => setShowSidebar(prev => !prev)} className="p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Users className="w-2.5 h-2.5" /></button>
-                <button onClick={onQuitRoom} className="px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-[7px] font-bold transition shrink-0">{language === 'ar' ? 'مغادرة' : 'Quit'}</button>
+                <button onClick={onQuitRoom} className="hidden md:inline-flex px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-[7px] font-bold transition shrink-0">{language === 'ar' ? 'مغادرة' : 'Quit'}</button>
               </div>
             </div>
           </motion.header>
@@ -450,17 +489,12 @@ export default function ArenaPage({
               disabled={!isMyTurn}
               className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
             ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+            <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300 transition-all"
+            >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
           </div>
 
-          {/* Mobile bottom controls */}
-          {isMobile && showOverlay && (
-            <div className="absolute bottom-0 inset-x-0 z-20 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-4 pb-3 pt-10 backdrop-blur-sm">
-              <div className="flex items-center justify-around max-w-xs mx-auto">
-                <button onClick={onQuitRoom} className="w-10 h-10 rounded-full bg-red-700/50 hover:bg-red-600/70 transition flex items-center justify-center border border-red-500/20 shadow-lg"><X className="w-4 h-4 text-white" /></button>
-                <button onClick={handleShootClick} disabled={!isMyTurn} className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_15px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed active:scale-90 transition-all"><div className="w-4 h-4 rounded-full bg-white/90" /></button>
-              </div>
-            </div>
-          )}
+
         </div>
 
         {/* Sidebar */}
@@ -485,6 +519,43 @@ export default function ArenaPage({
           )}
         </AnimatePresence>
       </div>
+
+      {/* Game Over overlay with stats + rematch */}
+      {isGameOver && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        >
+          <motion.div initial={{ scale: 0.8, y: 30 }} animate={{ scale: 1, y: 0 }}
+            className="relative p-6 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_60px_rgba(245,158,11,0.15)] max-w-xs w-full mx-4 text-center"
+          >
+            <div className="text-4xl mb-2">{isWinner ? '🏆' : '💔'}</div>
+            <div className={`text-xl font-black font-mono mb-1 ${isWinner ? 'text-amber-400' : 'text-rose-400'}`}>
+              {isWinner ? (language === 'ar' ? 'فوز!' : 'YOU WIN!') : (language === 'ar' ? 'خسارة' : 'DEFEAT')}
+            </div>
+            {!isWinner && (
+              <div className="text-xs font-mono text-amber-500/70 mb-3">{winnerName} {language === 'ar' ? 'فاز' : 'wins'}</div>
+            )}
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="bg-black/50 rounded-lg border border-amber-900/30 p-2">
+                <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'كراتي' : 'My Pockets'}</div>
+                <div className="text-lg font-black font-mono text-amber-300">{myPocketCount}</div>
+              </div>
+              <div className="bg-black/50 rounded-lg border border-amber-900/30 p-2">
+                <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'كرات الخصم' : 'Opponent'}</div>
+                <div className="text-lg font-black font-mono text-blue-400">{oppPocketCount}</div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleRematch}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-black transition shadow-lg shadow-amber-500/20"
+              >🔄 {language === 'ar' ? 'إعادة' : 'REMATCH'}</button>
+              <button onClick={onQuitRoom}
+                className="flex-1 py-2.5 rounded-xl bg-black/60 border border-amber-900/40 hover:border-amber-700/60 text-amber-400 text-xs font-black transition"
+              >✕ {language === 'ar' ? 'خروج' : 'QUIT'}</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </motion.div>
   );
 }

@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { RoomState, Player, SocketMessage } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
 import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreateRoom, broadcastRoom, pushRoomLog } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
@@ -320,6 +320,32 @@ export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'c
   const playerId = mapping.playerId;
   const sender = room.players.find(p => p.id === playerId)?.username || 'Spectator';
   pushRoomLog(room, `[Chat] ${sender}: ${msg.message}`);
+  broadcastRoom(roomId);
+}
+
+export function handleRematch(ws: WebSocket) {
+  const mapping = playerRoomMap.get(ws);
+  if (!mapping) return;
+  const { roomId, playerId } = mapping;
+  const room = activeRooms.get(roomId);
+  if (!room || room.status !== 'gameover') return;
+
+  const requester = room.players.find(p => p.id === playerId);
+  if (!requester) return;
+
+  room.balls = getInitialBalls();
+  room.players.forEach(p => { p.side = undefined; });
+  room.assignedSides = false;
+  room.scratchOccurred = false;
+  room.pocketedThisTurn = false;
+  room.ballInHandRestriction = undefined;
+  room.status = 'playing';
+  room.currentTurn = room.players[0]?.id || playerId;
+  room.winnerId = undefined;
+  room.turnTimer = 60;
+  room.animVersion = (room.animVersion || 0) + 1;
+  room.log = [`🔄 Rematch initiated by ${requester.username}!`];
+  pushRoomLog(room, 'Match reset. New break shot incoming!');
   broadcastRoom(roomId);
 }
 

@@ -74,6 +74,7 @@ export type SocketMessage =
   | { type: 'reset_cue_ball'; x: number; y: number }
   | { type: 'chat'; message: string }
   | { type: 'set_ai_opponent'; difficulty?: 'easy' | 'medium' | 'hard' }
+  | { type: 'rematch' }
   // Server to client messages:
   | { type: 'sync_state'; state: RoomState }
   | { type: 'physics_frames'; frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> }
