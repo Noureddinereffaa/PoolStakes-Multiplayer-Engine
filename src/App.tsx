@@ -50,9 +50,8 @@ export default function App() {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-    return () => {
+    return () => { 
+      mountedRef.current = false;
       for (const timer of toastTimersRef.current.values()) clearTimeout(timer);
       toastTimersRef.current.clear();
     };

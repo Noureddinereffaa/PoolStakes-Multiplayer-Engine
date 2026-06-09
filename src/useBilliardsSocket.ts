@@ -302,23 +302,25 @@ export function useBilliardsSocket({
       wsRef.current.send(JSON.stringify({ type: 'rematch' }));
     } else {
       // Offline rematch — reset balls locally
-      setRoomState((prev: any) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          balls: getInitialBalls(),
-          status: 'playing',
-          currentTurn: prev.players[0]?.id || 'local-1',
-          assignedSides: false,
-          scratchOccurred: false,
-          pocketedThisTurn: false,
-          ballInHandRestriction: undefined,
-          winnerId: undefined,
-          turnTimer: 60,
-          log: ['🔄 Rematch! New game started.'],
-        };
-      });
-      setPhysicsFrames(null);
+      if (mountedRef.current) {
+        setRoomState((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            balls: getInitialBalls(),
+            status: 'playing',
+            currentTurn: prev.players[0]?.id || 'local-1',
+            assignedSides: false,
+            scratchOccurred: false,
+            pocketedThisTurn: false,
+            ballInHandRestriction: undefined,
+            winnerId: undefined,
+            turnTimer: 60,
+            log: ['🔄 Rematch! New game started.'],
+          };
+        });
+        setPhysicsFrames(null);
+      }
     }
   }, []);
 
@@ -327,8 +329,10 @@ export function useBilliardsSocket({
       wsRef.current.close();
       wsRef.current = null;
     }
-    setRoomState(null);
-    setPhysicsFrames(null);
+    if (mountedRef.current) {
+      setRoomState(null);
+      setPhysicsFrames(null);
+    }
     fetchRef.current();
   }, []);
 
@@ -365,21 +369,23 @@ export function useBilliardsSocket({
       if (!isAnyBallMoving(balls)) break;
     }
 
-    setPhysicsFrames(mockFrames);
+    if (mountedRef.current) {
+      setPhysicsFrames(mockFrames);
 
-    const nextTurn = roomState.currentTurn === roomState.players[0]?.id
-      ? (roomState.players[1]?.id || roomState.players[0].id)
-      : roomState.players[0]?.id;
+      const nextTurn = roomState.currentTurn === roomState.players[0]?.id
+        ? (roomState.players[1]?.id || roomState.players[0].id)
+        : roomState.players[0]?.id;
 
-    setRoomState((prev: any) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        currentTurn: nextTurn,
-        balls: balls.map((b: Ball) => ({ ...b, vx: 0, vy: 0 })),
-        log: [...prev.log, `[Offline] Shot fired with ${power}% power.`]
-      };
-    });
+      setRoomState((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentTurn: nextTurn,
+          balls: balls.map((b: Ball) => ({ ...b, vx: 0, vy: 0 })),
+          log: [...prev.log, `[Offline] Shot fired with ${power}% power.`]
+        };
+      });
+    }
   }, [roomState]);
 
   return {

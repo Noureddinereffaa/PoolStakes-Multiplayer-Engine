@@ -2,8 +2,19 @@ import { useState } from 'react';
 
 async function sha256(msg: string): Promise<string> {
   const enc = new TextEncoder().encode(msg);
-  const buf = await crypto.subtle.digest('SHA-256', enc);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  // crypto.subtle only available in secure contexts (HTTPS/localhost)
+  if (typeof crypto !== 'undefined' && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+    const buf = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  // Fallback: simple hash for non-secure contexts (not cryptographically secure)
+  let hash = 0;
+  for (let i = 0; i < msg.length; i++) {
+    const char = msg.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
 }
 
 export function ProvablyFairVerify({ hash, seed }: { hash: string; seed: string }) {
