@@ -433,15 +433,15 @@ export default function ArenaPage({
                         const res = await deferredInstallPrompt.userChoice;
                         if (res.outcome === 'accepted') setInstalled(true);
                       }}
-                      className="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold tracking-wider active:scale-95 transition-all"
-                    >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
-                  ) : /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
-                    <div className="text-[10px] text-amber-500/60 font-mono text-center leading-tight max-w-[280px]">
-                      {language === 'ar'
-                        ? 'للتجربة الكاملة: زر المشاركة ← أضف إلى الشاشة الرئيسية'
-                        : 'For full experience: Share → Add to Home Screen'}
+                      className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-xs font-black tracking-wider active:scale-95 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)]"
+                    >📲 {language === 'ar' ? 'تثبيت التطبيق مجاناً' : 'FREE INSTALL APP'}</button>
+                  ) : (
+                    <div className="text-[10px] text-amber-500/50 font-mono text-center leading-tight max-w-[280px]">
+                      {/iPad|iPhone|iPod/.test(navigator.userAgent)
+                        ? (language === 'ar' ? 'للتجربة الكاملة: مشاركة ← إضافة للشاشة الرئيسية' : 'Full app: Share → Add to Home Screen')
+                        : (language === 'ar' ? 'لتجربة تطبيق: زر القائمة ← تثبيت التطبيق' : 'App experience: Menu → Install app')}
                     </div>
-                  ) : null}
+                  )}
                 </div>
               )}
             </>

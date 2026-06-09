@@ -24,7 +24,7 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
-if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js');
 }
 
