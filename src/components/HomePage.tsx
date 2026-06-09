@@ -13,7 +13,6 @@ interface HomePageProps {
   isAuthLoading: boolean;
   handleLoginSubmit: (e: React.FormEvent) => void;
   handleRegisterSubmit: (e: React.FormEvent) => void;
-  handleQuickGuest: () => void;
   language: Lang; setLanguage: (l: Lang) => void;
   onNavigateToRules: () => void;
 }
@@ -49,7 +48,7 @@ export default function HomePage({
   loginUser, setLoginUser, loginPass, setLoginPass,
   regUser, setRegUser, regEmail, setRegEmail, regPass, setRegPass,
   regWallet, setRegWallet, isAuthLoading,
-  handleLoginSubmit, handleRegisterSubmit, handleQuickGuest,
+  handleLoginSubmit, handleRegisterSubmit,
   language, setLanguage, onNavigateToRules,
 }: HomePageProps) {
   const [showPass, setShowPass] = useState(false);
@@ -115,12 +114,6 @@ export default function HomePage({
             >
               {isAr ? 'ابدأ الآن' : 'Start Playing'}
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </button>
-            <button
-              onClick={handleQuickGuest}
-              className="px-8 py-3.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 font-bold transition"
-            >
-              {isAr ? 'العب كضيف' : 'Play as Guest'}
             </button>
           </div>
 
@@ -237,11 +230,6 @@ export default function HomePage({
               </form>
             )}
 
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <button onClick={handleQuickGuest} className="w-full py-2.5 rounded-xl border border-white/8 bg-white/3 hover:bg-white/6 text-sm text-slate-400 hover:text-white font-medium transition">
-                🚀 {isAr ? 'العب كضيف فوراً' : 'Continue as Guest — no signup'}
-              </button>
-            </div>
           </div>
         </div>
       </section>

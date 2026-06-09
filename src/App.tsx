@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { RoomState, Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import RulesPage from './components/RulesPage';
@@ -40,13 +41,14 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 let toastIdCounter = 0;
 
 export default function App() {
+  const navigate = useNavigate();
   const [installed, setInstalled] = useState(false);
   const [showInstallOverlay, setShowInstallOverlay] = useState(false);
   const deferredInstallRef = useRef<any>(null);
 
   useEffect(() => {
     const onInstallPrompt = (e: any) => { e.preventDefault(); deferredInstallRef.current = e; };
-    const onInstalled = () => { setInstalled(true); setShowInstallOverlay(false); };
+    const onInstalled = () => { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000); };
     const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true); };
     window.addEventListener('beforeinstallprompt', onInstallPrompt);
     window.addEventListener('appinstalled', onInstalled);
@@ -91,8 +93,9 @@ export default function App() {
   }, []);
   const [chatMessage, setChatMessage] = useState('');
   const [joinDifficulty, setJoinDifficulty] = useState<Difficulty>('medium');
-  const [currentPage, setCurrentPage] = useState<'home' | 'rules' | 'dashboard' | 'arena'>('home');
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
+  const languageRef = useRef(language);
+  languageRef.current = language;
 
   // Initial DB fetches & periodic sync checks
   const fetchLaravelUsers = async () => {
@@ -160,7 +163,7 @@ export default function App() {
       try {
         const Parsed = JSON.parse(saved);
         setUserSession(Parsed);
-        setCurrentPage('dashboard');
+        navigate('/dashboard');
       } catch (e) {
         console.error('Failed to parse saved session:', e);
       }
@@ -227,8 +230,11 @@ export default function App() {
         };
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
-        setCurrentPage('dashboard');
-        if (isMobileAndNotInstalled()) setShowInstallOverlay(true);
+        if (isMobileAndNotInstalled()) {
+          setShowInstallOverlay(true);
+        } else {
+          navigate('/dashboard');
+        }
 
         addToast('success', 'Account Welcome Pack Loaded! You received 500.00 USDT credit bonus!', 5000);
         
@@ -271,8 +277,11 @@ export default function App() {
         };
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
-        setCurrentPage('dashboard');
-        if (isMobileAndNotInstalled()) setShowInstallOverlay(true);
+        if (isMobileAndNotInstalled()) {
+          setShowInstallOverlay(true);
+        } else {
+          navigate('/dashboard');
+        }
 
         addToast('success', `Welcome back ${session.username}! Lounge access granted.`);
         
@@ -287,47 +296,11 @@ export default function App() {
     }
   };
 
-  // Skip Login / Registration
-  const handleQuickGuest = async () => {
-    const guestName = 'Guest_' + Math.floor(Math.random() * 899 + 100);
-    try {
-      const res = await fetch('/api/laravel/auth/guest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: guestName }) });
-      const data = await res.json();
-      if (res.ok && data.token) {
-        const session: UserSession = {
-          id: data.user?.id || 'usr-' + Date.now(),
-          username: guestName,
-          balance: data.user?.balance || 350,
-          email: `${guestName}@usdtpool.com`,
-          walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest',
-          token: data.token
-        };
-        setUserSession(session);
-        localStorage.setItem('billiards_session', JSON.stringify(session));
-      }
-    } catch {}
-    if (!getAuthToken()) {
-      const session: UserSession = {
-        id: 'usr-' + Date.now(),
-        username: guestName,
-        balance: 350.0,
-        email: `${guestName}@usdtpool.com`,
-        walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest'
-      };
-      setUserSession(session);
-      localStorage.setItem('billiards_session', JSON.stringify(session));
-    }
-    if (isMobileAndNotInstalled()) setShowInstallOverlay(true);
-    setCurrentPage('dashboard');
-    addToast('success', 'Logged in as Guest and credited 350.00 USDT practice points successfully!');
-    fetchLaravelUsers();
-  };
-
   // Sign out / Exit Pool Room
   const handleSignout = () => {
     handleQuitRoom();
     setUserSession(null);
-    setCurrentPage('home');
+    navigate('/');
     localStorage.removeItem('billiards_session');
     addToast('success', 'Secure logout complete. Your USDT balance is archived.');
   };
@@ -349,7 +322,7 @@ export default function App() {
 
   const onQuitRoomClick = () => {
     handleQuitRoom();
-    setCurrentPage('dashboard');
+    navigate('/dashboard');
     addToast('success', 'Successfully exited Room. Your assets have returned safely to wallet ledger.');
   };
 
@@ -389,235 +362,6 @@ export default function App() {
   const isMyTurn = !!(roomState && roomState.status === 'playing' && myPlayerObj && roomState.currentTurn === myPlayerObj.id);
   const activeEscrow = roomState && roomState.status !== 'waiting' && roomState.status !== 'gameover' ? roomState.stake * 2 : 0;
 
-  const pageContent = !userSession ? (
-    <HomePage
-      loginUser={loginUser}
-      setLoginUser={setLoginUser}
-      loginPass={loginPass}
-      setLoginPass={setLoginPass}
-      regUser={regUser}
-      setRegUser={setRegUser}
-      regEmail={regEmail}
-      setRegEmail={setRegEmail}
-      regPass={regPass}
-      setRegPass={setRegPass}
-      regWallet={regWallet}
-      setRegWallet={setRegWallet}
-      isAuthLoading={isAuthLoading}
-      handleLoginSubmit={handleLoginSubmit}
-      handleRegisterSubmit={handleRegisterSubmit}
-      handleQuickGuest={handleQuickGuest}
-      language={language}
-      setLanguage={setLanguage}
-      onNavigateToRules={() => setCurrentPage('rules')}
-    />
-  ) : currentPage === 'rules' ? (
-    <RulesPage
-      language={language}
-      setLanguage={setLanguage}
-      onNavigateBack={() => setCurrentPage('home')}
-      onNavigateDashboard={() => setCurrentPage('dashboard')}
-    />
-  ) : currentPage === 'dashboard' ? (
-    <MemberDashboard
-      userSession={userSession}
-      roomState={roomState}
-      stake={stake}
-      roomId={roomId}
-      joinDifficulty={joinDifficulty}
-      laravelUsers={laravelUsers}
-      matchHistory={matchHistory}
-      language={language}
-      setLanguage={setLanguage}
-      onSetStake={setStake}
-      onSetRoomId={setRoomId}
-      onSetJoinDifficulty={setJoinDifficulty}
-      onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-        if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
-          return setShowInstallOverlay(true);
-        }
-        handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
-        setCurrentPage('arena');
-      }}
-      onJoinAI={(diff?: Difficulty) => {
-        const practiceRoom = 'Practice_' + Math.floor(Math.random() * 10000);
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-        if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
-          return setShowInstallOverlay(true);
-        }
-        handleJoinRoom(practiceRoom, 0, diff || 'medium');
-        setCurrentPage('arena');
-      }}
-      onNavigateRules={() => setCurrentPage('rules')}
-      onDeposit={(amount, address, method) => {
-        if (userSession) {
-          handleModifyBalance(userSession.id, amount);
-          addToast('success', `Deposit confirmed: ${amount} USDT credited to your account.`);
-        }
-      }}
-      onWithdraw={(amount, address, method) => {
-        if (userSession) {
-          if (userSession.balance < amount) {
-            addToast('error', 'Insufficient balance for this withdrawal.');
-            return;
-          }
-          handleModifyBalance(userSession.id, -amount);
-          addToast('success', `Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
-        }
-      }}
-    />
-  ) : currentPage === 'home' ? (
-    <HomePage
-      loginUser={loginUser}
-      setLoginUser={setLoginUser}
-      loginPass={loginPass}
-      setLoginPass={setLoginPass}
-      regUser={regUser}
-      setRegUser={setRegUser}
-      regEmail={regEmail}
-      setRegEmail={setRegEmail}
-      regPass={regPass}
-      setRegPass={setRegPass}
-      regWallet={regWallet}
-      setRegWallet={setRegWallet}
-      isAuthLoading={isAuthLoading}
-      handleLoginSubmit={handleLoginSubmit}
-      handleRegisterSubmit={handleRegisterSubmit}
-      handleQuickGuest={handleQuickGuest}
-      language={language}
-      setLanguage={setLanguage}
-      onNavigateToRules={() => setCurrentPage('rules')}
-    />
-  ) : (
-    <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
-
-      {/* Visual background emerald radial glow highlights */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full filter blur-[140px] pointer-events-none" />
-
-      {/* Header element */}
-      <header className="border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
-
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-emerald-400 flex items-center justify-center font-black text-slate-950 shadow-lg relative overflow-hidden group">
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-              🎱
-            </div>
-            <div>
-              <h1 className="text-md sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
-                PLAY & WIN USDT <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-bold tracking-normal">TRC20</span>
-              </h1>
-              <p className="text-[9px] sm:text-[10px] text-emerald-500 font-mono flex items-center gap-1.5 uppercase tracking-wider">
-                <span>● MULTIPLAYER 8-BALL LOCKER</span>
-                <span className="text-slate-700">•</span>
-                <span className="text-slate-400">PROVABLY FAIR CYBER FIELD</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="hidden md:flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/80 px-3 py-2">
-            <button
-              onClick={() => { if (roomState) handleQuitRoom(); setCurrentPage('home'); }}
-              className="text-xs font-bold uppercase text-slate-400 hover:text-emerald-200"
-            >
-              {t(language, 'home')}
-            </button>
-            <button
-              onClick={() => { if (roomState) handleQuitRoom(); setCurrentPage('rules'); }}
-              className="text-xs font-bold uppercase text-slate-400 hover:text-emerald-200"
-            >
-              {t(language, 'rules')}
-            </button>
-            {userSession && (
-              <button
-                onClick={() => { if (roomState) handleQuitRoom(); setCurrentPage('dashboard'); }}
-                className="text-xs font-bold uppercase text-slate-400 hover:text-emerald-200"
-              >
-                {t(language, 'dashboard')}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {userSession ? (
-          <div className="flex items-center gap-3">
-            <div className="hidden md:flex flex-col items-end text-right">
-              <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                <User className="w-3.5 h-3.5 text-slate-500" /> {userSession.username}
-              </span>
-              <span className="text-[9px] font-mono text-slate-600 truncate max-w-[150px]">
-                {userSession.walletAddress ? `${userSession.walletAddress.substring(0, 5)}...${userSession.walletAddress.substring(userSession.walletAddress.length - 4)}` : language === 'ar' ? 'لم يتم إدخال محفظة' : 'No Wallet Listed'}
-              </span>
-            </div>
-            
-            <div className="p-1 px-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2">
-              <span className="text-xs font-bold font-mono text-emerald-400">
-                {userSession.balance.toFixed(2)} {t(language, 'bankLabel')}
-              </span>
-            </div>
-
-            <button
-              onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-              className="px-3 py-2 border border-slate-800 rounded-lg text-xs font-bold uppercase text-slate-400 hover:border-emerald-500/30 hover:text-emerald-300 transition"
-              title={language === 'en' ? 'Switch to Arabic' : 'التبديل إلى الإنجليزية'}
-            >
-              {language === 'en' ? 'AR' : 'EN'}
-            </button>
-            <button 
-              onClick={handleSignout}
-              className="p-2 border border-slate-800 hover:border-red-500/30 text-slate-400 hover:text-red-400 rounded-lg transition-all duration-250 cursor-pointer"
-              title={t(language, 'signOut')}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-slate-500 animate-pulse hidden sm:inline">● {language === 'ar' ? 'القنوات الآمنة مؤمنة' : 'SECURE CHANNELS SECURED'}</span>
-          </div>
-        )}
-      </header>
-
-      {/* GAME SCREEN (authenticated user) */}
-      <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-5 flex flex-col gap-5">
-        {currentPage === 'arena' && (
-          <ArenaPage
-            roomState={roomState}
-            userSession={userSession}
-            language={language}
-            onQuitRoom={onQuitRoomClick}
-            myPlayerObj={myPlayerObj}
-            isMyTurn={isMyTurn}
-            physicsFrames={physicsFrames}
-            setPhysicsFrames={setPhysicsFrames}
-            handleShoot={handleShoot}
-            handleResetCueBall={handleResetCueBall}
-            opponentAim={opponentAim}
-            handlePreviewAim={handlePreviewAim}
-            handleJoinAI={handleJoinAI}
-            handleRematch={handleRematch}
-            chatMessage={chatMessage}
-            setChatMessage={setChatMessage}
-            handleSendChat={handleSendChat}
-          />
-        )}
-      </div>
-
-      {/* Styled sports footers */}
-      <footer className="mt-auto border-t border-slate-900 p-5 bg-slate-900/10 block relative overflow-hidden select-none">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-550 text-[10px] uppercase font-mono tracking-wider text-slate-500 text-center sm:text-left">
-          <span>👑 Play & Win USDT Pool Club • Professional Decent Arena v2.56</span>
-          <div className="flex gap-4">
-            <span className="text-emerald-500 font-extrabold flex items-center gap-1">● CERTIFIED PROVABLY FAIR</span>
-            <span>SECURE WEB3 SHIELD</span>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-
   return (
     <>
       {/* Toast notification stack */}
@@ -650,7 +394,217 @@ export default function App() {
         ))}
       </div>
 
-      {pageContent}
+      <Routes>
+        <Route path="/" element={
+          !userSession || isMobileAndNotInstalled() ? (
+            <HomePage
+              loginUser={loginUser}
+              setLoginUser={setLoginUser}
+              loginPass={loginPass}
+              setLoginPass={setLoginPass}
+              regUser={regUser}
+              setRegUser={setRegUser}
+              regEmail={regEmail}
+              setRegEmail={setRegEmail}
+              regPass={regPass}
+              setRegPass={setRegPass}
+              regWallet={regWallet}
+              setRegWallet={setRegWallet}
+              isAuthLoading={isAuthLoading}
+              handleLoginSubmit={handleLoginSubmit}
+              handleRegisterSubmit={handleRegisterSubmit}
+              language={language}
+              setLanguage={setLanguage}
+              onNavigateToRules={() => navigate('/rules')}
+            />
+          ) : (
+            <Navigate to="/dashboard" replace />
+          )
+        } />
+        <Route path="/rules" element={
+          <RulesPage
+            language={language}
+            setLanguage={setLanguage}
+            onNavigateBack={() => navigate('/')}
+            onNavigateDashboard={() => navigate('/dashboard')}
+          />
+        } />
+        <Route path="/dashboard" element={
+          userSession && !isMobileAndNotInstalled() ? (
+            <MemberDashboard
+              userSession={userSession}
+              roomState={roomState}
+              stake={stake}
+              roomId={roomId}
+              joinDifficulty={joinDifficulty}
+              laravelUsers={laravelUsers}
+              matchHistory={matchHistory}
+              language={language}
+              setLanguage={setLanguage}
+              onSetStake={setStake}
+              onSetRoomId={setRoomId}
+              onSetJoinDifficulty={setJoinDifficulty}
+              onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+                if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
+                  return setShowInstallOverlay(true);
+                }
+                handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
+                navigate('/arena');
+              }}
+              onNavigateRules={() => navigate('/rules')}
+              onDeposit={(amount, address, method) => {
+                if (userSession) {
+                  handleModifyBalance(userSession.id, amount);
+                  addToast('success', `Deposit confirmed: ${amount} USDT credited to your account.`);
+                }
+              }}
+              onWithdraw={(amount, address, method) => {
+                if (userSession) {
+                  if (userSession.balance < amount) {
+                    addToast('error', 'Insufficient balance for this withdrawal.');
+                    return;
+                  }
+                  handleModifyBalance(userSession.id, -amount);
+                  addToast('success', `Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
+                }
+              }}
+            />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } />
+        <Route path="/arena" element={
+          userSession ? (
+            <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
+
+              {/* Visual background emerald radial glow highlights */}
+              <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />
+              <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full filter blur-[140px] pointer-events-none" />
+
+              {/* Header element */}
+              <header className="border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-emerald-400 flex items-center justify-center font-black text-slate-950 shadow-lg relative overflow-hidden group">
+                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                      🎱
+                    </div>
+                    <div>
+                      <h1 className="text-md sm:text-lg font-black tracking-tight text-white flex items-center gap-2">
+                        PLAY & WIN USDT <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded font-mono font-bold tracking-normal">TRC20</span>
+                      </h1>
+                      <p className="text-[9px] sm:text-[10px] text-emerald-500 font-mono flex items-center gap-1.5 uppercase tracking-wider">
+                        <span>● MULTIPLAYER 8-BALL LOCKER</span>
+                        <span className="text-slate-700">•</span>
+                        <span className="text-slate-400">PROVABLY FAIR CYBER FIELD</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="hidden md:flex items-center gap-2 rounded-full border border-slate-800 bg-slate-950/80 px-3 py-2">
+                    <button
+                      onClick={() => { if (roomState) handleQuitRoom(); navigate('/'); }}
+                      className="text-xs font-bold uppercase text-slate-400 hover:text-emerald-200"
+                    >
+                      {t(language, 'home')}
+                    </button>
+                    <button
+                      onClick={() => { if (roomState) handleQuitRoom(); navigate('/rules'); }}
+                      className="text-xs font-bold uppercase text-slate-400 hover:text-emerald-200"
+                    >
+                      {t(language, 'rules')}
+                    </button>
+                    {userSession && (
+                      <button
+                        onClick={() => { if (roomState) handleQuitRoom(); navigate('/dashboard'); }}
+                        className="text-xs font-bold uppercase text-slate-400 hover:text-emerald-200"
+                      >
+                        {t(language, 'dashboard')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {userSession ? (
+                  <div className="flex items-center gap-3">
+                    <div className="hidden md:flex flex-col items-end text-right">
+                      <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-slate-500" /> {userSession.username}
+                      </span>
+                      <span className="text-[9px] font-mono text-slate-600 truncate max-w-[150px]">
+                        {userSession.walletAddress ? `${userSession.walletAddress.substring(0, 5)}...${userSession.walletAddress.substring(userSession.walletAddress.length - 4)}` : language === 'ar' ? 'لم يتم إدخال محفظة' : 'No Wallet Listed'}
+                      </span>
+                    </div>
+                    
+                    <div className="p-1 px-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-center gap-2">
+                      <span className="text-xs font-bold font-mono text-emerald-400">
+                        {userSession.balance.toFixed(2)} {t(language, 'bankLabel')}
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+                      className="px-3 py-2 border border-slate-800 rounded-lg text-xs font-bold uppercase text-slate-400 hover:border-emerald-500/30 hover:text-emerald-300 transition"
+                      title={language === 'en' ? 'Switch to Arabic' : 'التبديل إلى الإنجليزية'}
+                    >
+                      {language === 'en' ? 'AR' : 'EN'}
+                    </button>
+                    <button 
+                      onClick={handleSignout}
+                      className="p-2 border border-slate-800 hover:border-red-500/30 text-slate-400 hover:text-red-400 rounded-lg transition-all duration-250 cursor-pointer"
+                      title={t(language, 'signOut')}
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-slate-500 animate-pulse hidden sm:inline">● {language === 'ar' ? 'القنوات الآمنة مؤمنة' : 'SECURE CHANNELS SECURED'}</span>
+                  </div>
+                )}
+              </header>
+
+              {/* GAME SCREEN (authenticated user) */}
+              <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-5 flex flex-col gap-5">
+                <ArenaPage
+                  roomState={roomState}
+                  userSession={userSession}
+                  language={language}
+                  onQuitRoom={onQuitRoomClick}
+                  myPlayerObj={myPlayerObj}
+                  isMyTurn={isMyTurn}
+                  physicsFrames={physicsFrames}
+                  setPhysicsFrames={setPhysicsFrames}
+                  handleShoot={handleShoot}
+                  handleResetCueBall={handleResetCueBall}
+                  opponentAim={opponentAim}
+                  handlePreviewAim={handlePreviewAim}
+                  handleJoinAI={handleJoinAI}
+                  handleRematch={handleRematch}
+                  chatMessage={chatMessage}
+                  setChatMessage={setChatMessage}
+                  handleSendChat={handleSendChat}
+                />
+              </div>
+
+              {/* Styled sports footers */}
+              <footer className="mt-auto border-t border-slate-900 p-5 bg-slate-900/10 block relative overflow-hidden select-none">
+                <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-550 text-[10px] uppercase font-mono tracking-wider text-slate-500 text-center sm:text-left">
+                  <span>👑 Play & Win USDT Pool Club • Professional Decent Arena v2.56</span>
+                  <div className="flex gap-4">
+                    <span className="text-emerald-500 font-extrabold flex items-center gap-1">● CERTIFIED PROVABLY FAIR</span>
+                    <span>SECURE WEB3 SHIELD</span>
+                  </div>
+                </div>
+              </footer>
+            </div>
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } />
+      </Routes>
 
       {/* Mobile install overlay (always rendered when active, covers any page) */}
       {showInstallOverlay && (
@@ -667,15 +621,15 @@ export default function App() {
               if (deferredInstallRef.current) {
                 deferredInstallRef.current.prompt();
                 const res = await deferredInstallRef.current.userChoice;
-                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); }
+                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000); }
               } else {
                 setInstalled(true);
                 setShowInstallOverlay(false);
+                addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000);
               }
             }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
           >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
-          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline">{language === 'ar' ? 'العودة' : 'Go back'}</button>
         </div>
       )}
     </>
