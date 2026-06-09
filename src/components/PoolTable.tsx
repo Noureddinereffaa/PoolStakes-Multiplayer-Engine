@@ -201,9 +201,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   useEffect(() => {
     if (physicsFrames && physicsFrames.length > 0) {
-      if (strikeAnimRef.current && strikeAnimRef.current.active && strikeAnimRef.current.startTime === -1) {
-        strikeAnimRef.current.startTime = performance.now();
-      }
+      strikeAnimRef.current = { active: false, power: 0, startTime: -1, angle: 0, duration: 0, hasStruck: false };
       setIsAnimating(true);
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;

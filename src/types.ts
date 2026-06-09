@@ -65,6 +65,8 @@ export interface GameConfig {
   };
 }
 
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
 // WebSocket incoming and outgoing message types
 export type SocketMessage =
   | { type: 'join'; roomId: string; username: string; stake: number }
@@ -79,5 +81,4 @@ export type SocketMessage =
   | { type: 'sync_state'; state: RoomState }
   | { type: 'physics_frames'; frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> }
   | { type: 'laravel_api_log'; id: string; apiName: string; payload: any; response: any; timestamp: string }
-  | { type: 'scratch_placement' }
   | { type: 'error'; message: string };

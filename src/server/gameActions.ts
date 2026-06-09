@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { WebSocket } from 'ws';
 import { RoomState, Player, SocketMessage } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
@@ -5,7 +6,7 @@ import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreat
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
 
-export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join' }>) {
+export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join' }>): Promise<void> {
   const { roomId, username, stake } = msg;
   const room = getOrCreateRoom(roomId, `Stakes match: $${stake}`, stake);
 
@@ -55,13 +56,14 @@ export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { ty
       room.players.pop();
       room.status = 'waiting';
       ws.send(JSON.stringify({ type: 'error', message: escrowResult.message || 'Unable to lock stakes for this table.' }));
+      broadcastRoom(roomId);
     }
   }
 
   broadcastRoom(roomId);
 }
 
-export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, { type: 'set_ai_opponent' }>) {
+export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, { type: 'set_ai_opponent' }>): Promise<void> {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId } = mapping;
@@ -116,7 +118,7 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
   broadcastRoom(roomId);
 }
 
-export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { type: 'preview_aim' }>) {
+export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { type: 'preview_aim' }>): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId } = mapping;
@@ -135,7 +137,7 @@ export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { ty
   }
 }
 
-export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: 'shoot' }>) {
+export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: 'shoot' }>): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId, playerId } = mapping;
@@ -212,7 +214,8 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
 
     for (let i = 0; i < room.balls.length; i++) {
       const currentB = room.balls[i];
-      const preB = preStates.find(item => item.id === currentB.id)!;
+      const preB = preStates.find(item => item.id === currentB.id);
+      if (!preB) continue;
       if (currentB.isPocketed && !preB.isPocketed) {
         if (currentB.id === 0) {
           cueBallPocketed = true;
@@ -257,7 +260,7 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   }, animationDurationMs);
 }
 
-export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { type: 'reset_cue_ball' }>) {
+export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { type: 'reset_cue_ball' }>): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId, playerId } = mapping;
@@ -310,7 +313,7 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
   broadcastRoom(roomId);
 }
 
-export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'chat' }>) {
+export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'chat' }>): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId } = mapping;
@@ -323,7 +326,7 @@ export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'c
   broadcastRoom(roomId);
 }
 
-export function handleRematch(ws: WebSocket) {
+export function handleRematch(ws: WebSocket): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId, playerId } = mapping;
@@ -344,12 +347,14 @@ export function handleRematch(ws: WebSocket) {
   room.winnerId = undefined;
   room.turnTimer = 60;
   room.animVersion = (room.animVersion || 0) + 1;
+  room.serverSeed = crypto.randomBytes(32).toString('hex');
+  room.escrowHash = crypto.createHash('sha256').update(room.serverSeed).digest('hex');
   room.log = [`🔄 Rematch initiated by ${requester.username}!`];
   pushRoomLog(room, 'Match reset. New break shot incoming!');
   broadcastRoom(roomId);
 }
 
-export function handleDisconnect(ws: WebSocket) {
+export function handleDisconnect(ws: WebSocket): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
 
