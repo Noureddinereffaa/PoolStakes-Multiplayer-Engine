@@ -11,11 +11,12 @@ export async function saveRoomSnapshot(room: RoomState): Promise<void> {
       stake: room.stake,
       status: room.status,
       players: room.players,
-      balls: room.balls.map(b => ({
-        id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
-        isPocketed: b.isPocketed, type: b.type,
-        spinX: b.spinX, spinY: b.spinY,
-      })),
+  balls: room.balls.map(b => ({
+    id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+    isPocketed: b.isPocketed, type: b.type,
+    color: b.color, number: b.number,
+    spinX: b.spinX, spinY: b.spinY,
+  })),
       currentTurn: room.currentTurn,
       assignedSides: room.assignedSides,
       scratchOccurred: room.scratchOccurred,

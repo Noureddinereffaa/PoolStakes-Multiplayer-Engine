@@ -1,6 +1,5 @@
-import crypto from 'crypto';
 import { WebSocket } from 'ws';
-import { RoomState, Player, SocketMessage } from '../types';
+import { RoomState, SocketMessage } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
 import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreateRoom, broadcastRoom, pushRoomLog } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
@@ -342,16 +341,34 @@ export function handleRematch(ws: WebSocket): void {
   room.scratchOccurred = false;
   room.pocketedThisTurn = false;
   room.ballInHandRestriction = undefined;
-  room.status = 'playing';
-  room.currentTurn = room.players[0]?.id || playerId;
   room.winnerId = undefined;
   room.turnTimer = 60;
   room.animVersion = (room.animVersion || 0) + 1;
-  room.serverSeed = crypto.randomBytes(32).toString('hex');
-  room.escrowHash = crypto.createHash('sha256').update(room.serverSeed).digest('hex');
+  room.serverSeed = undefined;
+  room.escrowHash = undefined;
+  room.status = 'ready';
   room.log = [`🔄 Rematch initiated by ${requester.username}!`];
-  pushRoomLog(room, 'Match reset. New break shot incoming!');
+  pushRoomLog(room, 'Match reset. Re-locking stakes in escrow...');
   broadcastRoom(roomId);
+
+  lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock (rematch)', {
+    roomName: room.name,
+    player1Id: room.players[0]?.id,
+    player2Id: room.players[1]?.id,
+    stake: room.stake
+  }).then(escrowResult => {
+    if (escrowResult.success) {
+      pushRoomLog(room, 'New break shot incoming!');
+    } else {
+      room.status = 'gameover';
+      pushRoomLog(room, `Rematch escrow failed: ${escrowResult.message}. Match cancelled.`);
+    }
+    broadcastRoom(roomId);
+  }).catch(err => {
+    room.status = 'gameover';
+    pushRoomLog(room, `Rematch escrow error: ${err.message}. Match cancelled.`);
+    broadcastRoom(roomId);
+  });
 }
 
 export function handleDisconnect(ws: WebSocket): void {

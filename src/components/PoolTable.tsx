@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import { useBilliardsRenderer } from '../hooks/useBilliardsRenderer';
-import { Ball, RoomState } from '../types';
+import { Ball, RoomState, Difficulty } from '../types';
 import { poolAudio } from '../utils/audio';
 import { BallRotationData } from './PoolTable/rotation';
 
@@ -31,7 +31,7 @@ interface PoolTableProps {
   onClearFrames: () => void;
   opponentAim?: { angle: number; power: number; spinX?: number; spinY?: number } | null;
   onPreviewAim?: (angle: number, power: number, spinX: number, spinY: number) => void;
-  onJoinAI?: (difficulty?: 'easy' | 'medium' | 'hard') => void;
+  onJoinAI?: (difficulty?: Difficulty) => void;
 }
 
 const isMobileTouch = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
@@ -77,7 +77,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const isPlacementInvalid = () => Boolean(placementErrorMessage());
 
   const [isPulling, setIsPulling] = useState(false);
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const isBreakShotRef = useRef(false);
   const initialAimAngleRef = useRef(0);
 

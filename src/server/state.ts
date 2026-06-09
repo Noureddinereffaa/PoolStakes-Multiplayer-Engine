@@ -12,14 +12,14 @@ export const playerRoomMap = new Map<WebSocket, { roomId: string; playerId: stri
 const MAX_ROOM_LOG = 100;
 const MAX_MATCH_LOGS = 200;
 
-export function pushRoomLog(room: RoomState, message: string) {
+export function pushRoomLog(room: RoomState, message: string): void {
   room.log.push(message);
   if (room.log.length > MAX_ROOM_LOG) {
     room.log.splice(0, room.log.length - MAX_ROOM_LOG);
   }
 }
 
-export function pushMatchLog(entry: MatchHistory) {
+export function pushMatchLog(entry: MatchHistory): void {
   matchLogs.push(entry);
   if (matchLogs.length > MAX_MATCH_LOGS) {
     matchLogs.splice(0, matchLogs.length - MAX_MATCH_LOGS);
@@ -54,7 +54,7 @@ export function getOrCreateRoom(roomId: string, name: string, stake = 10): RoomS
 
 const MAX_LOG_SYNC = 30;
 
-export function broadcastRoom(roomId: string) {
+export function broadcastRoom(roomId: string): void {
   const room = activeRooms.get(roomId);
   if (!room) return;
 
@@ -72,7 +72,7 @@ export function broadcastRoom(roomId: string) {
   }
 }
 
-export function broadcastToAllWebSockets(messageObj: Record<string, unknown>) {
+export function broadcastToAllWebSockets(messageObj: Record<string, unknown>): void {
   const payload = JSON.stringify(messageObj);
   for (const ws of activeSockets) {
     if (ws.readyState === WebSocket.OPEN) {

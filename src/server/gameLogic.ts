@@ -68,7 +68,7 @@ export function findValidCueBallPosition(balls: Ball[], preferHeadArea = false):
   return { x: 200, y: 200 };
 }
 
-export async function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string) {
+export async function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string): Promise<void> {
   room.status = 'gameover';
   room.winnerId = winner.id;
   pushRoomLog(room, `🏆 MATCH CONCLUDED! ${summaryMessage}`);
@@ -149,13 +149,14 @@ export function evaluateShotRules(
   shooterId: string,
   isBreakShot = false,
   cushionContactOccurred = false
-) {
+): void {
   const player1 = room.players[0];
   const player2 = room.players[1];
   if (!player1 || !player2) return;
 
-  const currentActivePlayer = room.players.find(p => p.id === shooterId)!;
-  const otherPlayer = room.players.find(p => p.id !== shooterId)!;
+  const currentActivePlayer = room.players.find(p => p.id === shooterId);
+  const otherPlayer = room.players.find(p => p.id !== shooterId);
+  if (!currentActivePlayer || !otherPlayer) return;
 
   room.pocketedThisTurn = false;
   room.scratchOccurred = false;
@@ -577,7 +578,7 @@ function findSafetyShot(
 //  MAIN AI SHOT FUNCTION
 // ─────────────────────────────────────────────────────────────
 
-export function triggerAiShot(room: RoomState) {
+export function triggerAiShot(room: RoomState): void {
   if (animatingRoomIds.has(room.roomId)) return;
   animatingRoomIds.add(room.roomId);
 
@@ -784,7 +785,8 @@ export function triggerAiShot(room: RoomState) {
 
       for (let i = 0; i < room.balls.length; i++) {
         const currentB = room.balls[i];
-        const preB = preStates.find(item => item.id === currentB.id)!;
+        const preB = preStates.find(item => item.id === currentB.id);
+        if (!preB) continue;
         if (currentB.isPocketed && !preB.isPocketed) {
           if (currentB.id === 0) cueBallPocketed = true;
           else ballsPocketed.push(currentB.id);

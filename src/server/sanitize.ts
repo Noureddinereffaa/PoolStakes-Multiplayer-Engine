@@ -21,7 +21,7 @@ function stripHtml(value: unknown): unknown {
   return value;
 }
 
-export function xssSanitize(req: Request, _res: Response, next: NextFunction) {
+export function xssSanitize(req: Request, _res: Response, next: NextFunction): void {
   if (req.body && typeof req.body === 'object') {
     req.body = stripHtml(req.body) as typeof req.body;
   }

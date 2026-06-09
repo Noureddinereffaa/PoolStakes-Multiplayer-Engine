@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RoomState, MatchHistory as MatchType } from '../types';
+import { RoomState, Difficulty, MatchHistory as MatchType } from '../types';
 import { ArrowRight, Trophy, Wallet, Users, Cpu, Play, Shield, Target, TrendingUp, ArrowDownRight, ArrowUpRight, X } from 'lucide-react';
 import { Lang } from '../i18n';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,14 +8,14 @@ import MatchHistory from './MatchHistory';
 interface Props {
   userSession: { id: string; username: string; balance: number; walletAddress?: string };
   roomState: RoomState | null;
-  stake: number; roomId: string; joinDifficulty: 'easy' | 'medium' | 'hard';
+  stake: number; roomId: string;   joinDifficulty: Difficulty;
   laravelUsers: Array<{ id: string; username: string; balance: number }>;
   matchHistory: MatchType[];
   language: Lang; setLanguage: (l: Lang) => void;
   onSetStake: (v: number) => void; onSetRoomId: (v: string) => void;
-  onSetJoinDifficulty: (v: 'easy' | 'medium' | 'hard') => void;
-  onJoinRoom: (roomId: string, stake: number, autoJoinAI?: boolean | 'easy' | 'medium' | 'hard') => void;
-  onJoinAI?: (difficulty?: 'easy' | 'medium' | 'hard') => void;
+  onSetJoinDifficulty: (v: Difficulty) => void;
+  onJoinRoom: (roomId: string, stake: number, autoJoinAI?: boolean | Difficulty) => void;
+  onJoinAI?: (difficulty?: Difficulty) => void;
   onNavigateRules: () => void;
   // financial handlers passed from App
   onDeposit?: (amount: number, address: string, method: string) => void;

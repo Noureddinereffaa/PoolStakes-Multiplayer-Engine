@@ -34,7 +34,7 @@ export function attachWebSocketHandlers(wss: WebSocketServer) {
 
       try {
         const msg = JSON.parse(data.toString());
-        routeWsMessage(ws, msg);
+        await routeWsMessage(ws, msg);
       } catch (e: any) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: 'error', message: 'Decoding Error: ' + e.message }));

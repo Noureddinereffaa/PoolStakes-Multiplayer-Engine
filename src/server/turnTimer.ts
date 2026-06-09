@@ -8,7 +8,7 @@ const roomIdleTicks = new Map<string, number>();
 
 let apiLogCleanupCounter = 0;
 
-export function startTurnTimer() {
+export function startTurnTimer(): void {
   setInterval(() => {
     // ── ApiLog cleanup (every 600 ticks = 10 minutes) ──
     apiLogCleanupCounter++;

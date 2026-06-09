@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { RoomState, Ball } from './types';
+import { RoomState, Ball, Difficulty } from './types';
 import { simulatePhysicsStep, isAnyBallMoving, captureFrame, powerToVelocity } from './server/physics';
 
 interface UseBilliardsSocketProps {
@@ -21,9 +21,11 @@ export function useBilliardsSocket({
   const [opponentAim, setOpponentAim] = useState<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | 'easy' | 'medium' | 'hard' } | null>(null);
+  const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | Difficulty } | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingShotRef = useRef<{ angle: number; power: number } | null>(null);
 
   // استخدام المراجع (Refs) لحفظ أحدث القيم للدوال لتجنب الإغلاقات القديمة (Stale Closures) داخل الـ WebSocket
   const fetchRef = useRef(fetchLaravelUsers);
@@ -41,7 +43,7 @@ export function useBilliardsSocket({
     setOpponentAim(null);
   }, [roomState?.currentTurn, roomState?.status]);
 
-  const connect = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | 'easy' | 'medium' | 'hard' = false, isReconnect = false) => {
+  const connect = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | Difficulty = false, isReconnect = false) => {
     if (!isReconnect) {
       reconnectAttemptRef.current = 0;
     }
@@ -56,6 +58,11 @@ export function useBilliardsSocket({
       wsRef.current.close();
     }
 
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+
     const wsHost = window.location.host;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${wsHost}/ws`;
@@ -64,8 +71,7 @@ export function useBilliardsSocket({
     wsRef.current = ws;
     let aiScheduled = autoJoinAI;
 
-    // مؤقت (Fallback): إذا لم يرد الخادم خلال 1 ثانية، نُشغل وضع التجربة المحلي الأوفلاين
-    const fallbackTimer = setTimeout(() => {
+    fallbackTimerRef.current = setTimeout(() => {
       setErrorRef.current('Backend Server Offline. Entering Local Practice Mode.');
       setRoomState({
         roomId: targetRoomId,
@@ -106,7 +112,7 @@ export function useBilliardsSocket({
     }, 1000);
 
     ws.onopen = () => {
-      clearTimeout(fallbackTimer);
+      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       reconnectAttemptRef.current = 0;
       ws.send(JSON.stringify({
         type: 'join',
@@ -123,7 +129,7 @@ export function useBilliardsSocket({
 
         switch (msg.type) {
           case 'sync_state':
-            clearTimeout(fallbackTimer);
+            if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
             setRoomState(msg.state);
             fetchRef.current();
             if (aiScheduled && msg.state.players.length === 1 && msg.state.status === 'waiting') {
@@ -181,7 +187,7 @@ export function useBilliardsSocket({
     };
   }, []);
 
-  const handleJoinRoom = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | 'easy' | 'medium' | 'hard' = false) => {
+  const handleJoinRoom = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | Difficulty = false) => {
     reconnectRef.current = { targetRoomId, customStake, autoJoinAI };
     reconnectAttemptRef.current = 0;
     connect(targetRoomId, customStake, autoJoinAI);
@@ -196,14 +202,10 @@ export function useBilliardsSocket({
   const handleShoot = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }));
-    } else {
-      // Offline mode using the same shared physics as the server
-      setRoomState((prev: any) => {
-        if (!prev) return prev;
-        return { ...prev, _pendingOfflineShot: { angle, power } };
-      });
+    } else if (roomState) {
+      pendingShotRef.current = { angle, power };
     }
-  }, []);
+  }, [roomState]);
 
   const handleResetCueBall = useCallback((x: number, y: number) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -211,7 +213,7 @@ export function useBilliardsSocket({
     }
   }, []);
 
-  const handleJoinAI = useCallback((difficulty: 'easy' | 'medium' | 'hard' = 'medium') => {
+  const handleJoinAI = useCallback((difficulty: Difficulty = 'medium') => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'set_ai_opponent', difficulty }));
     }
@@ -266,18 +268,10 @@ export function useBilliardsSocket({
     };
   }, []);
 
-  // معالجة التسديد في وضع الأوفلاين خارج setState (React-correct pattern)
   useEffect(() => {
-    if (!roomState || !('_pendingOfflineShot' in roomState)) return;
-    const pending = (roomState as any)._pendingOfflineShot;
-    if (!pending) return;
-
-    // إزالة الحالة المعلقة
-    setRoomState((prev: any) => {
-      if (!prev) return prev;
-      const { _pendingOfflineShot, ...rest } = prev;
-      return rest;
-    });
+    const pending = pendingShotRef.current;
+    if (!pending || !roomState) return;
+    pendingShotRef.current = null;
 
     const angle = pending.angle;
     const power = pending.power;

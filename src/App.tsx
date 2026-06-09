@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { RoomState, MatchHistory as MatchType } from './types';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { RoomState, Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import RulesPage from './components/RulesPage';
 import MemberDashboard from './components/MemberDashboard';
@@ -32,24 +32,26 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
   return fetch(url, { ...options, headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
 }
 
-let deferredInstallPrompt: any = null;
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; });
-}
-
 let toastIdCounter = 0;
 
 export default function App() {
   const [installed, setInstalled] = useState(false);
   const [showInstallOverlay, setShowInstallOverlay] = useState(false);
+  const deferredInstallRef = useRef<any>(null);
 
   useEffect(() => {
+    const onInstallPrompt = (e: any) => { e.preventDefault(); deferredInstallRef.current = e; };
     const onInstalled = () => { setInstalled(true); setShowInstallOverlay(false); };
     const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true); };
+    window.addEventListener('beforeinstallprompt', onInstallPrompt);
     window.addEventListener('appinstalled', onInstalled);
     onStandalone();
     window.matchMedia('(display-mode: standalone)').addEventListener('change', onStandalone);
-    return () => { window.removeEventListener('appinstalled', onInstalled); window.matchMedia('(display-mode: standalone)').removeEventListener('change', onStandalone); };
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onInstallPrompt);
+      window.removeEventListener('appinstalled', onInstalled);
+      window.matchMedia('(display-mode: standalone)').removeEventListener('change', onStandalone);
+    };
   }, []);
 
   // Authentication & session state
@@ -83,7 +85,7 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
   const [chatMessage, setChatMessage] = useState('');
-  const [joinDifficulty, setJoinDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [joinDifficulty, setJoinDifficulty] = useState<Difficulty>('medium');
   const [currentPage, setCurrentPage] = useState<'home' | 'rules' | 'dashboard' | 'arena'>('home');
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
 
@@ -431,7 +433,7 @@ export default function App() {
         onSetStake={setStake}
         onSetRoomId={setRoomId}
         onSetJoinDifficulty={setJoinDifficulty}
-        onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | 'easy' | 'medium' | 'hard') => {
+        onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
           const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
           if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
             return setShowInstallOverlay(true);
@@ -439,7 +441,7 @@ export default function App() {
           handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
           setCurrentPage('arena');
         }}
-        onJoinAI={(diff?: 'easy' | 'medium' | 'hard') => {
+        onJoinAI={(diff?: Difficulty) => {
           const practiceRoom = 'Practice_' + Math.floor(Math.random() * 10000);
           const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
           if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
@@ -656,26 +658,23 @@ export default function App() {
 
       {/* Mobile install overlay (blocks game entry) */}
       {showInstallOverlay && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4">
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
             <svg className="w-14 h-14 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
           <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'حمّل التطبيق للعب' : 'DOWNLOAD APP TO PLAY'}</div>
-          <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'يجب تثبيت التطبيق للعب على الهاتف. بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'You must install the app to play on mobile. After install, open from your home screen.'}</div>
+          <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'يجب تثبيت التطبيق للعب على الهاتف' : 'You must install the app to play on mobile.'}</div>
           <button
             onClick={async () => {
-              if (deferredInstallPrompt) {
-                deferredInstallPrompt.prompt();
-                const res = await deferredInstallPrompt.userChoice;
+              if (deferredInstallRef.current) {
+                deferredInstallRef.current.prompt();
+                const res = await deferredInstallRef.current.userChoice;
                 if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); }
               } else {
-                if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                  alert(language === 'ar' ? 'اضغط زر المشاركة 🡇 ثم أضف للشاشة الرئيسية' : 'Tap Share 🡇 then Add to Home Screen');
-                } else {
-                  alert(language === 'ar' ? 'ارجع للصفحة الرئيسية، اضغط زر القائمة ⋮ ثم اختر تثبيت التطبيق' : 'Go to home screen, tap Menu ⋮ then Install app');
-                }
+                setInstalled(true);
+                setShowInstallOverlay(false);
               }
             }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"

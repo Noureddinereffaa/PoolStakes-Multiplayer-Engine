@@ -81,61 +81,6 @@ export function triggerShootParticles(
   });
 }
 
-export function addCollisionRipple(
-  feltRipples: RippleData[],
-  x: number, y: number
-): void {
-  feltRipples.push({
-    x, y,
-    radius: 4,
-    maxRadius: 30,
-    opacity: 0.7,
-    color: 'rgba(255, 255, 255, 0.4)',
-  });
-}
 
-export function addPocketParticles(
-  chalkParticles: ChalkParticle[],
-  feltRipples: RippleData[],
-  x: number, y: number,
-  color: string
-): void {
-  feltRipples.push({
-    x, y,
-    radius: 5,
-    maxRadius: 35,
-    opacity: 0.8,
-    color: 'rgba(16, 185, 129, 0.5)',
-  });
 
-  for (let i = 0; i < 12; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 2 + 0.5;
-    chalkParticles.push({
-      x, y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      size: Math.random() * 1.8 + 0.5,
-      opacity: 0.9,
-      color,
-    });
-  }
-}
 
-export function addCushionParticles(
-  chalkParticles: ChalkParticle[],
-  x: number, y: number
-): void {
-  for (let i = 0; i < 5; i++) {
-    const spreadAngle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 1.5 + 0.3;
-    chalkParticles.push({
-      x, y,
-      vx: Math.cos(spreadAngle) * speed,
-      vy: Math.sin(spreadAngle) * speed,
-      size: Math.random() * 1.2 + 0.3,
-      opacity: 0.7,
-      color: 'rgba(245, 158, 11, 0.6)',
-    });
-  }
-}

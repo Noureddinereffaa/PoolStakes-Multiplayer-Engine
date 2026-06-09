@@ -11,7 +11,7 @@ import {
   handleDisconnect
 } from './gameActions';
 
-export async function routeWsMessage(ws: WebSocket, msg: SocketMessage) {
+export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise<void> {
   switch (msg.type) {
     case 'join':
       await handleJoin(ws, msg);

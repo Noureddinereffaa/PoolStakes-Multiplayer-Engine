@@ -93,7 +93,7 @@ export async function logLaravelApi(
   apiName: string,
   reqBody: Record<string, unknown>,
   response: Record<string, unknown>
-) {
+): Promise<void> {
   try {
     const logItem = await prisma.apiLog.create({
       data: {
@@ -116,7 +116,7 @@ export async function logLaravelApi(
   }
 }
 
-export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void) {
+export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void): void {
   const logLocalLaravelApi = (apiName: string, reqBody: Record<string, unknown>, response: Record<string, unknown>) =>
     logLaravelApi(broadcastToAllWebSockets, apiName, reqBody, response);
 

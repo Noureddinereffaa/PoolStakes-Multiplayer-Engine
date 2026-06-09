@@ -48,7 +48,7 @@ export interface RoomState {
   pocketedThisTurn: boolean;
   ballInHandRestriction?: 'anywhere' | 'behind_head_string';
   log: string[];
-  aiDifficulty?: 'easy' | 'medium' | 'hard';
+  aiDifficulty?: Difficulty;
   escrowHash?: string;
   serverSeed?: string;
   commissionRate?: number;
@@ -75,7 +75,7 @@ export type SocketMessage =
   | { type: 'shoot'; angle: number; power: number; spinX?: number; spinY?: number }
   | { type: 'reset_cue_ball'; x: number; y: number }
   | { type: 'chat'; message: string }
-  | { type: 'set_ai_opponent'; difficulty?: 'easy' | 'medium' | 'hard' }
+  | { type: 'set_ai_opponent'; difficulty?: Difficulty }
   | { type: 'rematch' }
   // Server to client messages:
   | { type: 'sync_state'; state: RoomState }

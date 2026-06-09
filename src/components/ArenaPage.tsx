@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { RoomState } from '../types';
+import { RoomState, Difficulty } from '../types';
 
 function hideBrowserChrome() {
   const d = document.documentElement;
@@ -29,7 +29,7 @@ interface ArenaPageProps {
   handleResetCueBall: (x: number, y: number) => void;
   opponentAim: { angle: number; power: number; spinX?: number; spinY?: number } | null | undefined;
   handlePreviewAim: (angle: number, power: number, spinX?: number, spinY?: number) => void;
-  handleJoinAI: (difficulty?: 'easy' | 'medium' | 'hard') => void;
+  handleJoinAI: (difficulty?: Difficulty) => void;
   handleRematch: () => void;
   chatMessage: string;
   setChatMessage: (msg: string) => void;
@@ -131,7 +131,7 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
 function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage, setChatMessage, handleSendChat, handleJoinAI, chatRef, onClose }: {
   roomState: RoomState; userSession: { id: string; username: string; balance: number; email?: string; walletAddress?: string }; language: 'en' | 'ar'; activeEscrow: number;
   chatMessage: string; setChatMessage: (v: string) => void; handleSendChat: (v: string) => void;
-  handleJoinAI: (difficulty?: 'easy' | 'medium' | 'hard') => void; chatRef: React.RefObject<HTMLDivElement | null>; onClose: () => void;
+  handleJoinAI: (difficulty?: Difficulty) => void; chatRef: React.RefObject<HTMLDivElement | null>; onClose: () => void;
 }) {
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-[#0d0806] to-black border-l border-amber-900/30 overflow-hidden">

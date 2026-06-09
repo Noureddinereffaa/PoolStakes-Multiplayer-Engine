@@ -1,10 +1,6 @@
 import { useEffect, RefObject } from 'react';
-import { Ball, RoomState } from '../types';
-import {
-  createBallRotation,
-  updateBallRotation,
-  BallRotationData,
-} from '../components/PoolTable/rotation';
+import { Ball, RoomState, Difficulty } from '../types';
+import { BallRotationData } from '../components/PoolTable/rotation';
 import {
   triggerShootParticles as triggerShootParticlesFn,
   RippleData,
@@ -27,7 +23,7 @@ interface RenderContext {
   placedPosRef: RefObject<{ x: number; y: number }>;
   isPullingRef: RefObject<boolean>;
   roomStateRef: RefObject<RoomState>;
-  difficultyRef: RefObject<'easy' | 'medium' | 'hard'>;
+  difficultyRef: RefObject<Difficulty>;
   myPlayerIdRef: RefObject<string>;
   ballRotationsRef: RefObject<Record<number, BallRotationData>>;
   impactShakeRef: RefObject<number>;

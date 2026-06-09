@@ -5,7 +5,7 @@ import { broadcastToAllWebSockets, pushRoomLog } from './state';
 import { prisma } from './db';
 import type { User } from '@prisma/client';
 
-export async function ensureLaravelUser(username: string) {
+export async function ensureLaravelUser(username: string): Promise<User> {
   let user = await prisma.user.findUnique({ where: { username } });
   if (!user) {
     user = await prisma.user.create({
@@ -29,14 +29,14 @@ export function createPlayerFromUser(user: User, stake: number): Player {
   };
 }
 
-export async function ensureMinimumBalance(userId: string, minimum: number) {
+export async function ensureMinimumBalance(userId: string, minimum: number): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (user && user.balance < minimum) {
     await prisma.user.update({ where: { id: userId }, data: { balance: minimum } });
   }
 }
 
-export async function getAiUser() {
+export async function getAiUser(): Promise<User> {
   let ai = await prisma.user.findUnique({ where: { id: 'ai-bot' } });
   if (!ai) {
     ai = await prisma.user.create({
@@ -61,7 +61,7 @@ export function createAiPlayer(diffLevel: string, stake: number): Player {
   };
 }
 
-export async function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any) {
+export async function lockRoomEscrow(room: RoomState, apiName: string, reqPayload: any): Promise<{ success: boolean; escrowId?: string; escrowHash?: string; message?: string }> {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const p1 = await tx.user.findUnique({ where: { id: room.players[0]?.id } });
