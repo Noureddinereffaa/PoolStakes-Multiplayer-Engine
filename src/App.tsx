@@ -48,7 +48,7 @@ export default function App() {
 
   useEffect(() => {
     const onInstallPrompt = (e: any) => { e.preventDefault(); deferredInstallRef.current = e; };
-    const onInstalled = () => { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000); };
+    const onInstalled = () => { setInstalled(true); };
     const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true); };
     window.addEventListener('beforeinstallprompt', onInstallPrompt);
     window.addEventListener('appinstalled', onInstalled);
@@ -606,8 +606,8 @@ export default function App() {
         } />
       </Routes>
 
-      {/* Mobile install overlay (always rendered when active, covers any page) */}
-      {showInstallOverlay && (
+      {/* Mobile install overlay — two states: not installed / installed */}
+      {showInstallOverlay && !installed && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
             <svg className="w-14 h-14 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -621,15 +621,29 @@ export default function App() {
               if (deferredInstallRef.current) {
                 deferredInstallRef.current.prompt();
                 const res = await deferredInstallRef.current.userChoice;
-                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000); }
+                if (res.outcome === 'accepted') { setInstalled(true); }
               } else {
                 setInstalled(true);
-                setShowInstallOverlay(false);
-                addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000);
               }
             }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
           >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
+        </div>
+      )}
+      {showInstallOverlay && installed && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
+          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-emerald-600/30 to-emerald-800/30 border-2 border-emerald-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(16,185,129,0.2)]">
+            <svg className="w-14 h-14 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="text-lg font-black font-mono text-emerald-400">{language === 'ar' ? 'التطبيق مثبت ✓' : 'APP INSTALLED ✓'}</div>
+          <div className="text-xs text-emerald-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'اضغط لفتح التطبيق على حسابك' : 'Tap to open the app on your account'}</div>
+          <button
+            onClick={() => { setShowInstallOverlay(false); window.location.href = window.location.origin; }}
+            className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
+          >{language === 'ar' ? 'فتح التطبيق' : 'OPEN APP'}</button>
+          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-emerald-600/40 font-mono underline">{language === 'ar' ? 'البقاء في المتصفح' : 'Stay in browser'}</button>
         </div>
       )}
     </>
