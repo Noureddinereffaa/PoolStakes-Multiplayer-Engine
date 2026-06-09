@@ -264,6 +264,29 @@ export default function ArenaPage({
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
+  useEffect(() => {
+    const prevBodyStyle = { overflow: document.body.style.overflow, position: document.body.style.position };
+    const prevHtmlStyle = { overflow: document.documentElement.style.overflow };
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    document.body.style.top = '0';
+    document.body.style.left = '0';
+    document.documentElement.style.overflow = 'hidden';
+    hideBrowserChrome();
+    setTimeout(hideBrowserChrome, 400);
+    return () => {
+      document.body.style.overflow = prevBodyStyle.overflow;
+      document.body.style.position = prevBodyStyle.position;
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.documentElement.style.overflow = prevHtmlStyle.overflow;
+    };
+  }, []);
+
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
 
   const enterFullscreen = async () => {
