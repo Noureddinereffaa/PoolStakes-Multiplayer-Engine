@@ -7,6 +7,12 @@
 canvas {
   image-rendering: auto;
 }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
 body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;

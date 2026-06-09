@@ -1,5 +1,13 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState } from '../types';
+
+function hideBrowserChrome() {
+  const d = document.documentElement;
+  d.style.height = 'calc(100% + 1px)';
+  window.scrollTo(0, 1);
+  requestAnimationFrame(() => { d.style.height = ''; });
+  setTimeout(() => { window.scrollTo(0, 1); }, 300);
+}
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
   Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot, Volume2, VolumeX
@@ -223,8 +231,17 @@ export default function ArenaPage({
   const [isMobile, setIsMobile] = useState(() => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
 
   useEffect(() => {
+    let wasPortrait: boolean | null = null;
     const checkMobile = () => setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
-    const checkOrientation = () => setIsPortrait(window.innerHeight > window.innerWidth);
+    const checkOrientation = () => {
+      const portrait = window.innerHeight > window.innerWidth;
+      if (wasPortrait === true && !portrait) {
+        setTimeout(hideBrowserChrome, 50);
+        setTimeout(hideBrowserChrome, 500);
+      }
+      wasPortrait = portrait;
+      setIsPortrait(portrait);
+    };
     const onResize = () => { checkMobile(); checkOrientation(); };
     checkMobile();
     checkOrientation();
@@ -245,6 +262,7 @@ export default function ArenaPage({
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
 
   const enterFullscreen = async () => {
+    hideBrowserChrome();
     if (!containerRef.current) return false;
     try {
       await containerRef.current.requestFullscreen({ navigationUI: 'hide' } as any);
