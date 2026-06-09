@@ -326,7 +326,7 @@ export default function HomePage({
       {/* ── FOOTER ──────────────────────────── */}
       <footer className="border-t border-white/5 px-5 py-8">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <span>© 2025 8-Ball Arena. Powered by USDT TRC20 Blockchain.</span>
+          <span>© 2026 8-Ball Arena. Powered by USDT TRC20 Blockchain.</span>
           <div className="flex items-center gap-1.5 text-emerald-500 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             CERTIFIED PROVABLY FAIR

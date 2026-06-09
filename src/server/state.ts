@@ -136,7 +136,13 @@ export function broadcastRoom(roomId: string): void {
   if (!room) return;
 
   const wssList = clientsByRoom.get(roomId) || [];
-  const stateForSync = { ...room, log: room.log.slice(-MAX_LOG_SYNC) };
+  // Deep clone balls and players to prevent mutation during serialization
+  const stateForSync = {
+    ...room,
+    balls: room.balls.map(b => ({ ...b })),
+    players: room.players.map(p => ({ ...p })),
+    log: room.log.slice(-MAX_LOG_SYNC)
+  };
   const payload = JSON.stringify({
     type: 'sync_state',
     state: stateForSync
@@ -152,7 +158,12 @@ export function broadcastRoom(roomId: string): void {
 export function sendFullState(ws: WebSocket, roomId: string): void {
   const room = activeRooms.get(roomId);
   if (!room || ws.readyState !== WebSocket.OPEN) return;
-  const stateForSync = { ...room, log: room.log.slice(-MAX_LOG_SYNC) };
+  const stateForSync = {
+    ...room,
+    balls: room.balls.map(b => ({ ...b })),
+    players: room.players.map(p => ({ ...p })),
+    log: room.log.slice(-MAX_LOG_SYNC)
+  };
   ws.send(JSON.stringify({ type: 'sync_state', state: stateForSync }));
 }
 

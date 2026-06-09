@@ -3,7 +3,6 @@ import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchL
 import { prisma } from './db';
 import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H } from './physics';
 import { logger } from './logger';
-import { WebSocket } from 'ws';
 
 /** Find a valid position for the cue ball that doesn't overlap other balls */
 export function findValidCueBallPosition(balls: Ball[], preferHeadArea = false): { x: number; y: number } {
@@ -65,7 +64,8 @@ export function findValidCueBallPosition(balls: Ball[], preferHeadArea = false):
     }
   }
 
-  return { x: 200, y: 200 };
+  // No valid position found after all attempts — table is too crowded
+  throw new Error('Unable to find valid cue ball position: table too crowded');
 }
 
 export async function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string): Promise<void> {

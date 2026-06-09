@@ -60,7 +60,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const [isScratchPlacing, setIsScratchPlacing] = useState(false);
   const [placedPos, setPlacedPos] = useState({ x: 200, y: 200 });
 
-  const HEAD_STRING_LINE = 220;
+  const HEAD_STRING_LINE = 240; // Must match server HEAD_STRING_X = CUSHION + 220 = 240
   const placementErrorMessage = () => {
     if (!isScratchPlacing) return null;
     const overOtherBall = roomState.balls.some((b) => {

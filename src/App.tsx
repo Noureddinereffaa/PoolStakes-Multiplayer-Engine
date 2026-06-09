@@ -47,6 +47,7 @@ export default function App() {
   const deferredInstallRef = useRef<any>(null);
   const toastTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const mountedRef = useRef(true);
+  const gameoverProcessedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     mountedRef.current = true;
@@ -194,6 +195,10 @@ export default function App() {
   // Sync lobby connection state
   useEffect(() => {
     if (roomState?.status === 'gameover' && mountedRef.current) {
+      const roomKey = roomState.name;
+      if (gameoverProcessedRef.current.has(roomKey)) return;
+      gameoverProcessedRef.current.add(roomKey);
+
       fetchLaravelUsers();
       // append history locally
       const winnerName = roomState.players.find((p: any) => p.id === roomState.winnerId)?.username || 'Winner';
@@ -216,7 +221,7 @@ export default function App() {
         return [newMatch, ...prev];
       });
     }
-  }, [roomState?.log]);
+  }, [roomState?.status, roomState?.winnerId]);
 
   // Handle User Registration
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -363,7 +368,7 @@ export default function App() {
     }
   };
 
-  const myPlayerObj = roomState?.players.find((p: any) => p.username === userSession!.username);
+  const myPlayerObj = roomState?.players.find((p: any) => p.username === userSession?.username);
   const isMyTurn = !!(roomState && roomState.status === 'playing' && myPlayerObj && roomState.currentTurn === myPlayerObj.id);
   const activeEscrow = roomState && roomState.status !== 'waiting' && roomState.status !== 'gameover' ? roomState.stake * 2 : 0;
 
