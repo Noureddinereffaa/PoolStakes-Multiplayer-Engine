@@ -274,6 +274,16 @@ export default function ArenaPage({
   const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
 
   const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement);
+  const [installEvent, setInstallEvent] = useState<any>(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const onPrompt = (e: any) => { e.preventDefault(); setInstallEvent(e); };
+    const onInstalled = () => setInstalled(true);
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled); };
+  }, []);
 
   const resetOverlayTimer = useCallback(() => {
     setShowOverlay(true);
@@ -389,6 +399,26 @@ export default function ArenaPage({
                 }}
                 className="mt-4 px-8 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-black text-sm font-black tracking-wider active:scale-95 transition-transform"
               >{language === 'ar' ? 'بدء اللعب' : 'PLAY'}</button>
+              {!installed && !(navigator as any).standalone && (
+                <div className="flex flex-col items-center gap-2 mt-2">
+                  {installEvent ? (
+                    <button
+                      onClick={async () => {
+                        installEvent.prompt();
+                        const res = await installEvent.userChoice;
+                        if (res.outcome === 'accepted') setInstalled(true);
+                      }}
+                      className="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold tracking-wider active:scale-95 transition-all"
+                    >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
+                  ) : /iPad|iPhone|iPod/.test(navigator.userAgent) ? (
+                    <div className="text-[10px] text-amber-500/60 font-mono text-center leading-tight max-w-[280px]">
+                      {language === 'ar'
+                        ? 'للتجربة الكاملة: زر المشاركة ← أضف إلى الشاشة الرئيسية'
+                        : 'For full experience: Share → Add to Home Screen'}
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </>
           )}
         </div>
