@@ -1,12 +1,28 @@
 import { WebSocket } from 'ws';
+import jwt from 'jsonwebtoken';
 import { RoomState, SocketMessage } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
-import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, getOrCreateRoom, broadcastRoom, pushRoomLog } from './state';
+import { activeRooms, animatingRoomIds, clientsByRoom, playerRoomMap, userSockets, rematchingRooms, payingOutRooms, getOrCreateRoom, broadcastRoom, pushRoomLog } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
 
+const JWT_SECRET = process.env.JWT_SECRET || '';
+
 export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join' }>): Promise<void> {
-  const { roomId, username, stake } = msg;
+  const { roomId, username, stake, token } = msg;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+      if (decoded.username !== username) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Token username mismatch.' }));
+        return;
+      }
+    } catch {
+      ws.send(JSON.stringify({ type: 'error', message: 'Invalid authentication token.' }));
+      return;
+    }
+  }
+
   const room = getOrCreateRoom(roomId, `Stakes match: $${stake}`, stake);
 
   if (!clientsByRoom.has(roomId)) {
@@ -17,6 +33,9 @@ export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { ty
   const walletUser = await ensureLaravelUser(username);
   const resolvedPlayerId = walletUser.id;
   playerRoomMap.set(ws, { roomId, playerId: resolvedPlayerId });
+
+  if (!userSockets.has(resolvedPlayerId)) userSockets.set(resolvedPlayerId, new Set());
+  userSockets.get(resolvedPlayerId)!.add(ws);
 
   if (room.players.some(p => p.username === username)) {
     ws.send(JSON.stringify({ type: 'error', message: 'You already occupy a seat at this table.' }));
@@ -329,11 +348,14 @@ export function handleRematch(ws: WebSocket): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId, playerId } = mapping;
+  if (rematchingRooms.has(roomId)) return;
   const room = activeRooms.get(roomId);
   if (!room || room.status !== 'gameover') return;
 
   const requester = room.players.find(p => p.id === playerId);
   if (!requester) return;
+
+  rematchingRooms.add(roomId);
 
   room.balls = getInitialBalls();
   room.players.forEach(p => { p.side = undefined; });
@@ -363,10 +385,12 @@ export function handleRematch(ws: WebSocket): void {
       room.status = 'gameover';
       pushRoomLog(room, `Rematch escrow failed: ${escrowResult.message}. Match cancelled.`);
     }
+    rematchingRooms.delete(roomId);
     broadcastRoom(roomId);
   }).catch(err => {
     room.status = 'gameover';
     pushRoomLog(room, `Rematch escrow error: ${err.message}. Match cancelled.`);
+    rematchingRooms.delete(roomId);
     broadcastRoom(roomId);
   });
 }
@@ -377,6 +401,12 @@ export function handleDisconnect(ws: WebSocket): void {
 
   const { roomId, playerId } = mapping;
   playerRoomMap.delete(ws);
+
+  const sockets = userSockets.get(playerId);
+  if (sockets) {
+    sockets.delete(ws);
+    if (sockets.size === 0) userSockets.delete(playerId);
+  }
 
   const room = activeRooms.get(roomId);
   if (!room) return;

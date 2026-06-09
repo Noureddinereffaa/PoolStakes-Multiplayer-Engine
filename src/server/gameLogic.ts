@@ -1,5 +1,5 @@
 import { RoomState, Player, MatchHistory, Ball } from '../types';
-import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog } from './state';
+import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog, payingOutRooms } from './state';
 import { prisma } from './db';
 import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H } from './physics';
 import { logger } from './logger';
@@ -69,6 +69,8 @@ export function findValidCueBallPosition(balls: Ball[], preferHeadArea = false):
 }
 
 export async function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string): Promise<void> {
+  if (payingOutRooms.get(room.name)) return;
+
   room.status = 'gameover';
   room.winnerId = winner.id;
   pushRoomLog(room, `🏆 MATCH CONCLUDED! ${summaryMessage}`);
@@ -76,40 +78,50 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
   let commission = 0;
   let prize = 0;
 
+  payingOutRooms.set(room.name, true);
   try {
-    const esc = await prisma.escrow.findFirst({
-      where: { roomName: room.name, status: 'locked' }
-    });
-    if (!esc) return;
+    const result = await prisma.$transaction(async (tx) => {
+      const esc = await tx.escrow.findFirst({
+        where: { roomName: room.name, status: 'locked' }
+      });
+      if (!esc) return null;
 
-    const totalPot = esc.amountEach * 2;
-    commission = Math.round(totalPot * (room.commissionRate || 0.05) * 100) / 100;
-    prize = totalPot - commission;
+      const updated = await tx.escrow.updateMany({
+        where: { id: esc.id, status: 'locked' },
+        data: { status: 'payout_completed' }
+      });
+      if (updated.count === 0) return null;
 
-    const dbWinner = await prisma.$transaction(async (tx) => {
+      const totalPot = esc.amountEach * 2;
+      const c = Math.round(totalPot * (room.commissionRate || 0.05) * 100) / 100;
+      const p = totalPot - c;
+
       const updatedWinner = await tx.user.update({
         where: { id: winner.id },
-        data: { balance: { increment: prize } }
-      });
-
-      await tx.escrow.update({
-        where: { id: esc.id },
-        data: { status: 'payout_completed' }
+        data: { balance: { increment: p } }
       });
 
       await tx.transaction.create({
         data: {
           escrowId: esc.id,
-          prize,
-          commission,
+          prize: p,
+          commission: c,
           winnerId: winner.id,
           loserId: loser.id
         }
       });
-      return updatedWinner;
+
+      return { winner: updatedWinner, prize: p, commission: c };
     });
 
-    winner.walletBalance = dbWinner.balance;
+    if (!result) {
+      pushRoomLog(room, 'Payout already processed for this match.');
+      return;
+    }
+
+    prize = result.prize;
+    commission = result.commission;
+    winner.walletBalance = result.winner.balance;
     const dbLoser = await prisma.user.findUnique({ where: { id: loser.id } });
     if (dbLoser) loser.walletBalance = dbLoser.balance;
 
@@ -122,6 +134,8 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
   } catch (error) {
     logger.error('Failed to process match payout', { error: String(error), room: room.name });
     pushRoomLog(room, "⚠️ Error processing payout.");
+  } finally {
+    payingOutRooms.delete(room.name);
   }
 
   const hist: MatchHistory = {

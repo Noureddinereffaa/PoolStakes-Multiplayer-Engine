@@ -69,7 +69,7 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 
 // WebSocket incoming and outgoing message types
 export type SocketMessage =
-  | { type: 'join'; roomId: string; username: string; stake: number }
+  | { type: 'join'; roomId: string; username: string; stake: number; token?: string }
   | { type: 'leave' }
   | { type: 'preview_aim'; angle: number; power: number; spinX?: number; spinY?: number }
   | { type: 'shoot'; angle: number; power: number; spinX?: number; spinY?: number }

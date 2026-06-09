@@ -13,6 +13,7 @@ export async function saveRoomSnapshot(room: RoomState): Promise<void> {
       players: room.players,
   balls: room.balls.map(b => ({
     id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+    radius: b.radius,
     isPocketed: b.isPocketed, type: b.type,
     color: b.color, number: b.number,
     spinX: b.spinX, spinY: b.spinY,

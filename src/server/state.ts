@@ -8,6 +8,9 @@ export const matchLogs: MatchHistory[] = [];
 export const activeSockets = new Set<WebSocket>();
 export const clientsByRoom = new Map<string, Set<WebSocket>>();
 export const playerRoomMap = new Map<WebSocket, { roomId: string; playerId: string }>();
+export const userSockets = new Map<string, Set<WebSocket>>();
+export const rematchingRooms = new Set<string>();
+export const payingOutRooms = new Map<string, boolean>();
 
 const MAX_ROOM_LOG = 100;
 const MAX_MATCH_LOGS = 200;

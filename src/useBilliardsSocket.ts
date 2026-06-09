@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { RoomState, Ball, Difficulty } from './types';
-import { simulatePhysicsStep, isAnyBallMoving, captureFrame, powerToVelocity } from './server/physics';
+import { simulatePhysicsStep, isAnyBallMoving, captureFrame, powerToVelocity, getInitialBalls } from './server/physics';
 
 interface UseBilliardsSocketProps {
   username?: string;
@@ -79,11 +79,10 @@ export function useBilliardsSocket({
         status: 'playing',
         stake: customStake,
         players: [
-          { id: 'local-1', username: usernameRef.current || 'Guest', walletBalance: 500, side: 'solids' },
-          { id: 'local-bot', username: 'Bot_AI', walletBalance: 1000, side: 'stripes' }
+          { id: 'local-1', username: usernameRef.current || 'Guest', walletBalance: 500, bettingStake: customStake, side: 'solids', isConnected: true },
+          { id: 'local-bot', username: 'Bot_AI', walletBalance: 1000, bettingStake: customStake, side: 'stripes', isConnected: true }
         ],
         currentTurn: 'local-1',
-        winnerId: null,
         balls: [
           { id: 0, x: 200, y: 200, vx: 0, vy: 0, radius: 10, isPocketed: false, color: '#ffffff', type: 'cue' },
           { id: 1, x: 550, y: 200, vx: 0, vy: 0, radius: 10, isPocketed: false, color: '#CFAF30', type: 'solid', number: 1 },
@@ -102,23 +101,25 @@ export function useBilliardsSocket({
           { id: 14, x: 622, y: 220, vx: 0, vy: 0, radius: 10, isPocketed: false, color: '#3CA972', type: 'stripe', number: 14 },
           { id: 15, x: 622, y: 240, vx: 0, vy: 0, radius: 10, isPocketed: false, color: '#8A1A24', type: 'stripe', number: 15 },
         ],
+        assignedSides: false,
+        pocketedThisTurn: false,
         log: ['[System] Connection failed.', '[System] Offline Practice Mode Activated.'],
-        chat: [],
         turnTimer: 60,
         scratchOccurred: false,
-        ballInHandRestriction: 'none',
         escrowHash: 'mock-offline-hash-00000000'
-      } as any);
+      });
     }, 1000);
 
     ws.onopen = () => {
       if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       reconnectAttemptRef.current = 0;
+      const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
       ws.send(JSON.stringify({
         type: 'join',
         roomId: targetRoomId,
         username: usernameRef.current ?? '',
-        stake: customStake
+        stake: customStake,
+        token
       }));
       setErrorRef.current(null);
     };
@@ -232,7 +233,6 @@ export function useBilliardsSocket({
       // Offline rematch — reset balls locally
       setRoomState((prev: any) => {
         if (!prev) return prev;
-        const { getInitialBalls } = require('./server/physics');
         return {
           ...prev,
           balls: getInitialBalls(),
