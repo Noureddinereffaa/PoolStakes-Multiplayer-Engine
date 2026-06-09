@@ -46,8 +46,12 @@ export default function App() {
   const [showInstallOverlay, setShowInstallOverlay] = useState(false);
   const deferredInstallRef = useRef<any>(null);
   const toastTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
     return () => {
       for (const timer of toastTimersRef.current.values()) clearTimeout(timer);
       toastTimersRef.current.clear();
@@ -115,15 +119,17 @@ export default function App() {
       const res = await authFetch('/api/laravel/users');
       if (res.ok) {
         const data = await res.json();
-        setLaravelUsers(data.users);
-        
-        // Sync the logged-in user balance with latest database
-        if (userSession && data.currentUser) {
-          const freshBalance = Number(data.currentUser.balance);
-          if (freshBalance !== userSession.balance) {
-            const updated = { ...userSession, balance: freshBalance };
-            setUserSession(updated);
-            localStorage.setItem('billiards_session', JSON.stringify(updated));
+        if (mountedRef.current) {
+          setLaravelUsers(data.users);
+          
+          // Sync the logged-in user balance with latest database
+          if (userSession && data.currentUser) {
+            const freshBalance = Number(data.currentUser.balance);
+            if (freshBalance !== userSession.balance) {
+              const updated = { ...userSession, balance: freshBalance };
+              setUserSession(updated);
+              localStorage.setItem('billiards_session', JSON.stringify(updated));
+            }
           }
         }
       }
@@ -137,7 +143,9 @@ export default function App() {
       const res = await authFetch('/api/laravel/logs');
       if (res.ok) {
         const data = await res.json();
-        setApiLogs(data.logs);
+        if (mountedRef.current) {
+          setApiLogs(data.logs);
+        }
       }
     } catch (e) {
       console.error('Failed to retrieve API audit logs:', e);
@@ -173,7 +181,7 @@ export default function App() {
     if (saved) {
       try {
         const Parsed = JSON.parse(saved);
-        setUserSession(Parsed);
+        if (mountedRef.current) setUserSession(Parsed);
         navigate('/dashboard');
       } catch (e) {
         console.error('Failed to parse saved session:', e);
@@ -186,7 +194,7 @@ export default function App() {
 
   // Sync lobby connection state
   useEffect(() => {
-    if (roomState?.status === 'gameover') {
+    if (roomState?.status === 'gameover' && mountedRef.current) {
       fetchLaravelUsers();
       // append history locally
       const winnerName = roomState.players.find((p: any) => p.id === roomState.winnerId)?.username || 'Winner';
