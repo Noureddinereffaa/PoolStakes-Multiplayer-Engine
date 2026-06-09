@@ -664,25 +664,22 @@ export default function App() {
           </div>
           <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'حمّل التطبيق للعب' : 'DOWNLOAD APP TO PLAY'}</div>
           <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'يجب تثبيت التطبيق للعب على الهاتف. بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'You must install the app to play on mobile. After install, open from your home screen.'}</div>
-          {deferredInstallPrompt ? (
-            <button
-              onClick={async () => {
+          <button
+            onClick={async () => {
+              if (deferredInstallPrompt) {
                 deferredInstallPrompt.prompt();
                 const res = await deferredInstallPrompt.userChoice;
                 if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); }
-              }}
-              className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-            >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
-          ) : (
-            <div className="flex flex-col items-center gap-2 mt-6 px-6">
-              <div className="text-xs text-amber-400/80 font-mono">{language === 'ar' ? 'خطوات التثبيت:' : 'Installation steps:'}</div>
-              <div className="text-[11px] text-amber-500/60 font-mono text-center leading-relaxed max-w-[300px]">
-                {/iPad|iPhone|iPod/.test(navigator.userAgent)
-                  ? (language === 'ar' ? '① اضغط زر المشاركة 🡇  ← ② أضف للشاشة الرئيسية' : '① Tap Share 🡇 ② Add to Home Screen')
-                  : (language === 'ar' ? '① اضغط زر القائمة ⋮ ← ② تثبيت التطبيق' : '① Tap Menu ⋮ ② Install app')}
-              </div>
-            </div>
-          )}
+              } else {
+                if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+                  alert(language === 'ar' ? 'اضغط زر المشاركة 🡇 ثم أضف للشاشة الرئيسية' : 'Tap Share 🡇 then Add to Home Screen');
+                } else {
+                  alert(language === 'ar' ? 'ارجع للصفحة الرئيسية، اضغط زر القائمة ⋮ ثم اختر تثبيت التطبيق' : 'Go to home screen, tap Menu ⋮ then Install app');
+                }
+              }
+            }}
+            className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
+          >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
           <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline">{language === 'ar' ? 'العودة' : 'Go back'}</button>
         </div>
       )}
