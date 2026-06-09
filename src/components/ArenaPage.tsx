@@ -342,9 +342,7 @@ export default function ArenaPage({
     >
       {/* Mobile overlay: rotate first, then tap to fullscreen */}
       {isMobile && (isPortrait || needsTap) && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4"
-          onClick={async () => { const ok = await enterFullscreen(); if (ok) setNeedsTap(false); }}
-        >
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4">
           {isPortrait ? (
             <>
               <div className="text-5xl animate-pulse rotate-90">🎱</div>
@@ -356,7 +354,7 @@ export default function ArenaPage({
                 </svg>
               </div>
             </>
-          ) : needsTap ? (
+          ) : (
             <>
               <div className="w-20 h-20 rounded-3xl border-[3px] border-amber-500/50 flex items-center justify-center shadow-[0_0_40px_rgba(245,158,11,0.15)]">
                 <svg className="w-12 h-12 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -365,8 +363,16 @@ export default function ArenaPage({
               </div>
               <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'اضغط للعب' : 'TAP TO PLAY'}</div>
               <div className="text-xs text-amber-600/60 font-mono">{language === 'ar' ? 'اضغط على الشاشة لبدء اللعب' : 'Tap the screen to start'}</div>
+              <button
+                onClick={async () => {
+                  await enterFullscreen();
+                  try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
+                  setNeedsTap(false);
+                }}
+                className="mt-4 px-8 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-black text-sm font-black tracking-wider active:scale-95 transition-transform"
+              >{language === 'ar' ? 'بدء اللعب' : 'PLAY'}</button>
             </>
-          ) : null}
+          )}
         </div>
       )}
 

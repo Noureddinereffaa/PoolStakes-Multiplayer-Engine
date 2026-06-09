@@ -1,0 +1,11 @@
+{
+  "name": "8-Ball Pool",
+  "short_name": "8-Ball Pool",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape-primary",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "scope": "/",
+  "prefer_related_applications": false
+}
