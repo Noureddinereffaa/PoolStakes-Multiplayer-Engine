@@ -255,17 +255,7 @@ export default function ArenaPage({
   const exitFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {} };
   const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
 
-  // Mobile: try fullscreen on every tap until it works
-  const tryFullscreenRef = useRef(enterFullscreen);
-  tryFullscreenRef.current = enterFullscreen;
-  useEffect(() => {
-    if (!isMobile) return;
-    const onTap = () => {
-      if (!document.fullscreenElement) tryFullscreenRef.current();
-    };
-    document.addEventListener('pointerdown', onTap, true);
-    return () => { document.removeEventListener('pointerdown', onTap, true); exitFullscreen(); };
-  }, [isMobile]);
+  const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement);
 
   const resetOverlayTimer = useCallback(() => {
     setShowOverlay(true);
@@ -350,17 +340,33 @@ export default function ArenaPage({
       ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden"
       onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
     >
-      {/* Portrait orientation overlay */}
-      {isMobile && isPortrait && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4">
-          <div className="text-5xl animate-pulse rotate-90">🎱</div>
-          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'دور الهاتف' : 'ROTATE DEVICE'}</div>
-          <div className="text-xs text-amber-600/80 font-mono text-center px-8">{language === 'ar' ? 'الرجاء تدوير الهاتف إلى الوضع الأفقي للعب' : 'Please rotate your phone to landscape'}</div>
-          <div className="mt-4 w-16 h-16 rounded-2xl border-2 border-amber-500/40 flex items-center justify-center animate-pulse">
-            <svg className="w-10 h-10 text-amber-400 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-          </div>
+      {/* Mobile overlay: rotate first, then tap to fullscreen */}
+      {isMobile && (isPortrait || needsTap) && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4"
+          onClick={async () => { const ok = await enterFullscreen(); if (ok) setNeedsTap(false); }}
+        >
+          {isPortrait ? (
+            <>
+              <div className="text-5xl animate-pulse rotate-90">🎱</div>
+              <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'دور الهاتف' : 'ROTATE DEVICE'}</div>
+              <div className="text-xs text-amber-600/80 font-mono text-center px-8">{language === 'ar' ? 'الرجاء تدوير الهاتف إلى الوضع الأفقي للعب' : 'Please rotate your phone to landscape'}</div>
+              <div className="mt-4 w-16 h-16 rounded-2xl border-2 border-amber-500/40 flex items-center justify-center animate-pulse">
+                <svg className="w-10 h-10 text-amber-400 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            </>
+          ) : needsTap ? (
+            <>
+              <div className="w-20 h-20 rounded-3xl border-[3px] border-amber-500/50 flex items-center justify-center shadow-[0_0_40px_rgba(245,158,11,0.15)]">
+                <svg className="w-12 h-12 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </div>
+              <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'اضغط للعب' : 'TAP TO PLAY'}</div>
+              <div className="text-xs text-amber-600/60 font-mono">{language === 'ar' ? 'اضغط على الشاشة لبدء اللعب' : 'Tap the screen to start'}</div>
+            </>
+          ) : null}
         </div>
       )}
 
