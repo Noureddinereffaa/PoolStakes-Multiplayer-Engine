@@ -403,11 +403,11 @@ export default function ArenaPage({
               >{language === 'ar' ? 'بدء اللعب' : 'PLAY'}</button>
               {!installed && !(navigator as any).standalone && (
                 <div className="flex flex-col items-center gap-2 mt-2">
-                  {installEvent ? (
+                  {deferredInstallPrompt ? (
                     <button
                       onClick={async () => {
-                        installEvent.prompt();
-                        const res = await installEvent.userChoice;
+                        deferredInstallPrompt.prompt();
+                        const res = await deferredInstallPrompt.userChoice;
                         if (res.outcome === 'accepted') setInstalled(true);
                       }}
                       className="px-6 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold tracking-wider active:scale-95 transition-all"
