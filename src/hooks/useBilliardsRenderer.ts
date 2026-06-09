@@ -38,6 +38,7 @@ interface RenderContext {
   strikeAnimRef: RefObject<any>;
   turnStartTimestampRef: RefObject<number>;
   animatedBallsRef: RefObject<Ball[]>;
+  isMobileRef: RefObject<boolean>;
   opponentAim:
     | { angle: number; power: number; spinX?: number; spinY?: number }
     | null
@@ -1538,10 +1539,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`
               );
               ctx2d.strokeStyle = outerGlowGrad;
-              ctx2d.lineWidth = 18;
+              ctx2d.lineWidth = 18 * (ctx.isMobileRef.current ? 0.45 : 1);
               ctx2d.lineCap = 'round';
               ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 25;
+              ctx2d.shadowBlur = 25 * (ctx.isMobileRef.current ? 0.5 : 1);
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               ctx2d.lineTo(contactX, contactY);
@@ -1570,10 +1571,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`
               );
               ctx2d.strokeStyle = midGlowGrad;
-              ctx2d.lineWidth = 10;
+              ctx2d.lineWidth = 10 * (ctx.isMobileRef.current ? 0.45 : 1);
               ctx2d.lineCap = 'round';
               ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 14;
+              ctx2d.shadowBlur = 14 * (ctx.isMobileRef.current ? 0.5 : 1);
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               ctx2d.lineTo(contactX, contactY);
@@ -1599,12 +1600,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`
               );
               ctx2d.strokeStyle = coreGrad;
-              ctx2d.lineWidth = 2.5;
+              ctx2d.lineWidth = 2.5 * (ctx.isMobileRef.current ? 0.45 : 1);
               ctx2d.setLineDash([8, 5]);
               ctx2d.lineDashOffset =
                 -(Date.now() / 50) % 13;
               ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 8;
+              ctx2d.shadowBlur = 8 * (ctx.isMobileRef.current ? 0.5 : 1);
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               ctx2d.lineTo(contactX, contactY);
@@ -1625,10 +1626,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               precisionGrad.addColorStop(0.5, mainLaserColor);
               precisionGrad.addColorStop(1, `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`);
               ctx2d.strokeStyle = precisionGrad;
-              ctx2d.lineWidth = 1.0;
+              ctx2d.lineWidth = 1.0 * (ctx.isMobileRef.current ? 0.6 : 1);
               ctx2d.lineCap = 'round';
               ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 4;
+              ctx2d.shadowBlur = 4 * (ctx.isMobileRef.current ? 0.5 : 1);
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               ctx2d.lineTo(contactX, contactY);
@@ -1646,7 +1647,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 const my = cueBall.y + aimDy * m * markerSpacing;
                 const alpha = 0.3 + 0.4 * Math.sin(Date.now() / 300 + m * 0.8);
                 ctx2d.beginPath();
-                ctx2d.arc(mx, my, 1.2, 0, Math.PI * 2);
+                ctx2d.arc(mx, my, 1.2 * (ctx.isMobileRef.current ? 0.5 : 1), 0, Math.PI * 2);
                 ctx2d.strokeStyle = `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, ${alpha})`;
                 ctx2d.stroke();
               }

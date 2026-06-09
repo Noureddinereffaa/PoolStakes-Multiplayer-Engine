@@ -34,6 +34,8 @@ interface PoolTableProps {
   onJoinAI?: (difficulty?: 'easy' | 'medium' | 'hard') => void;
 }
 
+const isMobileTouch = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+
 export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   roomState,
   onShoot,
@@ -49,6 +51,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isMobile = useRef(isMobileTouch());
 
   const [aimAngle, setAimAngle] = useState(0);
   const [shotPower, setShotPower] = useState(40);
@@ -381,7 +384,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     isMyTurnRef, isAnimatingRef, isScratchPlacingRef, placedPosRef, isPullingRef,
     roomStateRef, difficultyRef, myPlayerIdRef, ballRotationsRef, impactShakeRef,
     feltRipplesRef, chalkParticlesRef, dustSpecksRef, sinkingBallsRef, strikeAnimRef,
-    turnStartTimestampRef, animatedBallsRef, opponentAim,
+    turnStartTimestampRef, animatedBallsRef, isMobileRef: isMobile, opponentAim,
   });
 
   const getPointerCoords = (e: any) => {
@@ -424,10 +427,20 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
             setAimAngle(initialAimAngleRef.current + orthoDrag * 0.003);
           }
-          const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
-          const rawPower = Math.min(100, dragDist / 2.4);
-          const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
-          setShotPower(Math.min(100, Math.max(5, Math.floor(curvedPower))));
+          if (isMobile.current) {
+            const dx = coords.x - pullStartPosRef.current.x;
+            const dy = coords.y - pullStartPosRef.current.y;
+            const baseAngle = initialAimAngleRef.current;
+            const towardCue = -(dx * Math.cos(baseAngle) + dy * Math.sin(baseAngle));
+            const rawPower = Math.min(100, Math.max(0, towardCue) / 1.7);
+            const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
+            setShotPower(Math.min(100, Math.max(5, Math.floor(curvedPower))));
+          } else {
+            const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
+            const rawPower = Math.min(100, dragDist / 2.4);
+            const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
+            setShotPower(Math.min(100, Math.max(5, Math.floor(curvedPower))));
+          }
         } else if (!isAimLocked) {
           setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
         }

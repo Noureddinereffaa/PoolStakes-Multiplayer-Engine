@@ -248,12 +248,28 @@ export default function ArenaPage({
   const enterFullscreen = async () => {
     if (!containerRef.current) return;
     try {
-      await containerRef.current.requestFullscreen();
+      await containerRef.current.requestFullscreen({ navigationUI: 'hide' } as any);
       if (isMobile) try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
-    } catch (_) {}
+      return true;
+    } catch (_) { return false; }
   };
   const exitFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {} };
   const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
+
+  const [fsFailed, setFsFailed] = useState(false);
+  useEffect(() => {
+    if (!isMobile || roomState) return;
+    let attempts = 0;
+    const tryFs = async () => {
+      if (document.fullscreenElement) { setFsFailed(false); return; }
+      const ok = await enterFullscreen();
+      if (!ok) { attempts++; if (attempts < 3) setTimeout(tryFs, 500); else setFsFailed(true); }
+    };
+    const onInteraction = () => { if (!document.fullscreenElement) tryFs(); };
+    tryFs();
+    document.addEventListener('pointerdown', onInteraction, { once: false });
+    return () => { document.removeEventListener('pointerdown', onInteraction); exitFullscreen(); };
+  }, [isMobile, roomState]);
 
   const resetOverlayTimer = useCallback(() => {
     setShowOverlay(true);
@@ -349,6 +365,21 @@ export default function ArenaPage({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </div>
+        </div>
+      )}
+
+      {/* Fullscreen failed overlay — tap to retry */}
+      {isMobile && fsFailed && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4 cursor-pointer"
+          onClick={async () => { const ok = await enterFullscreen(); if (ok) setFsFailed(false); }}
+        >
+          <div className="w-16 h-16 rounded-2xl border-2 border-amber-500/40 flex items-center justify-center">
+            <svg className="w-10 h-10 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </div>
+          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'اضغط لملء الشاشة' : 'TAP FOR FULLSCREEN'}</div>
+          <div className="text-xs text-amber-600/60 font-mono">{language === 'ar' ? 'الرجاء النقر للعب بوضع ملء الشاشة' : 'Tap to play in fullscreen'}</div>
         </div>
       )}
 
