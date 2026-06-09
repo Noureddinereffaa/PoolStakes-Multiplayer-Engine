@@ -24,8 +24,8 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
+if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
+  navigator.serviceWorker.register('/sw.js');
 }
 
 createRoot(document.getElementById('root')!).render(

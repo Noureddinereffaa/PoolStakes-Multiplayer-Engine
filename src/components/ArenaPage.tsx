@@ -424,7 +424,7 @@ export default function ArenaPage({
                 }}
                 className="mt-4 px-8 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-black text-sm font-black tracking-wider active:scale-95 transition-transform"
               >{language === 'ar' ? 'بدء اللعب' : 'PLAY'}</button>
-              {!installed && !(navigator as any).standalone && (
+              {!installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches && (
                 <div className="flex flex-col items-center gap-2 mt-2">
                   {deferredInstallPrompt ? (
                     <button
