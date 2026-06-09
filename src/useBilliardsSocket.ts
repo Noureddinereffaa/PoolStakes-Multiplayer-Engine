@@ -19,6 +19,7 @@ export function useBilliardsSocket({
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [physicsFrames, setPhysicsFrames] = useState<Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null>(null);
   const [opponentAim, setOpponentAim] = useState<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | Difficulty } | null>(null);
@@ -26,6 +27,9 @@ export function useBilliardsSocket({
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingShotRef = useRef<{ angle: number; power: number } | null>(null);
+  const roomStateRef = useRef<RoomState | null>(null);
+  roomStateRef.current = roomState;
+  const wasInActiveGameRef = useRef(false); // track if we were in a playing game when disconnect happened
 
   // استخدام المراجع (Refs) لحفظ أحدث القيم للدوال لتجنب الإغلاقات القديمة (Stale Closures) داخل الـ WebSocket
   const fetchRef = useRef(fetchLaravelUsers);
@@ -114,13 +118,19 @@ export function useBilliardsSocket({
       if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       reconnectAttemptRef.current = 0;
       const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
-      ws.send(JSON.stringify({
-        type: 'join',
-        roomId: targetRoomId,
-        username: usernameRef.current ?? '',
-        stake: customStake,
-        token
-      }));
+
+      if (isReconnect) {
+        // Try reconnecting to existing game first
+        ws.send(JSON.stringify({ type: 'reconnect', token }));
+      } else {
+        ws.send(JSON.stringify({
+          type: 'join',
+          roomId: targetRoomId,
+          username: usernameRef.current ?? '',
+          stake: customStake,
+          token
+        }));
+      }
       setErrorRef.current(null);
     };
 
@@ -131,6 +141,8 @@ export function useBilliardsSocket({
         switch (msg.type) {
           case 'sync_state':
             if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+            setIsReconnecting(false);
+            wasInActiveGameRef.current = msg.state.status === 'playing' || msg.state.status === 'ready';
             setRoomState(msg.state);
             fetchRef.current();
             if (aiScheduled && msg.state.players.length === 1 && msg.state.status === 'waiting') {
@@ -140,7 +152,6 @@ export function useBilliardsSocket({
             }
             break;
           case 'physics_frames':
-            // تحويل من مصفوفات مضغوطة [id, x, y, isPocketed] إلى كائنات
             setPhysicsFrames(
               (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
                 frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
@@ -155,12 +166,49 @@ export function useBilliardsSocket({
               spinY: msg.spinY || 0,
             });
             break;
+          case 'disconnect_notice':
+            // Opponent disconnected — show waiting state
+            setRoomState((prev: any) => {
+              if (!prev) return prev;
+              const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
+              const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
+              return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
+            });
+            setErrorRef.current('Opponent disconnected. Waiting for reconnection...');
+            setTimeout(() => setErrorRef.current(null), 30000);
+            break;
+          case 'reconnect_notice':
+            // Opponent reconnected
+            setRoomState((prev: any) => {
+              if (!prev) return prev;
+              const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
+              const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
+              delete reconnectDeadlines[msg.playerId];
+              return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
+            });
+            setErrorRef.current(null);
+            break;
           case 'laravel_api_log':
             setApiLogsRef.current(prev => [msg, ...prev]);
             break;
           case 'error':
-            setErrorRef.current(msg.message);
-            setTimeout(() => setErrorRef.current(null), 4500);
+            if (isReconnect) {
+              // Reconnect failed — fall back to join
+              setIsReconnecting(false);
+              if (reconnectRef.current) {
+                const token2 = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+                ws.send(JSON.stringify({
+                  type: 'join',
+                  roomId: reconnectRef.current.targetRoomId,
+                  username: usernameRef.current ?? '',
+                  stake: reconnectRef.current.customStake,
+                  token: token2
+                }));
+              }
+            } else {
+              setErrorRef.current(msg.message);
+              setTimeout(() => setErrorRef.current(null), 4500);
+            }
             break;
         }
       } catch (err) {
@@ -169,6 +217,13 @@ export function useBilliardsSocket({
     };
 
     ws.onclose = () => {
+      // Use ref to avoid stale closure — roomState in render closure may be null
+      const currentRoom = roomStateRef.current;
+      if (currentRoom && (currentRoom.status === 'playing' || currentRoom.status === 'ready')) {
+        wasInActiveGameRef.current = true;
+        setIsReconnecting(true);
+      }
+
       // Exponential backoff reconnection (1s, 2s, 4s, 8s, max 30s)
       if (reconnectRef.current && reconnectAttemptRef.current < 5) {
         const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
@@ -180,6 +235,8 @@ export function useBilliardsSocket({
           }
         }, delay);
       } else {
+        setIsReconnecting(false);
+        wasInActiveGameRef.current = false;
         reconnectRef.current = null;
       }
     };
@@ -318,6 +375,7 @@ export function useBilliardsSocket({
     physicsFrames,
     setPhysicsFrames,
     opponentAim,
+    isReconnecting,
     handleJoinRoom,
     handlePreviewAim,
     handleShoot,

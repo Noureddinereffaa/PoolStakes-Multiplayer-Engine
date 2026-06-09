@@ -1,5 +1,5 @@
 import { RoomState, Player, MatchHistory, Ball } from '../types';
-import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog, payingOutRooms } from './state';
+import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog, payingOutRooms, pushEventLog } from './state';
 import { prisma } from './db';
 import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H } from './physics';
 import { logger } from './logger';
@@ -69,7 +69,7 @@ export function findValidCueBallPosition(balls: Ball[], preferHeadArea = false):
 }
 
 export async function concludeMatch(room: RoomState, winner: Player, loser: Player, summaryMessage: string): Promise<void> {
-  if (payingOutRooms.get(room.name)) return;
+  if (payingOutRooms.has(room.name)) return;
 
   room.status = 'gameover';
   room.winnerId = winner.id;
@@ -78,7 +78,7 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
   let commission = 0;
   let prize = 0;
 
-  payingOutRooms.set(room.name, true);
+  payingOutRooms.add(room.name);
   try {
     const result = await prisma.$transaction(async (tx) => {
       const esc = await tx.escrow.findFirst({
@@ -151,6 +151,7 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
   };
   pushMatchLog(hist);
   pushRoomLog(room, `Match history recorded.`);
+  pushEventLog('match_concluded', { winner: winner.username, loser: loser.username, roomId: room.roomId, prize, commission });
   logger.info('Match concluded', { winner: winner.username, loser: loser.username, room: room.roomId, prize, commission });
 }
 

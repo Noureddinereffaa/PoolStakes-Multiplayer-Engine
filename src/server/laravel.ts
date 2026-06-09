@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import crypto, { randomUUID } from 'crypto';
 import { Express, Request, Response, NextFunction } from 'express';
 import { WebSocket } from 'ws';
 import bcrypt from 'bcryptjs';
@@ -72,6 +72,14 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 const RATE_LIMIT_MAX = 100; // max requests per window per IP
 
+// Clean up expired rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(ip);
+  }
+}, 300_000).unref();
+
 function rateLimiter(req: Request, res: Response, next: NextFunction) {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const now = Date.now();
@@ -105,7 +113,7 @@ function sanitizeForLog(data: Record<string, unknown>): Record<string, unknown> 
 }
 
 export async function logLaravelApi(
-  broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void,
+  _broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void,
   apiName: string,
   reqBody: Record<string, unknown>,
   response: Record<string, unknown>
@@ -113,21 +121,12 @@ export async function logLaravelApi(
   try {
     const safePayload = sanitizeForLog(reqBody);
     const safeResponse = sanitizeForLog(response);
-    const logItem = await prisma.apiLog.create({
+    await prisma.apiLog.create({
       data: {
         apiName,
         payload: JSON.stringify(safePayload),
         response: JSON.stringify(safeResponse),
       }
-    });
-
-    broadcastToAllWebSockets({
-      type: 'laravel_api_log',
-      id: logItem.id,
-      apiName,
-      payload: safePayload,
-      response: safeResponse,
-      timestamp: logItem.timestamp.toISOString()
     });
   } catch (error) {
     logger.error('Failed to write API log', { error: String(error) });
@@ -147,7 +146,7 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
   // Public routes (no JWT required)
   app.post('/api/laravel/auth/guest', async (req, res) => {
     try {
-      const guestName = 'Guest_' + Date.now();
+      const guestName = 'Guest_' + Date.now() + '_' + randomUUID().slice(0, 8);
       const guestExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h TTL
       const guest = await prisma.user.create({
         data: {
@@ -156,7 +155,7 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
           email: `${guestName}@guest.local`,
           password: randomUUID(),
           balance: 350.0,
-          walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest',
+          walletAddress: 'T' + crypto.randomBytes(8).toString('hex').toUpperCase() + 'usdtGuest',
           guestExpiresAt,
         }
       });
@@ -172,11 +171,14 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
 
   app.post('/api/laravel/auth/register', async (req, res) => {
     const { username, email, password, walletAddress } = req.body;
-    if (!username) {
-      return res.status(400).json({ success: false, error: 'Username is required' });
+    if (!username || username.length < 3) {
+      return res.status(400).json({ success: false, error: 'Username is required (min 3 characters)' });
     }
-    if (!password || password.length < 4) {
-      return res.status(400).json({ success: false, error: 'Password is required and must be at least 4 characters' });
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password is required and must be at least 6 characters' });
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email format.' });
     }
 
     try {
@@ -200,7 +202,7 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
           email: email || `${username}@playusdt.domain`,
           password: hashedPassword,
           balance: 500.0,
-          walletAddress: walletAddress || 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtTRC20'
+          walletAddress: walletAddress || 'T' + crypto.randomBytes(8).toString('hex').toUpperCase() + 'usdtTRC20'
         }
       });
 
@@ -222,10 +224,21 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
 
   app.get('/api/laravel/users', async (req, res) => {
     try {
-      const users = await prisma.user.findMany({
+      const userId = (req as any).user.id;
+      const currentUser = await prisma.user.findUnique({
+        where: { id: userId },
         select: { id: true, username: true, email: true, balance: true, walletAddress: true }
       });
-      res.json({ users });
+      // Return all users for leaderboard but WITHOUT balance/email
+      const users = await prisma.user.findMany({
+        select: { id: true, username: true, walletAddress: true }
+      });
+      const usersWithBalance = users.map(u => ({
+        ...u,
+        balance: u.id === userId ? (currentUser?.balance || 0) : 0,
+        email: u.id === userId ? (currentUser?.email || null) : undefined
+      }));
+      res.json({ users: usersWithBalance, currentUser: currentUser ? { ...currentUser, balance: Number(currentUser.balance) } : null });
     } catch (error) {
       res.status(500).json({ error: 'Database error' });
     }
@@ -267,16 +280,24 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
   });
 
   app.post('/api/laravel/users/update', async (req, res) => {
-    const { userId, amount } = req.body;
+    const { userId, delta } = req.body;
     if (userId !== (req as any).user.id) {
       return res.status(403).json({ success: false, error: 'You can only update your own balance.' });
+    }
+    const parsedDelta = parseFloat(delta);
+    if (!isFinite(parsedDelta) || Math.abs(parsedDelta) > 100000) {
+      return res.status(400).json({ success: false, error: 'Invalid delta amount (max 100,000).' });
     }
     try {
       const user = await prisma.user.update({
         where: { id: userId },
-        data: { balance: Math.max(0, parseFloat(amount.toFixed(2))) }
+        data: { balance: { increment: parsedDelta } }
       });
-      res.json({ success: true, user: { id: user.id, username: user.username, balance: user.balance } });
+      if (Number(user.balance) < 0) {
+        await prisma.user.update({ where: { id: userId }, data: { balance: 0 } });
+      }
+      const fresh = await prisma.user.findUnique({ where: { id: userId } });
+      res.json({ success: true, user: { id: fresh!.id, username: fresh!.username, balance: fresh!.balance } });
     } catch (error) {
       res.status(404).json({ success: false, error: 'User not found' });
     }
@@ -336,8 +357,11 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
     }
   });
 
+  const SERVER_COMMISSION_RATE = 0.05;
+
   app.post('/api/laravel/escrow/payout', async (req, res) => {
-    const { escrowId, winnerId, loserId, commissionRate = 0.05 } = req.body;
+    const { escrowId, winnerId, loserId } = req.body;
+    const commissionRate = SERVER_COMMISSION_RATE;
     try {
       const responseData = await prisma.$transaction(async (tx) => {
         const esc = await tx.escrow.findFirst({ where: { id: escrowId, status: 'locked' } });
@@ -393,15 +417,18 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
 
   app.post('/api/laravel/crypto/deposit', async (req, res) => {
     const { userId, amount, txHash } = req.body;
+    if (userId !== (req as any).user.id) {
+      return res.status(403).json({ success: false, error: 'You can only deposit to your own account.' });
+    }
+    const parsedAmount = parseFloat(amount);
+    if (!isFinite(parsedAmount) || parsedAmount <= 0 || parsedAmount > 100000) {
+      return res.status(400).json({ success: false, error: 'Invalid deposit amount (1–100,000).' });
+    }
     try {
       const tx = await prisma.cryptoTransaction.create({
-        data: { userId, type: 'DEPOSIT', amount, txHash, status: 'COMPLETED' }
+        data: { userId, type: 'DEPOSIT', amount: parsedAmount, txHash: txHash || 'manual-' + randomUUID(), status: 'PENDING' }
       });
-      const user = await prisma.user.update({
-        where: { id: userId },
-        data: { balance: { increment: amount } }
-      });
-      res.json({ success: true, transaction: tx, newBalance: user.balance });
+      res.json({ success: true, transaction: tx, message: 'Deposit submitted for manual review. Balance will be credited after blockchain confirmation.' });
     } catch (error: any) {
       res.status(400).json({ success: false, error: error.message });
     }

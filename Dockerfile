@@ -9,6 +9,9 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 
+# Remove devDependencies after build
+RUN npm prune --omit=dev
+
 FROM node:20-alpine AS runner
 
 WORKDIR /app

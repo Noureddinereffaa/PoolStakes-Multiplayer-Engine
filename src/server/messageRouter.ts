@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import { SocketMessage } from '../types';
 import {
   handleJoin,
+  handleReconnect,
   handleSetAiOpponent,
   handlePreviewAim,
   handleShoot,
@@ -10,11 +11,17 @@ import {
   handleRematch,
   handleDisconnect
 } from './gameActions';
+import { pushEventLog } from './state';
 
 export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise<void> {
+  pushEventLog('ws_message_in', { type: msg.type, sensitive: msg.type === 'reconnect' });
+
   switch (msg.type) {
     case 'join':
       await handleJoin(ws, msg);
+      break;
+    case 'reconnect':
+      await handleReconnect(ws, msg);
       break;
     case 'set_ai_opponent':
       await handleSetAiOpponent(ws, msg);
@@ -39,7 +46,9 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       break;
     default:
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${(msg as any).type}` }));
+        const unknownType = (msg as any).type;
+        pushEventLog('ws_unknown_type', { type: unknownType });
+        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${unknownType}` }));
       }
       break;
   }

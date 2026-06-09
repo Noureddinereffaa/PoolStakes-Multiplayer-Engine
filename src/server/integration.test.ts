@@ -4,7 +4,7 @@ import {
   powerToVelocity, BALL_R, CUSHION, TABLE_W, TABLE_H,
 } from './physics';
 import { evaluateShotRules, ghostBallAngle } from './gameLogic';
-import { getOrCreateRoom } from './state';
+import { getOrCreateRoom, payingOutRooms, activeRooms, clientsByRoom } from './state';
 
 function simulateShot(
   balls: ReturnType<typeof getInitialBalls>,
@@ -50,6 +50,13 @@ describe('integration — full game flow', () => {
   let room: ReturnType<typeof getOrCreateRoom>;
 
   beforeEach(() => {
+    // Clean up state from previous tests (especially payingOutRooms and activeRooms)
+    const existing = activeRooms.get('integ-test-room');
+    if (existing) {
+      payingOutRooms.delete(existing.name);
+      activeRooms.delete('integ-test-room');
+      clientsByRoom.delete('integ-test-room');
+    }
     room = getOrCreateRoom('integ-test-room', 'Integration Test Room', 10);
     room.players = [
       { id: 'p1', username: 'Player1', walletBalance: 500, bettingStake: 10, isConnected: true },

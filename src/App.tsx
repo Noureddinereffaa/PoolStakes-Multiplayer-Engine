@@ -42,14 +42,22 @@ let toastIdCounter = 0;
 
 export default function App() {
   const navigate = useNavigate();
-  const [installed, setInstalled] = useState(false);
+  const [installed, setInstalled] = useState(() => localStorage.getItem('pwa_installed') === 'true');
   const [showInstallOverlay, setShowInstallOverlay] = useState(false);
   const deferredInstallRef = useRef<any>(null);
+  const toastTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+
+  useEffect(() => {
+    return () => {
+      for (const timer of toastTimersRef.current.values()) clearTimeout(timer);
+      toastTimersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     const onInstallPrompt = (e: any) => { e.preventDefault(); deferredInstallRef.current = e; };
-    const onInstalled = () => { setInstalled(true); };
-    const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true); };
+    const onInstalled = () => { setInstalled(true); localStorage.setItem('pwa_installed', 'true'); };
+    const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) { setInstalled(true); localStorage.setItem('pwa_installed', 'true'); } };
     window.addEventListener('beforeinstallprompt', onInstallPrompt);
     window.addEventListener('appinstalled', onInstalled);
     onStandalone();
@@ -86,7 +94,11 @@ export default function App() {
   const addToast = useCallback((type: 'success' | 'error', message: string, durationMs = 4000) => {
     const id = ++toastIdCounter;
     setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), durationMs);
+    const timer = setTimeout(() => {
+      toastTimersRef.current.delete(id);
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, durationMs);
+    toastTimersRef.current.set(id, timer);
   }, []);
   const removeToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -106,14 +118,12 @@ export default function App() {
         setLaravelUsers(data.users);
         
         // Sync the logged-in user balance with latest database
-        if (userSession) {
-          const freshUser = data.users.find((u: any) => u.id === userSession.id || u.username === userSession.username);
-          if (freshUser) {
-            if (freshUser.balance !== userSession.balance) {
-              const updated = { ...userSession, balance: freshUser.balance };
-              setUserSession(updated);
-              localStorage.setItem('billiards_session', JSON.stringify(updated));
-            }
+        if (userSession && data.currentUser) {
+          const freshBalance = Number(data.currentUser.balance);
+          if (freshBalance !== userSession.balance) {
+            const updated = { ...userSession, balance: freshBalance };
+            setUserSession(updated);
+            localStorage.setItem('billiards_session', JSON.stringify(updated));
           }
         }
       }
@@ -141,6 +151,7 @@ export default function App() {
     physicsFrames,
     setPhysicsFrames,
     opponentAim,
+    isReconnecting,
     handleJoinRoom,
     handlePreviewAim,
     handleShoot,
@@ -230,11 +241,8 @@ export default function App() {
         };
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
-        if (isMobileAndNotInstalled()) {
-          setShowInstallOverlay(true);
-        } else {
-          navigate('/dashboard');
-        }
+        navigate('/dashboard');
+        if (isMobileAndNotInstalled() && !installed) setShowInstallOverlay(true);
 
         addToast('success', 'Account Welcome Pack Loaded! You received 500.00 USDT credit bonus!', 5000);
         
@@ -277,11 +285,8 @@ export default function App() {
         };
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
-        if (isMobileAndNotInstalled()) {
-          setShowInstallOverlay(true);
-        } else {
-          navigate('/dashboard');
-        }
+        navigate('/dashboard');
+        if (isMobileAndNotInstalled() && !installed) setShowInstallOverlay(true);
 
         addToast('success', `Welcome back ${session.username}! Lounge access granted.`);
         
@@ -328,17 +333,10 @@ export default function App() {
 
   const handleModifyBalance = async (userId: string, delta: number) => {
     try {
-      const res = await authFetch('/api/laravel/users');
-      if (!res.ok) return;
-      const data = await res.json();
-      const freshUser = data.users.find((u: any) => u.id === userId);
-      if (!freshUser) return;
-      const newBalance = Math.max(0, parseFloat((freshUser.balance + delta).toFixed(2)));
-
       const upd = await authFetch('/api/laravel/users/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, amount: newBalance })
+        body: JSON.stringify({ userId, delta })
       });
       if (upd.ok) {
         await fetchLaravelUsers();
@@ -346,7 +344,7 @@ export default function App() {
           {
             id: `log-${Date.now()}`,
             apiName: 'MANUAL LEDGER MODIFICATION',
-            payload: { userId, delta, newBalance },
+            payload: { userId, delta },
             response: { success: true, message: 'Balance updated' },
             timestamp: new Date().toISOString()
           },
@@ -396,7 +394,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={
-          !userSession || isMobileAndNotInstalled() ? (
+          !userSession ? (
             <HomePage
               loginUser={loginUser}
               setLoginUser={setLoginUser}
@@ -430,7 +428,7 @@ export default function App() {
           />
         } />
         <Route path="/dashboard" element={
-          userSession && !isMobileAndNotInstalled() ? (
+          userSession ? (
             <MemberDashboard
               userSession={userSession}
               roomState={roomState}
@@ -606,7 +604,7 @@ export default function App() {
         } />
       </Routes>
 
-      {/* Mobile install overlay — two states: not installed / installed */}
+      {/* Mobile install overlay — not installed / installed */}
       {showInstallOverlay && !installed && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
@@ -615,19 +613,25 @@ export default function App() {
             </svg>
           </div>
           <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'حمّل التطبيق للعب' : 'DOWNLOAD APP TO PLAY'}</div>
-          <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'يجب تثبيت التطبيق للعب على الهاتف' : 'You must install the app to play on mobile.'}</div>
+          <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">
+            {deferredInstallRef.current
+              ? (language === 'ar' ? 'اضغط على زر التثبيت أدناه' : 'Tap the install button below')
+              : (language === 'ar' ? 'استخدم القائمة ⋮ ← تثبيت التطبيق' : 'Use browser menu ⋮ → Install app')}
+          </div>
           <button
             onClick={async () => {
               if (deferredInstallRef.current) {
                 deferredInstallRef.current.prompt();
                 const res = await deferredInstallRef.current.userChoice;
-                if (res.outcome === 'accepted') { setInstalled(true); }
+                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000); }
               } else {
-                setInstalled(true);
+                setShowInstallOverlay(false);
+                addToast('success', languageRef.current === 'ar' ? 'استخدم القائمة ⋮ ← تثبيت التطبيق' : 'Use browser menu ⋮ → Install app', 6000);
               }
             }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
           >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
+          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline">{language === 'ar' ? 'تخطي' : 'Skip'}</button>
         </div>
       )}
       {showInstallOverlay && installed && (
@@ -637,13 +641,12 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <div className="text-lg font-black font-mono text-emerald-400">{language === 'ar' ? 'التطبيق مثبت ✓' : 'APP INSTALLED ✓'}</div>
-          <div className="text-xs text-emerald-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'اضغط لفتح التطبيق على حسابك' : 'Tap to open the app on your account'}</div>
+          <div className="text-lg font-black font-mono text-emerald-400">{language === 'ar' ? 'تم التثبيت ✓' : 'APP INSTALLED ✓'}</div>
+          <div className="text-xs text-emerald-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'افتح التطبيق من الشاشة الرئيسية' : 'Open the app from your home screen'}</div>
           <button
-            onClick={() => { setShowInstallOverlay(false); window.location.href = window.location.origin; }}
+            onClick={() => { setShowInstallOverlay(false); }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-          >{language === 'ar' ? 'فتح التطبيق' : 'OPEN APP'}</button>
-          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-emerald-600/40 font-mono underline">{language === 'ar' ? 'البقاء في المتصفح' : 'Stay in browser'}</button>
+          >{language === 'ar' ? 'متابعة إلى لوحة التحكم' : 'CONTINUE TO DASHBOARD'}</button>
         </div>
       )}
     </>

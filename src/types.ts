@@ -54,6 +54,9 @@ export interface RoomState {
   commissionRate?: number;
   turnTimer?: number; // active player turn timer in seconds (e.g., 40 to 0)
   animVersion?: number; // incremented each shot to invalidate stale timeouts
+  disconnectedPlayerIds?: string[]; // players currently disconnected during active game
+  reconnectDeadlines?: Record<string, number>; // playerId → deadline timestamp
+  forfeitedPlayerId?: string; // player who forfeited by not reconnecting
 }
 
 export interface GameConfig {
@@ -70,6 +73,7 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 // WebSocket incoming and outgoing message types
 export type SocketMessage =
   | { type: 'join'; roomId: string; username: string; stake: number; token?: string }
+  | { type: 'reconnect'; token: string }
   | { type: 'leave' }
   | { type: 'preview_aim'; angle: number; power: number; spinX?: number; spinY?: number }
   | { type: 'shoot'; angle: number; power: number; spinX?: number; spinY?: number }
@@ -80,5 +84,8 @@ export type SocketMessage =
   // Server to client messages:
   | { type: 'sync_state'; state: RoomState }
   | { type: 'physics_frames'; frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> }
+  | { type: 'disconnect_notice'; playerId: string; deadline: number }
+  | { type: 'reconnect_notice'; playerId: string }
   | { type: 'laravel_api_log'; id: string; apiName: string; payload: any; response: any; timestamp: string }
+  | { type: 'event_log'; event: string; data?: any }
   | { type: 'error'; message: string };
