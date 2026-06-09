@@ -210,14 +210,19 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const initialBallsCopy = [...roomState.balls];
       const basePlayMultiplier = physicsFrames.length > 350 ? 1.95 : 1.65;
       let animationFrameId: number;
-      let startTime = performance.now();
+      const animStartTime = performance.now();
+      const STRIKE_ACCEL = 8;
+      const physicsStartTime = animStartTime + STRIKE_ACCEL;
+      animatedBallsRef.current = initialBallsCopy.map(b => {
+        const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);
+        return fb ? { ...b, x: fb.x, y: fb.y, isPocketed: fb.isPocketed } : b;
+      });
+      setAnimatedBalls(animatedBallsRef.current);
       const animate = (now: number) => {
-        let isCurrentlyStrikingBeforeContact = false;
         if (strikeAnimRef.current && strikeAnimRef.current.active) {
-          const STRIKE_ACCEL = 40;
           const strikeElapsed = strikeAnimRef.current.startTime !== -1 ? (performance.now() - strikeAnimRef.current.startTime) : 0;
           if (strikeElapsed < STRIKE_ACCEL && !strikeAnimRef.current.hasStruck) {
-            isCurrentlyStrikingBeforeContact = true;
+            /* cue wind-up — physics is delayed by 40ms via physicsStartTime */
           } else if (!strikeAnimRef.current.hasStruck) {
             strikeAnimRef.current.hasStruck = true;
             poolAudio.playCueHit(strikeAnimRef.current.power); haptic(30);
@@ -232,12 +237,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             }
           }
         }
-        if (isCurrentlyStrikingBeforeContact) {
-          startTime = now;
-          animationFrameId = requestAnimationFrame(animate);
-          return;
-        }
-        const elapsed = now - startTime;
+        const elapsed = Math.max(0, now - physicsStartTime);
         const targetFrameIdx = (elapsed / 16.667) * basePlayMultiplier;
         if (physicsFrames && targetFrameIdx < physicsFrames.length) {
           const indexFloor = Math.floor(targetFrameIdx);
