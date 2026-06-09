@@ -11,7 +11,7 @@ if (!JWT_SECRET) {
   logger.error('FATAL: JWT_SECRET environment variable is not set');
   process.exit(1);
 }
-if (JWT_SECRET === 'CHANGE_ME_TO_A_RANDOM_SECRET_IN_PRODUCTION') {
+if (JWT_SECRET === 'your_super_secure_random_string_at_least_32_characters_long') {
   logger.error('FATAL: JWT_SECRET is still set to the default placeholder value. Generate a strong random secret and update .env');
   process.exit(1);
 }
@@ -436,6 +436,9 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
 
   app.post('/api/laravel/crypto/withdraw', async (req, res) => {
     const { userId, amount, address } = req.body;
+    if (userId !== (req as any).user.id) {
+      return res.status(403).json({ success: false, error: 'You can only withdraw from your own account.' });
+    }
     try {
       const result = await prisma.$transaction(async (tx) => {
         const user = await tx.user.findUnique({ where: { id: userId } });

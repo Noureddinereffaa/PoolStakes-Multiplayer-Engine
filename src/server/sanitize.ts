@@ -6,7 +6,8 @@ function stripHtml(value: unknown): unknown {
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<[^>]*>/g, '')
       .replace(/['"]?(?:javascript|data|vbscript):/gi, '')
-      .replace(/&#x?[0-9a-f]+;/gi, '') // strip HTML entities (&#x3C;, &#60;)
+      .replace(/&#x?[0-9a-f]+;/gi, '') // strip hex HTML entities (&#x3C;)
+      .replace(/&#\d+;/gi, '') // strip decimal HTML entities (&#60;)
       .replace(/on\w+\s*=\s*['"][^'"]*['"]/gi, '') // strip event handlers (onload=, onclick=)
       .replace(/style\s*=\s*['"][^'"]*['"]/gi, '') // strip style attributes with expressions
       .trim();

@@ -7,7 +7,7 @@ import {
   userSockets, rematchingRooms, payingOutRooms, getOrCreateRoom, broadcastRoom,
   pushRoomLog, cancelForfeitTimer, startForfeitTimer, DISCONNECT_TIMEOUT_MS,
   enforceSingleSocket, removeUserSocket, pushEventLog, sendFullState, cleanupRoom,
-  registerRoomTimeout, withRoomLock
+  registerRoomTimeout, roomLocks
 } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
@@ -56,67 +56,77 @@ export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { ty
     return;
   }
 
-  const room = getOrCreateRoom(roomId, `Stakes match: $${stake}`, stake);
-
-  if (!clientsByRoom.has(roomId)) {
-    clientsByRoom.set(roomId, new Set());
-  }
-  clientsByRoom.get(roomId)!.add(ws);
-
-  const walletUser = await ensureLaravelUser(username);
-  const resolvedPlayerId = walletUser.id;
-  playerRoomMap.set(ws, { roomId, playerId: resolvedPlayerId });
-
-  if (room.players.some(p => p.username === username)) {
-    ws.send(JSON.stringify({ type: 'error', message: 'You already occupy a seat at this table.' }));
+  // Room-scoped mutex to prevent race conditions on concurrent joins
+  if (roomLocks.has(roomId)) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Room is busy. Please try again.' }));
     return;
   }
+  roomLocks.add(roomId);
+  try {
+    const room = getOrCreateRoom(roomId, `Stakes match: $${stake}`, stake);
 
-  if (room.players.length >= 2 || room.status === 'playing') {
-    ws.send(JSON.stringify({ type: 'error', message: 'This room is full or already in play. Choose another table.' }));
-    return;
-  }
-
-  if (room.players.length === 1 && stake !== room.stake) {
-    ws.send(JSON.stringify({ type: 'error', message: `Stake mismatch. Existing room requires $${room.stake} USDT per player.` }));
-    return;
-  }
-
-  // State machine: can only join in 'waiting'
-  if (room.status !== 'waiting') {
-    ws.send(JSON.stringify({ type: 'error', message: 'Room is not in joinable state.' }));
-    return;
-  }
-
-  const player = createPlayerFromUser(walletUser, stake);
-  room.players.push(player);
-  pushRoomLog(room, `${username} entered table. Stake: $${stake}`);
-
-  if (room.players.length === 2 && room.status === 'waiting') {
-    if (!validateTransition(room, 'waiting', 'ready')) return;
-    room.status = 'ready';
-    pushRoomLog(room, 'Players joined! Validating and locking stakes in secure Laravel wallet escrow...');
-
-    const escrowResult = await lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock', {
-      roomName: room.name,
-      player1Id: room.players[0].id,
-      player2Id: room.players[1].id,
-      stake: room.stake
-    });
-
-    if (escrowResult.success) {
-      pushRoomLog(room, `Current turn: ${room.players[0].username} (Shooter). Aim at cue ball.`);
-    } else {
-      pushRoomLog(room, `Escrow validation failed: ${escrowResult.message || 'Insufficient wallet funds.'}`);
-      room.players.pop();
-      validateTransition(room, 'ready', 'waiting');
-      room.status = 'waiting';
-      ws.send(JSON.stringify({ type: 'error', message: escrowResult.message || 'Unable to lock stakes for this table.' }));
-      broadcastRoom(roomId);
+    if (!clientsByRoom.has(roomId)) {
+      clientsByRoom.set(roomId, new Set());
     }
-  }
+    clientsByRoom.get(roomId)!.add(ws);
 
-  broadcastRoom(roomId);
+    const walletUser = await ensureLaravelUser(username);
+    const resolvedPlayerId = walletUser.id;
+    playerRoomMap.set(ws, { roomId, playerId: resolvedPlayerId });
+
+    if (room.players.some(p => p.username === username)) {
+      ws.send(JSON.stringify({ type: 'error', message: 'You already occupy a seat at this table.' }));
+      return;
+    }
+
+    if (room.players.length >= 2 || room.status === 'playing') {
+      ws.send(JSON.stringify({ type: 'error', message: 'This room is full or already in play. Choose another table.' }));
+      return;
+    }
+
+    if (room.players.length === 1 && stake !== room.stake) {
+      ws.send(JSON.stringify({ type: 'error', message: `Stake mismatch. Existing room requires $${room.stake} USDT per player.` }));
+      return;
+    }
+
+    // State machine: can only join in 'waiting'
+    if (room.status !== 'waiting') {
+      ws.send(JSON.stringify({ type: 'error', message: 'Room is not in joinable state.' }));
+      return;
+    }
+
+    const player = createPlayerFromUser(walletUser, stake);
+    room.players.push(player);
+    pushRoomLog(room, `${username} entered table. Stake: $${stake}`);
+
+    if (room.players.length === 2 && room.status === 'waiting') {
+      if (!validateTransition(room, 'waiting', 'ready')) return;
+      room.status = 'ready';
+      pushRoomLog(room, 'Players joined! Validating and locking stakes in secure Laravel wallet escrow...');
+
+      const escrowResult = await lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock', {
+        roomName: room.name,
+        player1Id: room.players[0].id,
+        player2Id: room.players[1].id,
+        stake: room.stake
+      });
+
+      if (escrowResult.success) {
+        pushRoomLog(room, `Current turn: ${room.players[0].username} (Shooter). Aim at cue ball.`);
+      } else {
+        pushRoomLog(room, `Escrow validation failed: ${escrowResult.message || 'Insufficient wallet funds.'}`);
+        room.players.pop();
+        validateTransition(room, 'ready', 'waiting');
+        room.status = 'waiting';
+        ws.send(JSON.stringify({ type: 'error', message: escrowResult.message || 'Unable to lock stakes for this table.' }));
+        broadcastRoom(roomId);
+      }
+    }
+
+    broadcastRoom(roomId);
+  } finally {
+    roomLocks.delete(roomId);
+  }
 }
 
 // ── Set AI Opponent ──────────────────────────────────────────
@@ -416,13 +426,14 @@ export function handleRematch(ws: WebSocket): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId, playerId } = mapping;
-  if (rematchingRooms.has(roomId)) return;
+  if (rematchingRooms.has(roomId) || roomLocks.has(roomId)) return;
   const room = activeRooms.get(roomId);
   if (!room || room.status !== 'gameover') return;
 
   const requester = room.players.find(p => p.id === playerId);
   if (!requester) return;
 
+  roomLocks.add(roomId);
   rematchingRooms.add(roomId);
 
   room.balls = getInitialBalls();
@@ -441,6 +452,7 @@ export function handleRematch(ws: WebSocket): void {
   room.forfeitedPlayerId = undefined;
 
   if (!validateTransition(room, 'gameover', 'ready')) {
+    roomLocks.delete(roomId);
     rematchingRooms.delete(roomId);
     return;
   }
@@ -448,6 +460,11 @@ export function handleRematch(ws: WebSocket): void {
   room.log = [`🔄 Rematch initiated by ${requester.username}!`];
   pushRoomLog(room, 'Match reset. Re-locking stakes in escrow...');
   broadcastRoom(roomId);
+
+  const releaseRematch = () => {
+    roomLocks.delete(roomId);
+    rematchingRooms.delete(roomId);
+  };
 
   lockRoomEscrow(room, 'AUTO /api/laravel/escrow/lock (rematch)', {
     roomName: room.name,
@@ -462,13 +479,13 @@ export function handleRematch(ws: WebSocket): void {
       room.status = 'gameover';
       pushRoomLog(room, `Rematch escrow failed: ${escrowResult.message}. Match cancelled.`);
     }
-    rematchingRooms.delete(roomId);
+    releaseRematch();
     broadcastRoom(roomId);
   }).catch(err => {
     validateTransition(room, 'ready', 'gameover');
     room.status = 'gameover';
     pushRoomLog(room, `Rematch escrow error: ${err.message}. Match cancelled.`);
-    rematchingRooms.delete(roomId);
+    releaseRematch();
     broadcastRoom(roomId);
   });
 }
