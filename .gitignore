@@ -6,5 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
-
+*.db
+*.db-journal
 /src/generated/prisma
