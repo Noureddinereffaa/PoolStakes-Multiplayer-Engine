@@ -25,7 +25,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import './index.css';
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js');
+  navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()));
 }
 
 createRoot(document.getElementById('root')!).render(
