@@ -389,160 +389,112 @@ export default function App() {
   const isMyTurn = !!(roomState && roomState.status === 'playing' && myPlayerObj && roomState.currentTurn === myPlayerObj.id);
   const activeEscrow = roomState && roomState.status !== 'waiting' && roomState.status !== 'gameover' ? roomState.stake * 2 : 0;
 
-  if (!userSession) {
-    return (
-      <HomePage
-        loginUser={loginUser}
-        setLoginUser={setLoginUser}
-        loginPass={loginPass}
-        setLoginPass={setLoginPass}
-        regUser={regUser}
-        setRegUser={setRegUser}
-        regEmail={regEmail}
-        setRegEmail={setRegEmail}
-        regPass={regPass}
-        setRegPass={setRegPass}
-        regWallet={regWallet}
-        setRegWallet={setRegWallet}
-        isAuthLoading={isAuthLoading}
-        handleLoginSubmit={handleLoginSubmit}
-        handleRegisterSubmit={handleRegisterSubmit}
-        handleQuickGuest={handleQuickGuest}
-        language={language}
-        setLanguage={setLanguage}
-        onNavigateToRules={() => setCurrentPage('rules')}
-      />
-    );
-  }
-
-  if (currentPage === 'rules') {
-    return (
-      <RulesPage
-        language={language}
-        setLanguage={setLanguage}
-        onNavigateBack={() => setCurrentPage('home')}
-        onNavigateDashboard={() => setCurrentPage('dashboard')}
-      />
-    );
-  }
-
-  if (currentPage === 'dashboard') {
-    return (
-      <MemberDashboard
-        userSession={userSession}
-        roomState={roomState}
-        stake={stake}
-        roomId={roomId}
-        joinDifficulty={joinDifficulty}
-        laravelUsers={laravelUsers}
-        matchHistory={matchHistory}
-        language={language}
-        setLanguage={setLanguage}
-        onSetStake={setStake}
-        onSetRoomId={setRoomId}
-        onSetJoinDifficulty={setJoinDifficulty}
-        onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
-          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-          if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
-            return setShowInstallOverlay(true);
+  const pageContent = !userSession ? (
+    <HomePage
+      loginUser={loginUser}
+      setLoginUser={setLoginUser}
+      loginPass={loginPass}
+      setLoginPass={setLoginPass}
+      regUser={regUser}
+      setRegUser={setRegUser}
+      regEmail={regEmail}
+      setRegEmail={setRegEmail}
+      regPass={regPass}
+      setRegPass={setRegPass}
+      regWallet={regWallet}
+      setRegWallet={setRegWallet}
+      isAuthLoading={isAuthLoading}
+      handleLoginSubmit={handleLoginSubmit}
+      handleRegisterSubmit={handleRegisterSubmit}
+      handleQuickGuest={handleQuickGuest}
+      language={language}
+      setLanguage={setLanguage}
+      onNavigateToRules={() => setCurrentPage('rules')}
+    />
+  ) : currentPage === 'rules' ? (
+    <RulesPage
+      language={language}
+      setLanguage={setLanguage}
+      onNavigateBack={() => setCurrentPage('home')}
+      onNavigateDashboard={() => setCurrentPage('dashboard')}
+    />
+  ) : currentPage === 'dashboard' ? (
+    <MemberDashboard
+      userSession={userSession}
+      roomState={roomState}
+      stake={stake}
+      roomId={roomId}
+      joinDifficulty={joinDifficulty}
+      laravelUsers={laravelUsers}
+      matchHistory={matchHistory}
+      language={language}
+      setLanguage={setLanguage}
+      onSetStake={setStake}
+      onSetRoomId={setRoomId}
+      onSetJoinDifficulty={setJoinDifficulty}
+      onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+        if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
+          return setShowInstallOverlay(true);
+        }
+        handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
+        setCurrentPage('arena');
+      }}
+      onJoinAI={(diff?: Difficulty) => {
+        const practiceRoom = 'Practice_' + Math.floor(Math.random() * 10000);
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+        if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
+          return setShowInstallOverlay(true);
+        }
+        handleJoinRoom(practiceRoom, 0, diff || 'medium');
+        setCurrentPage('arena');
+      }}
+      onNavigateRules={() => setCurrentPage('rules')}
+      onDeposit={(amount, address, method) => {
+        if (userSession) {
+          handleModifyBalance(userSession.id, amount);
+          addToast('success', `Deposit confirmed: ${amount} USDT credited to your account.`);
+        }
+      }}
+      onWithdraw={(amount, address, method) => {
+        if (userSession) {
+          if (userSession.balance < amount) {
+            addToast('error', 'Insufficient balance for this withdrawal.');
+            return;
           }
-          handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
-          setCurrentPage('arena');
-        }}
-        onJoinAI={(diff?: Difficulty) => {
-          const practiceRoom = 'Practice_' + Math.floor(Math.random() * 10000);
-          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-          if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
-            return setShowInstallOverlay(true);
-          }
-          handleJoinRoom(practiceRoom, 0, diff || 'medium');
-          setCurrentPage('arena');
-        }}
-        onNavigateRules={() => setCurrentPage('rules')}
-        onDeposit={(amount, address, method) => {
-          if (userSession) {
-            handleModifyBalance(userSession.id, amount); // amount is a delta (positive)
-            addToast('success', `Deposit confirmed: ${amount} USDT credited to your account.`);
-          }
-        }}
-        onWithdraw={(amount, address, method) => {
-          if (userSession) {
-            if (userSession.balance < amount) {
-              addToast('error', 'Insufficient balance for this withdrawal.');
-              return;
-            }
-            handleModifyBalance(userSession.id, -amount); // delta (negative)
-            addToast('success', `Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
-          }
-        }}
-      />
-    );
-  }
-
-  // Fallback to Home page (currentPage === 'home')
-  if (currentPage === 'home') {
-    return (
-      <HomePage
-        loginUser={loginUser}
-        setLoginUser={setLoginUser}
-        loginPass={loginPass}
-        setLoginPass={setLoginPass}
-        regUser={regUser}
-        setRegUser={setRegUser}
-        regEmail={regEmail}
-        setRegEmail={setRegEmail}
-        regPass={regPass}
-        setRegPass={setRegPass}
-        regWallet={regWallet}
-        setRegWallet={setRegWallet}
-        isAuthLoading={isAuthLoading}
-        handleLoginSubmit={handleLoginSubmit}
-        handleRegisterSubmit={handleRegisterSubmit}
-        handleQuickGuest={handleQuickGuest}
-        language={language}
-        setLanguage={setLanguage}
-        onNavigateToRules={() => setCurrentPage('rules')}
-      />
-    );
-  }
-
-  return (
+          handleModifyBalance(userSession.id, -amount);
+          addToast('success', `Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
+        }
+      }}
+    />
+  ) : currentPage === 'home' ? (
+    <HomePage
+      loginUser={loginUser}
+      setLoginUser={setLoginUser}
+      loginPass={loginPass}
+      setLoginPass={setLoginPass}
+      regUser={regUser}
+      setRegUser={setRegUser}
+      regEmail={regEmail}
+      setRegEmail={setRegEmail}
+      regPass={regPass}
+      setRegPass={setRegPass}
+      regWallet={regWallet}
+      setRegWallet={setRegWallet}
+      isAuthLoading={isAuthLoading}
+      handleLoginSubmit={handleLoginSubmit}
+      handleRegisterSubmit={handleRegisterSubmit}
+      handleQuickGuest={handleQuickGuest}
+      language={language}
+      setLanguage={setLanguage}
+      onNavigateToRules={() => setCurrentPage('rules')}
+    />
+  ) : (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
 
       {/* Visual background emerald radial glow highlights */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full filter blur-[140px] pointer-events-none" />
-
-      {/* Toast notification stack */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`relative p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-fadeIn border overflow-hidden ${
-              toast.type === 'error'
-                ? 'bg-red-950 border-red-500/40 text-red-200'
-                : 'bg-gradient-to-r from-amber-950 to-amber-900 border-amber-500/40 text-amber-200'
-            }`}
-          >
-            {toast.type === 'error' ? (
-              <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 animate-pulse" />
-            ) : (
-              <div className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-xs shrink-0">✓</div>
-            )}
-            <div className="text-xs font-mono flex-1">{toast.message}</div>
-            <button
-              onClick={() => removeToast(toast.id)}
-              className="text-current/50 hover:text-current/80 transition shrink-0"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-            {/* Gold progress bar for success */}
-            {toast.type === 'success' && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-amber-300 animate-shrink-right" style={{animationDuration: '4s'}} />
-            )}
-          </div>
-        ))}
-      </div>
 
       {/* Header element */}
       <header className="border-b border-slate-900 bg-slate-900/50 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40">
@@ -663,8 +615,44 @@ export default function App() {
           </div>
         </div>
       </footer>
+    </div>
+  );
 
-      {/* Mobile install overlay (blocks game entry) */}
+  return (
+    <>
+      {/* Toast notification stack */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`relative p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-fadeIn border overflow-hidden ${
+              toast.type === 'error'
+                ? 'bg-red-950 border-red-500/40 text-red-200'
+                : 'bg-gradient-to-r from-amber-950 to-amber-900 border-amber-500/40 text-amber-200'
+            }`}
+          >
+            {toast.type === 'error' ? (
+              <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 animate-pulse" />
+            ) : (
+              <div className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-400 text-xs shrink-0">✓</div>
+            )}
+            <div className="text-xs font-mono flex-1">{toast.message}</div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="text-current/50 hover:text-current/80 transition shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {toast.type === 'success' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-amber-300 animate-shrink-right" style={{animationDuration: '4s'}} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {pageContent}
+
+      {/* Mobile install overlay (always rendered when active, covers any page) */}
       {showInstallOverlay && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
@@ -690,6 +678,6 @@ export default function App() {
           <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline">{language === 'ar' ? 'العودة' : 'Go back'}</button>
         </div>
       )}
-    </div>
+    </>
   );
 }
