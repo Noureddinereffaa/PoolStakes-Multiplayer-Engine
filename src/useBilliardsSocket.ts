@@ -69,7 +69,7 @@ export function useBilliardsSocket({
       setErrorRef.current('Backend Server Offline. Entering Local Practice Mode.');
       setRoomState({
         roomId: targetRoomId,
-        name: targetRoomId.replace(/_/g, ' '),
+        name: (targetRoomId || '').replace(/_/g, ' '),
         status: 'playing',
         stake: customStake,
         players: [
