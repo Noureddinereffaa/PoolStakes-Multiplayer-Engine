@@ -1,6 +1,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState } from '../types';
 
+let deferredInstallPrompt: any = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; });
+}
+
 function hideBrowserChrome() {
   const d = document.documentElement;
   d.style.height = 'calc(100% + 1px)';
@@ -274,15 +279,12 @@ export default function ArenaPage({
   const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
 
   const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement);
-  const [installEvent, setInstallEvent] = useState<any>(null);
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    const onPrompt = (e: any) => { e.preventDefault(); setInstallEvent(e); };
     const onInstalled = () => setInstalled(true);
-    window.addEventListener('beforeinstallprompt', onPrompt);
     window.addEventListener('appinstalled', onInstalled);
-    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled); };
+    return () => window.removeEventListener('appinstalled', onInstalled);
   }, []);
 
   const resetOverlayTimer = useCallback(() => {
