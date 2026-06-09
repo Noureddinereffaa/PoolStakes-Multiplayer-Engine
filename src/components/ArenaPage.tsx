@@ -1,11 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState } from '../types';
 
-let deferredInstallPrompt: any = null;
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; });
-}
-
 function hideBrowserChrome() {
   const d = document.documentElement;
   d.style.height = 'calc(100% + 1px)';
@@ -302,13 +297,6 @@ export default function ArenaPage({
   const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
 
   const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement);
-  const [installed, setInstalled] = useState(false);
-
-  useEffect(() => {
-    const onInstalled = () => setInstalled(true);
-    window.addEventListener('appinstalled', onInstalled);
-    return () => window.removeEventListener('appinstalled', onInstalled);
-  }, []);
 
   const resetOverlayTimer = useCallback(() => {
     setShowOverlay(true);
@@ -393,7 +381,7 @@ export default function ArenaPage({
       ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden"
       onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
     >
-      {/* Mobile overlay: rotate first, then forced install */}
+      {/* Mobile overlay: rotate first, then tap to play (only in standalone mode) */}
       {isMobile && (isPortrait || needsTap) && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4">
           {isPortrait ? (
@@ -407,7 +395,7 @@ export default function ArenaPage({
                 </svg>
               </div>
             </>
-          ) : (installed || (navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches) ? (
+          ) : (
             <>
               <div className="w-20 h-20 rounded-3xl border-[3px] border-amber-500/50 flex items-center justify-center shadow-[0_0_40px_rgba(245,158,11,0.15)]">
                 <svg className="w-12 h-12 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -423,35 +411,6 @@ export default function ArenaPage({
                 }}
                 className="mt-4 px-8 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-black text-sm font-black tracking-wider active:scale-95 transition-transform"
               >{language === 'ar' ? 'بدء اللعب' : 'PLAY'}</button>
-            </>
-          ) : (
-            <>
-              <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
-                <svg className="w-14 h-14 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'حمّل التطبيق للعب' : 'DOWNLOAD APP TO PLAY'}</div>
-              <div className="text-xs text-amber-600/60 font-mono text-center px-8">{language === 'ar' ? 'يجب تثبيت التطبيق للعب على الهاتف' : 'You must install the app to play on mobile'}</div>
-              {deferredInstallPrompt ? (
-                <button
-                  onClick={async () => {
-                    deferredInstallPrompt.prompt();
-                    const res = await deferredInstallPrompt.userChoice;
-                    if (res.outcome === 'accepted') setInstalled(true);
-                  }}
-                  className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-                >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
-              ) : (
-                <div className="flex flex-col items-center gap-2 mt-6 px-6">
-                  <div className="text-xs text-amber-400/80 font-mono">{language === 'ar' ? 'خطوات التثبيت:' : 'Installation steps:'}</div>
-                  <div className="text-[11px] text-amber-500/60 font-mono text-center leading-relaxed max-w-[300px]">
-                    {/iPad|iPhone|iPod/.test(navigator.userAgent)
-                      ? (language === 'ar' ? '① اضغط زر المشاركة 🡇  ← ② أضف للشاشة الرئيسية' : '① Tap Share 🡇 ② Add to Home Screen')
-                      : (language === 'ar' ? '① اضغط زر القائمة ⋮ ← ② تثبيت التطبيق' : '① Tap Menu ⋮ ② Install app')}
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>

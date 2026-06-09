@@ -20,11 +20,38 @@ interface UserSession {
   balance: number;
   email?: string;
   walletAddress?: string;
+  token?: string;
+}
+
+function getAuthToken(): string | null {
+  try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || null; } catch { return null; }
+}
+
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const token = getAuthToken();
+  return fetch(url, { ...options, headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+}
+
+let deferredInstallPrompt: any = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstallPrompt = e; });
 }
 
 let toastIdCounter = 0;
 
 export default function App() {
+  const [installed, setInstalled] = useState(false);
+  const [showInstallOverlay, setShowInstallOverlay] = useState(false);
+
+  useEffect(() => {
+    const onInstalled = () => { setInstalled(true); setShowInstallOverlay(false); };
+    const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) setInstalled(true); };
+    window.addEventListener('appinstalled', onInstalled);
+    onStandalone();
+    window.matchMedia('(display-mode: standalone)').addEventListener('change', onStandalone);
+    return () => { window.removeEventListener('appinstalled', onInstalled); window.matchMedia('(display-mode: standalone)').removeEventListener('change', onStandalone); };
+  }, []);
+
   // Authentication & session state
   const [userSession, setUserSession] = useState<UserSession | null>(null);
 
@@ -63,7 +90,7 @@ export default function App() {
   // Initial DB fetches & periodic sync checks
   const fetchLaravelUsers = async () => {
     try {
-      const res = await fetch('/api/laravel/users');
+      const res = await authFetch('/api/laravel/users');
       if (res.ok) {
         const data = await res.json();
         setLaravelUsers(data.users);
@@ -87,7 +114,7 @@ export default function App() {
 
   const fetchApiLogs = async () => {
     try {
-      const res = await fetch('/api/laravel/logs');
+      const res = await authFetch('/api/laravel/logs');
       if (res.ok) {
         const data = await res.json();
         setApiLogs(data.logs);
@@ -188,7 +215,8 @@ export default function App() {
           username: data.user.username,
           balance: data.user.balance,
           email: data.user.email,
-          walletAddress: data.user.walletAddress
+          walletAddress: data.user.walletAddress,
+          token: data.token
         };
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
@@ -230,7 +258,8 @@ export default function App() {
           username: data.user.username,
           balance: data.user.balance,
           email: data.user.email,
-          walletAddress: data.user.walletAddress
+          walletAddress: data.user.walletAddress,
+          token: data.token
         };
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
@@ -250,17 +279,35 @@ export default function App() {
   };
 
   // Skip Login / Registration
-  const handleQuickGuest = () => {
+  const handleQuickGuest = async () => {
     const guestName = 'Guest_' + Math.floor(Math.random() * 899 + 100);
-    const session: UserSession = {
-      id: 'usr-' + Date.now(),
-      username: guestName,
-      balance: 350.0,
-      email: `${guestName}@usdtpool.com`,
-      walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest'
-    };
-    setUserSession(session);
-    localStorage.setItem('billiards_session', JSON.stringify(session));
+    try {
+      const res = await fetch('/api/laravel/auth/guest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: guestName }) });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        const session: UserSession = {
+          id: data.user?.id || 'usr-' + Date.now(),
+          username: guestName,
+          balance: data.user?.balance || 350,
+          email: `${guestName}@usdtpool.com`,
+          walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest',
+          token: data.token
+        };
+        setUserSession(session);
+        localStorage.setItem('billiards_session', JSON.stringify(session));
+      }
+    } catch {}
+    if (!getAuthToken()) {
+      const session: UserSession = {
+        id: 'usr-' + Date.now(),
+        username: guestName,
+        balance: 350.0,
+        email: `${guestName}@usdtpool.com`,
+        walletAddress: 'T' + Math.random().toString(36).substring(2, 11).toUpperCase() + 'usdtGuest'
+      };
+      setUserSession(session);
+      localStorage.setItem('billiards_session', JSON.stringify(session));
+    }
     setCurrentPage('dashboard');
     addToast('success', 'Logged in as Guest and credited 350.00 USDT practice points successfully!');
     fetchLaravelUsers();
@@ -298,15 +345,14 @@ export default function App() {
 
   const handleModifyBalance = async (userId: string, delta: number) => {
     try {
-      // Fetch fresh balance to compute correct absolute target
-      const res = await fetch('/api/laravel/users');
+      const res = await authFetch('/api/laravel/users');
       if (!res.ok) return;
       const data = await res.json();
       const freshUser = data.users.find((u: any) => u.id === userId);
       if (!freshUser) return;
       const newBalance = Math.max(0, parseFloat((freshUser.balance + delta).toFixed(2)));
 
-      const upd = await fetch('/api/laravel/users/update', {
+      const upd = await authFetch('/api/laravel/users/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, amount: newBalance })
@@ -386,11 +432,19 @@ export default function App() {
         onSetRoomId={setRoomId}
         onSetJoinDifficulty={setJoinDifficulty}
         onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | 'easy' | 'medium' | 'hard') => {
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+          if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
+            return setShowInstallOverlay(true);
+          }
           handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
           setCurrentPage('arena');
         }}
         onJoinAI={(diff?: 'easy' | 'medium' | 'hard') => {
           const practiceRoom = 'Practice_' + Math.floor(Math.random() * 10000);
+          const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+          if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
+            return setShowInstallOverlay(true);
+          }
           handleJoinRoom(practiceRoom, 0, diff || 'medium');
           setCurrentPage('arena');
         }}
@@ -600,6 +654,38 @@ export default function App() {
         </div>
       </footer>
 
+      {/* Mobile install overlay (blocks game entry) */}
+      {showInstallOverlay && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4">
+          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
+            <svg className="w-14 h-14 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'حمّل التطبيق للعب' : 'DOWNLOAD APP TO PLAY'}</div>
+          <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'يجب تثبيت التطبيق للعب على الهاتف. بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'You must install the app to play on mobile. After install, open from your home screen.'}</div>
+          {deferredInstallPrompt ? (
+            <button
+              onClick={async () => {
+                deferredInstallPrompt.prompt();
+                const res = await deferredInstallPrompt.userChoice;
+                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); }
+              }}
+              className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
+            >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
+          ) : (
+            <div className="flex flex-col items-center gap-2 mt-6 px-6">
+              <div className="text-xs text-amber-400/80 font-mono">{language === 'ar' ? 'خطوات التثبيت:' : 'Installation steps:'}</div>
+              <div className="text-[11px] text-amber-500/60 font-mono text-center leading-relaxed max-w-[300px]">
+                {/iPad|iPhone|iPod/.test(navigator.userAgent)
+                  ? (language === 'ar' ? '① اضغط زر المشاركة 🡇  ← ② أضف للشاشة الرئيسية' : '① Tap Share 🡇 ② Add to Home Screen')
+                  : (language === 'ar' ? '① اضغط زر القائمة ⋮ ← ② تثبيت التطبيق' : '① Tap Menu ⋮ ② Install app')}
+              </div>
+            </div>
+          )}
+          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline">{language === 'ar' ? 'العودة' : 'Go back'}</button>
+        </div>
+      )}
     </div>
   );
 }
