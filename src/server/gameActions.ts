@@ -98,14 +98,14 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
   room.commissionRate = 0.05;
 
   const userWallet = await ensureLaravelUser(humanPlayer.username);
-  if (userWallet.balance < room.stake) {
+  if (Number(userWallet.balance) < room.stake) {
     pushRoomLog(room, `AI match blocked: ${userWallet.username} has insufficient balance for a $${room.stake} stake.`);
     room.status = 'waiting';
     broadcastRoom(roomId);
     return;
   }
 
-  humanPlayer.walletBalance = userWallet.balance;
+  humanPlayer.walletBalance = Number(userWallet.balance);
 
   const aiWallet = await getAiUser();
   await ensureMinimumBalance(aiWallet.id, 10000.0);

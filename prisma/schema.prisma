@@ -12,7 +12,7 @@ model User {
   username        String    @unique
   email           String?   @unique
   password        String
-  balance         Float     @default(500.0)
+  balance         Decimal   @default(500.0) @db.Decimal(12, 2)
   walletAddress   String?
   guestExpiresAt  DateTime?
   createdAt       DateTime  @default(now())
@@ -30,7 +30,7 @@ model CryptoTransaction {
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   type        String   // "DEPOSIT", "WITHDRAWAL"
-  amount      Float
+  amount      Decimal   @db.Decimal(12, 2)
   currency    String   @default("USDT")
   txHash      String?  @unique
   status      String   @default("PENDING") // "PENDING", "COMPLETED", "FAILED"
@@ -41,7 +41,7 @@ model CryptoTransaction {
 model Escrow {
   id          String   @id @default(uuid())
   roomName    String
-  amountEach  Float
+  amountEach  Decimal   @db.Decimal(12, 2)
   status      String   @default("locked") // "locked", "refunded", "payout_completed"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -57,8 +57,8 @@ model Escrow {
 
 model Transaction {
   id          String   @id @default(uuid())
-  prize       Float
-  commission  Float
+  prize       Decimal   @db.Decimal(12, 2)
+  commission  Decimal   @db.Decimal(12, 2)
   timestamp   DateTime @default(now())
 
   escrowId    String   @unique
@@ -75,7 +75,7 @@ model RoomSnapshot {
   id          String   @id @default(uuid())
   roomId      String   @unique
   name        String
-  stake       Float
+  stake       Decimal   @db.Decimal(12, 2)
   status      String
   state       String   // JSON-serialized full RoomState (players, balls, turn, etc.)
   createdAt   DateTime @default(now())

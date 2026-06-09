@@ -88,6 +88,22 @@ function rateLimiter(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+const SENSITIVE_KEYS = new Set(['password', 'token', 'secret', 'authorization', 'accessToken']);
+
+function sanitizeForLog(data: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (SENSITIVE_KEYS.has(key.toLowerCase())) {
+      sanitized[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      sanitized[key] = sanitizeForLog(value as Record<string, unknown>);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 export async function logLaravelApi(
   broadcastToAllWebSockets: (messageObj: Record<string, unknown>) => void,
   apiName: string,
@@ -95,11 +111,13 @@ export async function logLaravelApi(
   response: Record<string, unknown>
 ): Promise<void> {
   try {
+    const safePayload = sanitizeForLog(reqBody);
+    const safeResponse = sanitizeForLog(response);
     const logItem = await prisma.apiLog.create({
       data: {
         apiName,
-        payload: JSON.stringify(reqBody),
-        response: JSON.stringify(response),
+        payload: JSON.stringify(safePayload),
+        response: JSON.stringify(safeResponse),
       }
     });
 
@@ -107,8 +125,8 @@ export async function logLaravelApi(
       type: 'laravel_api_log',
       id: logItem.id,
       apiName,
-      payload: reqBody,
-      response,
+      payload: safePayload,
+      response: safeResponse,
       timestamp: logItem.timestamp.toISOString()
     });
   } catch (error) {
@@ -250,6 +268,9 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
 
   app.post('/api/laravel/users/update', async (req, res) => {
     const { userId, amount } = req.body;
+    if (userId !== (req as any).user.id) {
+      return res.status(403).json({ success: false, error: 'You can only update your own balance.' });
+    }
     try {
       const user = await prisma.user.update({
         where: { id: userId },
@@ -327,7 +348,7 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
         
         const originalLoser = await tx.user.findUnique({ where: { id: loserId } });
 
-        const totalPot = esc.amountEach * 2;
+        const totalPot = Number(esc.amountEach) * 2;
         const commission = Math.round(totalPot * commissionRate * 100) / 100;
         const prize = totalPot - commission;
 

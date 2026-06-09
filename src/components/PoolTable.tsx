@@ -397,33 +397,37 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   };
 
   const handlePointerAction = (e: any, isInitialDown = false) => {
-    if (isAnimating) return;
+    if (isAnimatingRef.current) return;
     const coords = getPointerCoords(e);
     if (!coords) return;
-    if (isScratchPlacing) {
+    if (isScratchPlacingRef.current) {
       setPlacedPos({
         x: Math.max(35, Math.min(coords.x, roomStateRef.current.ballInHandRestriction === 'behind_head_string' ? HEAD_STRING_LINE - 10 : 765)),
         y: Math.max(35, Math.min(coords.y, 365)),
       });
       return;
     }
-    if (isMyTurn && !roomState.scratchOccurred) {
+    if (isMyTurnRef.current && !roomStateRef.current.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed) {
         if (isInitialDown) {
           pullStartPosRef.current = coords;
           setIsPulling(true);
-          if (!isAimLocked) {
+          isPullingRef.current = true;
+          if (!isAimLockedRef.current) {
             const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
             setAimAngle(newAngle);
+            aimAngleRef.current = newAngle;
             initialAimAngleRef.current = newAngle;
           }
         } else if (pullStartPosRef.current) {
-          if (!isAimLocked) {
+          if (!isAimLockedRef.current) {
             const dx = coords.x - pullStartPosRef.current.x;
             const dy = coords.y - pullStartPosRef.current.y;
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-            setAimAngle(initialAimAngleRef.current + orthoDrag * 0.003);
+            const newAngle = initialAimAngleRef.current + orthoDrag * 0.003;
+            setAimAngle(newAngle);
+            aimAngleRef.current = newAngle;
           }
           if (isMobile.current) {
             const dx = coords.x - pullStartPosRef.current.x;
@@ -432,15 +436,21 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             const towardCue = -(dx * Math.cos(baseAngle) + dy * Math.sin(baseAngle));
             const rawPower = Math.min(100, Math.max(0, towardCue) / 1.7);
             const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
-            setShotPower(Math.min(100, Math.max(5, Math.floor(curvedPower))));
+            const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
+            setShotPower(power);
+            shotPowerRef.current = power;
           } else {
             const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
             const rawPower = Math.min(100, dragDist / 2.4);
             const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
-            setShotPower(Math.min(100, Math.max(5, Math.floor(curvedPower))));
+            const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
+            setShotPower(power);
+            shotPowerRef.current = power;
           }
-        } else if (!isAimLocked) {
-          setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
+        } else if (!isAimLockedRef.current) {
+          const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+          setAimAngle(newAngle);
+          aimAngleRef.current = newAngle;
         }
       }
     }
@@ -448,11 +458,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const [isPointerActive, setIsPointerActive] = useState(false);
 
-  const handlePointerDown = (e: any) => { if (isAnimating) return; setIsPointerActive(true); handlePointerAction(e, true); };
+  const handlePointerDown = (e: any) => { if (isAnimatingRef.current) return; setIsPointerActive(true); handlePointerAction(e, true); };
   const handlePointerMove = (e: any) => {
-    if (isAnimating) return;
-    if (isPointerActive) handlePointerAction(e, false);
-    else if (isMyTurn && !isScratchPlacing && !roomState.scratchOccurred && !isAimLocked) {
+    if (isAnimatingRef.current) return;
+    if (isPointerActive || pullStartPosRef.current) handlePointerAction(e, false);
+    else if (isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
       const coords = getPointerCoords(e);
       if (coords) {
         const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
@@ -464,7 +474,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const triggerShootParticles = (power: number, isBreak = false) => {
     const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
     if (cueBall && !cueBall.isPocketed) {
-      const bAngle = aimAngle + Math.PI;
+      const bAngle = aimAngleRef.current + Math.PI;
       const hDx = Math.cos(bAngle), hDy = Math.sin(bAngle);
       const mult = isBreak ? 2.5 : 1;
       for (let i = 0; i < Math.min(Math.floor(25 * mult), Math.floor((10 + power * 0.25) * mult)); i++) {
@@ -482,7 +492,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   };
 
   const executeAuthorizedShot = (angle: number, power: number, sX: number, sY: number) => {
-    if (!isMyTurn || isAnimating) return;
+    if (!isMyTurnRef.current || isAnimatingRef.current) return;
     strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: 450 };
     setIsAnimating(true);
     onShoot(angle, power, sX, sY);
@@ -512,9 +522,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       window.removeEventListener('pointerup', handleGlobalUp);
       window.removeEventListener('pointercancel', handleGlobalUp);
     };
-  }, [isPointerActive, isMyTurn, isAnimating]);
+  }, [isPointerActive]);
 
-  const handleShootClick = () => { if (isMyTurn && !isAnimating) executeAuthorizedShot(aimAngle, shotPower, spinX, spinY); };
+  const handleShootClick = () => { if (isMyTurnRef.current && !isAnimatingRef.current) executeAuthorizedShot(aimAngleRef.current, shotPowerRef.current, spinXRef.current, spinYRef.current); };
 
   const handleConfirmPlacement = () => { if (!isPlacementInvalid()) { onResetCueBall(placedPos.x, placedPos.y); setIsScratchPlacing(false); } };
 

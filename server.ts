@@ -12,7 +12,8 @@ import { startTurnTimer } from './src/server/turnTimer';
 import { logger } from './src/server/logger';
 import { xssSanitize } from './src/server/sanitize';
 import { requestLogger } from './src/server/logger';
-import { restoreRoomSnapshots, startSnapshotInterval, stopSnapshotInterval } from './src/server/persist';
+import { restoreRoomSnapshots, saveRoomSnapshot, startSnapshotInterval, stopSnapshotInterval } from './src/server/persist';
+import { activeRooms } from './src/server/state';
 
 // Webpack/Esbuild-compatible paths config
 const PORT = Number(process.env.PORT ?? 3000);
@@ -137,8 +138,6 @@ async function startServer() {
 process.on('SIGINT', async () => {
   logger.info('Shutting down...');
   stopSnapshotInterval();
-  const { activeRooms } = require('./src/server/state');
-  const { saveRoomSnapshot } = require('./src/server/persist');
   for (const room of activeRooms.values()) {
     if (room.status === 'playing' || room.status === 'waiting') {
       await saveRoomSnapshot(room);

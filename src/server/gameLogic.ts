@@ -92,7 +92,7 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
       });
       if (updated.count === 0) return null;
 
-      const totalPot = esc.amountEach * 2;
+      const totalPot = Number(esc.amountEach) * 2;
       const c = Math.round(totalPot * (room.commissionRate || 0.05) * 100) / 100;
       const p = totalPot - c;
 
@@ -121,9 +121,9 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
 
     prize = result.prize;
     commission = result.commission;
-    winner.walletBalance = result.winner.balance;
+    winner.walletBalance = Number(result.winner.balance);
     const dbLoser = await prisma.user.findUnique({ where: { id: loser.id } });
-    if (dbLoser) loser.walletBalance = dbLoser.balance;
+    if (dbLoser) loser.walletBalance = Number(dbLoser.balance);
 
     pushRoomLog(room, `💰 Wallet balances updated via Prisma gateway secure callbacks!`);
     pushRoomLog(room, `Winner: ${winner.username} receives prize of $${prize.toFixed(2)} (locked stakes pot minus $${commission.toFixed(2)} commission).`);

@@ -23,7 +23,7 @@ export function createPlayerFromUser(user: User, stake: number): Player {
   return {
     id: user.id,
     username: user.username,
-    walletBalance: user.balance,
+    walletBalance: Number(user.balance),
     bettingStake: stake,
     isConnected: true
   };
@@ -31,7 +31,7 @@ export function createPlayerFromUser(user: User, stake: number): Player {
 
 export async function ensureMinimumBalance(userId: string, minimum: number): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (user && user.balance < minimum) {
+  if (user && Number(user.balance) < minimum) {
     await prisma.user.update({ where: { id: userId }, data: { balance: minimum } });
   }
 }
@@ -68,7 +68,7 @@ export async function lockRoomEscrow(room: RoomState, apiName: string, reqPayloa
       const p2 = await tx.user.findUnique({ where: { id: room.players[1]?.id } });
 
       if (!p1 || !p2) throw new Error('One or both escrow participants are missing.');
-      if (p1.balance < room.stake || p2.balance < room.stake) throw new Error('Insufficient funds in one or both player wallets.');
+      if (Number(p1.balance) < room.stake || Number(p2.balance) < room.stake) throw new Error('Insufficient funds in one or both player wallets.');
 
       const updatedP1 = await tx.user.update({ where: { id: p1.id }, data: { balance: { decrement: room.stake } } });
       const updatedP2 = await tx.user.update({ where: { id: p2.id }, data: { balance: { decrement: room.stake } } });
@@ -86,8 +86,8 @@ export async function lockRoomEscrow(room: RoomState, apiName: string, reqPayloa
       return { escrowId: escrow.id, balances: { [p1.id]: updatedP1.balance, [p2.id]: updatedP2.balance } };
     });
 
-    room.players[0].walletBalance = result.balances[room.players[0].id];
-    room.players[1].walletBalance = result.balances[room.players[1].id];
+    room.players[0].walletBalance = Number(result.balances[room.players[0].id]);
+    room.players[1].walletBalance = Number(result.balances[room.players[1].id]);
 
     const serverSeed = crypto.randomBytes(32).toString('hex');
     const escrowHash = crypto.createHash('sha256').update(serverSeed).digest('hex');

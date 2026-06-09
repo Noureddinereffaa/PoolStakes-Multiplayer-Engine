@@ -27,6 +27,11 @@ function getAuthToken(): string | null {
   try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || null; } catch { return null; }
 }
 
+function isMobileAndNotInstalled(): boolean {
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+  return isMobile && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches;
+}
+
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAuthToken();
   return fetch(url, { ...options, headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
@@ -223,6 +228,7 @@ export default function App() {
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
         setCurrentPage('dashboard');
+        if (isMobileAndNotInstalled()) setShowInstallOverlay(true);
 
         addToast('success', 'Account Welcome Pack Loaded! You received 500.00 USDT credit bonus!', 5000);
         
@@ -266,6 +272,7 @@ export default function App() {
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
         setCurrentPage('dashboard');
+        if (isMobileAndNotInstalled()) setShowInstallOverlay(true);
 
         addToast('success', `Welcome back ${session.username}! Lounge access granted.`);
         
@@ -310,6 +317,7 @@ export default function App() {
       setUserSession(session);
       localStorage.setItem('billiards_session', JSON.stringify(session));
     }
+    if (isMobileAndNotInstalled()) setShowInstallOverlay(true);
     setCurrentPage('dashboard');
     addToast('success', 'Logged in as Guest and credited 350.00 USDT practice points successfully!');
     fetchLaravelUsers();

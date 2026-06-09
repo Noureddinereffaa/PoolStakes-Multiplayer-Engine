@@ -5,8 +5,8 @@ import { activeSockets } from './state';
 
 // Simple rate limiter: max N messages per second per connection
 const rateLimitMap = new WeakMap<WebSocket, { count: number; resetAt: number }>();
-const WS_RATE_LIMIT_MAX = 30; // max messages per window
-const WS_RATE_LIMIT_WINDOW_MS = 1000; // 1 second
+const WS_RATE_LIMIT_MAX = 30;
+const WS_RATE_LIMIT_WINDOW_MS = 1000;
 
 function wsRateLimiter(ws: WebSocket): boolean {
   const now = Date.now();
@@ -25,9 +25,36 @@ function wsRateLimiter(ws: WebSocket): boolean {
   return true;
 }
 
+// Heartbeat / early disconnect detection
+const HEARTBEAT_INTERVAL_MS = 30000;
+const HEARTBEAT_TIMEOUT_MS = 10000;
+const lastPong = new WeakMap<WebSocket, number>();
+
+function heartbeat(this: WebSocket): void {
+  lastPong.set(this, Date.now());
+}
+
+function startHeartbeat(): void {
+  setInterval(() => {
+    const now = Date.now();
+    for (const ws of activeSockets) {
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      const last = lastPong.get(ws);
+      if (last && now - last > HEARTBEAT_INTERVAL_MS + HEARTBEAT_TIMEOUT_MS) {
+        ws.terminate();
+        continue;
+      }
+      ws.ping();
+    }
+  }, HEARTBEAT_INTERVAL_MS).unref();
+}
+
 export function attachWebSocketHandlers(wss: WebSocketServer) {
   wss.on('connection', (ws) => {
     activeSockets.add(ws);
+    lastPong.set(ws, Date.now());
+
+    ws.on('pong', heartbeat);
 
     ws.on('message', async (data) => {
       if (!wsRateLimiter(ws)) return;
@@ -45,7 +72,10 @@ export function attachWebSocketHandlers(wss: WebSocketServer) {
     ws.on('close', () => {
       activeSockets.delete(ws);
       rateLimitMap.delete(ws);
+      lastPong.delete(ws);
       handleDisconnect(ws);
     });
   });
+
+  startHeartbeat();
 }
