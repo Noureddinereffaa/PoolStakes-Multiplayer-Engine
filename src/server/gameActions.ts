@@ -289,15 +289,22 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   let cueBallPocketed = false;
   const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
 
+  // Frame thinning: capture a reference position to skip near-identical frames
+  let lastCapturePositions = room.balls.map(b => ({ x: b.x, y: b.y }));
+  const MOVEMENT_THRESHOLD_SQ = 4; // skip if no ball moved more than 2px
+  let framesSinceLastCapture = 0;
+
   while (iterations < maxStepsLimit) {
     const preStates = room.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
     simulatePhysicsStep(room.balls, contactTracker);
 
+    let pocketedThisStep = false;
     for (let i = 0; i < room.balls.length; i++) {
       const currentB = room.balls[i];
       const preB = preStates.find(item => item.id === currentB.id);
       if (!preB) continue;
       if (currentB.isPocketed && !preB.isPocketed) {
+        pocketedThisStep = true;
         if (currentB.id === 0) {
           cueBallPocketed = true;
         } else {
@@ -306,9 +313,33 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
       }
     }
 
-    frames.push(captureFrame(room.balls));
+    const collidedThisStep = contactTracker.firstContactBallId !== null && iterations < 5;
+
+    let significantMovement = framesSinceLastCapture >= 3;
+    if (!significantMovement) {
+      const maxDeltaSq = Math.max(...room.balls.map((b, i) => {
+        const dx = b.x - lastCapturePositions[i].x;
+        const dy = b.y - lastCapturePositions[i].y;
+        return dx * dx + dy * dy;
+      }));
+      significantMovement = maxDeltaSq > MOVEMENT_THRESHOLD_SQ;
+    }
+
+    if (pocketedThisStep || significantMovement || collidedThisStep) {
+      frames.push(captureFrame(room.balls));
+      lastCapturePositions = room.balls.map(b => ({ x: b.x, y: b.y }));
+      framesSinceLastCapture = 0;
+    } else {
+      framesSinceLastCapture++;
+    }
+
     iterations++;
     if (!isAnyBallMoving(room.balls)) break;
+  }
+
+  // Always capture the final resting frame
+  if (framesSinceLastCapture > 0 || frames.length === 0) {
+    frames.push(captureFrame(room.balls));
   }
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
@@ -320,8 +351,9 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
     }
   }
 
-  const basePlayMultiplier = frames.length > 350 ? 1.95 : 1.65;
-  const animationDurationMs = (frames.length * 16.66) / basePlayMultiplier + 150;
+  const totalSteps = iterations;
+  const basePlayMultiplier = totalSteps > 350 ? 1.95 : 1.65;
+  const animationDurationMs = (totalSteps * 16.66) / basePlayMultiplier + 150;
 
   const timer = setTimeout(() => {
     if ((room.animVersion || 0) !== currentAnimVersion) return;

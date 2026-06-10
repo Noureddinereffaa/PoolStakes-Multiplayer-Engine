@@ -26,16 +26,7 @@
     <link rel="apple-touch-startup-image" href="/icons/icon-512.png" media="(orientation: landscape)" />
     <meta name="apple-itunes-app" content="app-id=my-app-id" />
     <title>8-Ball Pool - Multiplayer</title>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-      }
-      if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
-        document.documentElement.classList.add('pwa-mode');
-      }
-    </script>
+    <script defer src="/sw-init.js"></script>
     <style>
       html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #020617; overflow-x: hidden; }
       html.pwa-mode { overscroll-behavior: none; -webkit-overflow-scrolling: touch; }

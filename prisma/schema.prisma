@@ -82,6 +82,17 @@ model RoomSnapshot {
   updatedAt   DateTime @updatedAt
 }
 
+model PushSubscription {
+  id            String   @id @default(uuid())
+  userId        String
+  endpoint      String   @unique
+  p256dh        String
+  auth          String
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
 model ApiLog {
   id        String   @id @default(uuid())
   apiName   String

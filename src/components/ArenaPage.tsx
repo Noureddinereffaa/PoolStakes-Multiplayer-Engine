@@ -4,8 +4,8 @@ import { RoomState, Difficulty } from '../types';
 import { isMobileDevice, hideBrowserChrome, isStandalone, enterFullscreen as enterMobileFS } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
-  Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot, Volume2, VolumeX,
-  ArrowUpCircle, ArrowDownCircle, ArrowLeftCircle, ArrowRightCircle, Crosshair
+  Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, X, Users, Bot, Volume2, VolumeX,
+  ArrowUpCircle, ArrowDownCircle
 } from 'lucide-react';
 import { ProvablyFairVerify } from './ProvablyFairVerify';
 import { poolAudio } from '../utils/audio';
@@ -329,6 +329,7 @@ export default function ArenaPage({
   const spinY = tableRef.current?.spinY ?? 0;
   const shotPower = tableRef.current?.shotPower ?? 40;
   const isAimLocked = tableRef.current?.isAimLocked ?? false;
+  const aimAngle = tableRef.current?.aimAngle ?? 0;
   const hudNotification = tableRef.current?.hudNotification ?? null;
   const setSpinX = (v: number) => tableRef.current?.setSpinX(v);
   const setSpinY = (v: number) => tableRef.current?.setSpinY(v);

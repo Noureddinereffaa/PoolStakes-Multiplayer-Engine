@@ -194,7 +194,7 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
                 { icon: Tablet, label: isAr ? 'شاشة كاملة' : 'Fullscreen', sub: isAr ? 'تجربة غامرة بدون حدود' : 'Immersive edge-to-edge', color: 'text-emerald-400', border: 'border-emerald-500/20', bg: 'bg-emerald-500/10' },
                 { icon: Shield, label: isAr ? 'لعب عادل' : 'Provably Fair', sub: isAr ? 'خوارزمية شفافة ومصدقة' : 'Audited. Trusted. Fair.', color: 'text-blue-400', border: 'border-blue-500/20', bg: 'bg-blue-500/10' },
                 { icon: Smartphone, label: isAr ? 'تحكم ذكي' : 'Smart Touch', sub: isAr ? 'إيماءات بديهية وسلسة' : 'Intuitive gesture controls', color: 'text-purple-400', border: 'border-purple-500/20', bg: 'bg-purple-500/10' },
-                { icon: Bell, label: isAr ? 'إشعارات فورية' : 'Instant Alerts', sub: isAr ? 'نبّهني عندما يحين دوري' : 'Know when it\'s your turn', color: 'text-rose-400', border: 'border-rose-500/20', bg: 'bg-rose-500/10' },
+                { icon: Sparkles, label: isAr ? 'إشعارات فورية' : 'Instant Alerts', sub: isAr ? 'نبّهني عندما يحين دوري' : 'Know when it\'s your turn', color: 'text-rose-400', border: 'border-rose-500/20', bg: 'bg-rose-500/10' },
                 { icon: Trophy, label: isAr ? 'بطولات حية' : 'Live Tourneys', sub: isAr ? 'تنافس مع الأبطال' : 'Compete for the crown', color: 'text-amber-400', border: 'border-amber-500/20', bg: 'bg-amber-500/10' },
               ].map((feat, i) => {
                 const Icon = feat.icon;

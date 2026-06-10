@@ -44,6 +44,7 @@ export function useBilliardsSocket({
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [publicRooms, setPublicRooms] = useState<Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }>>([]);
   const [roomCreationCode, setRoomCreationCode] = useState<string | null>(null);
+  const [pendingShotTick, setPendingShotTick] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
@@ -411,11 +412,12 @@ export function useBilliardsSocket({
       wsRef.current.send(JSON.stringify({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }));
     } else {
       offlineQueueRef.current.push({ type: 'shoot', payload: { type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }, timestamp: Date.now() });
-      if (roomState) {
+      if (roomStateRef.current) {
         pendingShotRef.current = { angle, power };
+        setPendingShotTick((t) => t + 1);
       }
     }
-  }, [roomState]);
+  }, []);
 
   const handleResetCueBall = useCallback((x: number, y: number) => {
     sendOrQueue({ type: 'reset_cue_ball', x, y });
@@ -432,8 +434,8 @@ export function useBilliardsSocket({
   const handleRematch = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'rematch' }));
-    } else {
-      // Offline rematch — reset balls locally
+    } else if (roomStateRef.current?.players.some(p => p.id.startsWith('ai-'))) {
+      // AI game offline rematch — reset balls locally
       if (mountedRef.current) {
         setRoomState((prev: any) => {
           if (!prev) return prev;
@@ -546,7 +548,7 @@ export function useBilliardsSocket({
         };
       });
     }
-  }, [roomState]);
+  }, [roomState, pendingShotTick]);
 
   return {
     roomId,

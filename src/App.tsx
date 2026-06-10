@@ -1,16 +1,23 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
-import RulesPage from './components/RulesPage';
-import MemberDashboard from './components/MemberDashboard';
-import ArenaPage from './components/ArenaPage';
 import ConnectionStatus from './components/ConnectionStatus';
 import InstallGuard from './components/InstallGuard';
 import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
 import { isMobileDevice, isStandalone, requestWakeLock, releaseWakeLock, enterFullscreen } from './utils/mobile';
+
+const ArenaPage = lazy(() => import('./components/ArenaPage'));
+const MemberDashboard = lazy(() => import('./components/MemberDashboard'));
+const RulesPage = lazy(() => import('./components/RulesPage'));
+
+const PageLoader = () => (
+  <div className="fixed inset-0 z-[9999] bg-[#0a0a0f] flex items-center justify-center">
+    <div className="w-12 h-12 rounded-full border-4 border-emerald-500/30 border-t-emerald-400 animate-spin" />
+  </div>
+);
 
 interface ToastItem {
   id: number;
@@ -184,7 +191,7 @@ export default function App() {
     username: userSession?.username,
     fetchLaravelUsers,
     setApiLogs,
-    setErrorBanner: (msg: string) => addToast('error', msg, 5000)
+    setErrorBanner: (msg: string | null) => msg !== null ? addToast('error', msg, 5000) : null
   });
 
   // Check saved session on load
@@ -283,7 +290,6 @@ export default function App() {
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
         navigate('/dashboard');
-        if (isMobileAndNotInstalled() && !installed) setShowInstallOverlay(true);
 
         addToast('success', 'Account Welcome Pack Loaded! You received 500.00 USDT credit bonus!', 5000);
         
@@ -327,7 +333,6 @@ export default function App() {
         setUserSession(session);
         localStorage.setItem('billiards_session', JSON.stringify(session));
         navigate('/dashboard');
-        if (isMobileAndNotInstalled() && !installed) setShowInstallOverlay(true);
 
         addToast('success', `Welcome back ${session.username}! Lounge access granted.`);
         
@@ -469,16 +474,19 @@ export default function App() {
           )
         } />
         <Route path="/rules" element={
-          <RulesPage
-            language={language}
-            setLanguage={setLanguage}
-            onNavigateBack={() => navigate('/')}
-            onNavigateDashboard={() => navigate('/dashboard')}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <RulesPage
+              language={language}
+              setLanguage={setLanguage}
+              onNavigateBack={() => navigate('/')}
+              onNavigateDashboard={() => navigate('/dashboard')}
+            />
+          </Suspense>
         } />
         <Route path="/dashboard" element={
           userSession ? (
-            <MemberDashboard
+            <Suspense fallback={<PageLoader />}>
+              <MemberDashboard
               userSession={userSession}
               roomState={roomState}
               stake={stake}
@@ -520,12 +528,14 @@ export default function App() {
               onJoinRandom={handleJoinRandom}
               onCancelWaiting={handleCancelWaiting}
             />
+            </Suspense>
           ) : (
             <Navigate to="/" replace />
           )
         } />
         <Route path="/arena" element={
           userSession ? (
+            <Suspense fallback={<PageLoader />}>
             <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
 
               {/* Visual background emerald radial glow highlights */}
@@ -651,6 +661,7 @@ export default function App() {
                 </div>
               </footer>
             </div>
+            </Suspense>
           ) : (
             <Navigate to="/" replace />
           )

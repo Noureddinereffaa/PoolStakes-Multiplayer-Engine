@@ -14,6 +14,12 @@ import { requestLogger } from './src/server/logger';
 import { restoreRoomSnapshots, saveRoomSnapshot, startSnapshotInterval, stopSnapshotInterval } from './src/server/persist';
 import { activeRooms } from './src/server/state';
 
+if (process.env.SENTRY_DSN) {
+  import('@sentry/node').then((Sentry) => {
+    Sentry.init({ dsn: process.env.SENTRY_DSN!, tracesSampleRate: 0.2 });
+  });
+}
+
 // ── Validate required env vars before anything else ────────────
 function validateEnv(): void {
   const required = ['DATABASE_URL', 'JWT_SECRET'];

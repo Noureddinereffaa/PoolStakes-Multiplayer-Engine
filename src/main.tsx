@@ -23,6 +23,12 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { isMobileDevice, setupAudioOnInteraction } from './utils/mobile';
 import './index.css';
 
+if (import.meta.env.VITE_SENTRY_DSN) {
+  import('@sentry/react').then((Sentry) => {
+    Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, tracesSampleRate: 0.2 });
+  });
+}
+
 setupAudioOnInteraction();
 
 // Capture beforeinstallprompt before React mounts (fires early during page load)

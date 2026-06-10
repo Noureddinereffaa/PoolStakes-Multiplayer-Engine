@@ -1,4 +1,19 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-pool_game_secret}
+      - POSTGRES_DB=pool_game
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     ports:
@@ -6,12 +21,14 @@ services:
     environment:
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET}
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:pool_game_secret@db:5432/pool_game}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - PORT=3000
       - HOST=0.0.0.0
-    volumes:
-      - db_data:/app/prisma
+      - DB_PASSWORD=${DB_PASSWORD:-pool_game_secret}
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
@@ -21,4 +38,4 @@ services:
       start_period: 10s
 
 volumes:
-  db_data:
+  pg_data:
