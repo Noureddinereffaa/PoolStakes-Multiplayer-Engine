@@ -114,7 +114,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     const ctx2d = canvas.getContext('2d');
     if (!ctx2d) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
     ctx2d.scale(dpr, dpr);
@@ -141,8 +141,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const PX = RAIL_W;
         const PY = RAIL_W;
 
-        // Wood rail base
-        const railColors = ['#1a0803', '#2d0f06', '#3a150b', '#2d0f06', '#1a0803'];
+        // Wood rail base (rich mahogany)
+        const railColors = ['#1a0602', '#2e0a04', '#4a1508', '#3a1006', '#1a0602'];
         const topRailGrad = offCtx.createLinearGradient(0, 0, 800, 8);
         railColors.forEach((c, i) => topRailGrad.addColorStop(i / 4, c));
         offCtx.fillStyle = topRailGrad;
@@ -155,22 +155,59 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         offCtx.fillRect(0, RAIL_W, RAIL_W, PLAY_H);
         offCtx.fillRect(800 - RAIL_W, RAIL_W, RAIL_W, PLAY_H);
 
-        // Wood grain lines on rails
-        offCtx.strokeStyle = 'rgba(120, 50, 20, 0.15)';
-        offCtx.lineWidth = 0.6;
-        for (let i = 0; i < 40; i++) {
+        // Enhanced wood grain lines on rails (multi-layer procedural)
+        // Layer 1: coarse grain
+        offCtx.strokeStyle = 'rgba(90, 35, 15, 0.12)';
+        offCtx.lineWidth = 0.8;
+        for (let i = 0; i < 30; i++) {
+          const gY = 2 + Math.random() * (RAIL_W - 4);
+          offCtx.beginPath();
+          offCtx.moveTo(0, gY);
+          for (let x = 0; x <= 800; x += 4) {
+            const wave = Math.sin(x * 0.04 + i * 1.7) * 2 + Math.sin(x * 0.015 + i * 3.1) * 1.5;
+            offCtx.lineTo(x, gY + wave);
+          }
+          offCtx.stroke();
+        }
+        for (let i = 0; i < 20; i++) {
+          const gX = 2 + Math.random() * (RAIL_W - 4);
+          offCtx.beginPath();
+          offCtx.moveTo(gX, 0);
+          for (let y = 0; y <= 400; y += 4) {
+            const wave = Math.sin(y * 0.04 + i * 1.7) * 2 + Math.sin(y * 0.015 + i * 3.1) * 1.5;
+            offCtx.lineTo(gX + wave, y);
+          }
+          offCtx.stroke();
+        }
+
+        // Layer 2: fine grain detail
+        offCtx.strokeStyle = 'rgba(160, 80, 30, 0.08)';
+        offCtx.lineWidth = 0.3;
+        for (let i = 0; i < 50; i++) {
           const gY = Math.random() * RAIL_W;
           offCtx.beginPath();
           offCtx.moveTo(0, gY);
-          for (let x = 0; x <= 800; x += 8) offCtx.lineTo(x, gY + Math.sin(x * 0.05 + i) * 1.2);
+          for (let x = 0; x <= 800; x += 3) {
+            offCtx.lineTo(x, gY + Math.sin(x * 0.08 + i * 5.3) * 0.8 + Math.cos(x * 0.03 + i * 2.7) * 0.5);
+          }
           offCtx.stroke();
         }
-        for (let i = 0; i < 30; i++) {
-          const gX = Math.random() * RAIL_W;
+
+        // Layer 3: wood pore dots
+        offCtx.fillStyle = 'rgba(60, 25, 10, 0.10)';
+        for (let i = 0; i < 60; i++) {
+          const px = Math.random() * 800;
+          const py = Math.random() * (i < 30 ? RAIL_W : 0) + (i < 30 ? 0 : 400 - RAIL_W);
           offCtx.beginPath();
-          offCtx.moveTo(gX, 0);
-          for (let y = 0; y <= 400; y += 8) offCtx.lineTo(gX + Math.sin(y * 0.05 + i) * 1.2, y);
-          offCtx.stroke();
+          offCtx.ellipse(px, py, 0.5 + Math.random() * 0.8, 0.2 + Math.random() * 0.3, Math.random() * Math.PI, 0, Math.PI * 2);
+          offCtx.fill();
+        }
+        for (let i = 0; i < 40; i++) {
+          const px = Math.random() * (i < 20 ? RAIL_W : 0) + (i < 20 ? 0 : 800 - RAIL_W);
+          const py = RAIL_W + Math.random() * (400 - RAIL_W * 2);
+          offCtx.beginPath();
+          offCtx.ellipse(px, py, 0.5 + Math.random() * 0.8, 0.2 + Math.random() * 0.3, Math.random() * Math.PI, 0, Math.PI * 2);
+          offCtx.fill();
         }
 
         // 3D bevel on outer edge (top highlight)
@@ -341,41 +378,75 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         offCtx.fillRect(PX + 8, PY + 4, 10, PLAY_H - 8);
         offCtx.fillRect(800 - PX - 18, PY + 4, 10, PLAY_H - 8);
 
-        // Felt playing surface with rich green lighting
+        // Felt playing surface with rich green lighting (tournament-grade)
         const feltSpotlight = offCtx.createRadialGradient(400, 200, 50, 400, 200, 440);
-        feltSpotlight.addColorStop(0, '#1ab896');
-        feltSpotlight.addColorStop(0.25, '#149c7e');
-        feltSpotlight.addColorStop(0.55, '#0e7a63');
-        feltSpotlight.addColorStop(0.8, '#0a5f4d');
-        feltSpotlight.addColorStop(1, '#064236');
+        feltSpotlight.addColorStop(0, '#28c9a0');
+        feltSpotlight.addColorStop(0.15, '#1ab896');
+        feltSpotlight.addColorStop(0.35, '#129c7e');
+        feltSpotlight.addColorStop(0.6, '#0c7a63');
+        feltSpotlight.addColorStop(0.85, '#085a48');
+        feltSpotlight.addColorStop(1, '#043a2e');
         offCtx.fillStyle = feltSpotlight;
         offCtx.beginPath();
         offCtx.roundRect(PX + 6, PY + 6, PLAY_W - 12, PLAY_H - 12, 4);
         offCtx.fill();
 
-        // Felt texture (micro-fibers)
-        offCtx.fillStyle = 'rgba(255,255,255,0.015)';
-        for (let i = 0; i < 80; i++) {
-          const fx = PX + 8 + (i * 37) % (PLAY_W - 16);
-          const fy = PY + 8 + (i * 29) % (PLAY_H - 16);
-          const fw = 0.5 + Math.random() * 0.8;
-          const fh = 0.2 + Math.random() * 0.3;
-          offCtx.fillRect(fx - fw / 2, fy - fh / 2, fw, fh);
+        // Procedural woven cloth texture (thread crosshatch)
+        offCtx.globalAlpha = 0.035;
+        for (let y = 0; y < PLAY_H - 12; y += 3) {
+          const weaveX = PX + 8 + (y % 6 < 3 ? 0 : 1.5);
+          offCtx.strokeStyle = y % 6 < 3 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+          offCtx.lineWidth = 0.4;
+          offCtx.beginPath();
+          offCtx.moveTo(weaveX, PY + 8 + y);
+          offCtx.lineTo(weaveX + PLAY_W - 16, PY + 8 + y);
+          offCtx.stroke();
         }
+        for (let x = 0; x < PLAY_W - 12; x += 3) {
+          const weaveY = PY + 8 + (x % 6 < 3 ? 0 : 1.5);
+          offCtx.strokeStyle = x % 6 < 3 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+          offCtx.lineWidth = 0.4;
+          offCtx.beginPath();
+          offCtx.moveTo(PX + 8 + x, weaveY);
+          offCtx.lineTo(PX + 8 + x, weaveY + PLAY_H - 16);
+          offCtx.stroke();
+        }
+        offCtx.globalAlpha = 1.0;
+
+        // Felt surface noise (micro-variation)
+        const imageData = offCtx.getImageData(PX + 8, PY + 8, PLAY_W - 16, PLAY_H - 16);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const noise = (Math.random() - 0.5) * 6;
+          data[i] = Math.max(0, Math.min(255, data[i] + noise));
+          data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+          data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+        }
+        offCtx.putImageData(imageData, PX + 8, PY + 8);
 
         // Felt brush stroke marks (subtle directional)
-        offCtx.strokeStyle = 'rgba(255,255,255,0.012)';
+        offCtx.strokeStyle = 'rgba(255,255,255,0.015)';
         offCtx.lineWidth = 0.5;
-        for (let i = 0; i < 25; i++) {
+        for (let i = 0; i < 30; i++) {
           const bx = PX + 10 + Math.random() * (PLAY_W - 20);
           const by = PY + 10 + Math.random() * (PLAY_H - 20);
-          const bLen = 5 + Math.random() * 20;
+          const bLen = 8 + Math.random() * 25;
           const bAng = Math.random() * Math.PI;
           offCtx.beginPath();
           offCtx.moveTo(bx, by);
           offCtx.lineTo(bx + Math.cos(bAng) * bLen, by + Math.sin(bAng) * bLen);
           offCtx.stroke();
         }
+
+        // Felt nap directional effect (subtle grain along the table)
+        const napGrad = offCtx.createLinearGradient(PX + 8, PY + 8, PX + 8 + PLAY_W - 16, PY + 8);
+        napGrad.addColorStop(0, 'rgba(0,0,0,0.015)');
+        napGrad.addColorStop(0.3, 'rgba(0,0,0,0)');
+        napGrad.addColorStop(0.5, 'rgba(255,255,255,0.01)');
+        napGrad.addColorStop(0.7, 'rgba(0,0,0,0)');
+        napGrad.addColorStop(1, 'rgba(0,0,0,0.015)');
+        offCtx.fillStyle = napGrad;
+        offCtx.fillRect(PX + 8, PY + 8, PLAY_W - 16, PLAY_H - 16);
 
         // Felt edge shadows (table depth effect)
         const edgeShadowTop = offCtx.createLinearGradient(PX, PY + 6, PX, PY + 22);
@@ -710,6 +781,26 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
       ctx2d.restore();
 
+      // Felt wear marks from rolling balls (subtle nap compression)
+      ctx2d.save();
+      ctx2d.globalAlpha = 0.06;
+      ctx2d.filter = 'blur(1px)';
+      for (const b of ctx.animatedBallsRef.current) {
+        if (b.isPocketed || b.id === 0) continue;
+        const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (speed > 0.5) {
+          const wearAlpha = Math.min(0.08, speed * 0.003);
+          ctx2d.fillStyle = 'rgba(40,35,30,0.3)';
+          ctx2d.globalAlpha = wearAlpha;
+          ctx2d.beginPath();
+          ctx2d.arc(b.x - b.vx * 0.3, b.y - b.vy * 0.3, 10, 0, Math.PI * 2);
+          ctx2d.fill();
+        }
+      }
+      ctx2d.filter = 'none';
+      ctx2d.globalAlpha = 1;
+      ctx2d.restore();
+
       // 5. Render All Balls using Ultra-Realistic 3D Spherical Glistening Shaders
       const eligibleIds = getEligibleBallIds(
         ctx.roomStateRef.current,
@@ -727,37 +818,38 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             ? ctx.placedPosRef.current.y
             : b.y;
         const ballRadius = b.radius || 10;
-        const softShadow = ctx2d.createRadialGradient(
-          px + 3,
-          py + 4,
-          0,
-          px + 3,
-          py + 4,
-          ballRadius * 2.0
+
+        // Directional cast shadow (overhead light from top-left)
+        const lightDir = -0.6;
+        const lightDist = 5;
+        const shadowOffX = Math.cos(lightDir) * lightDist;
+        const shadowOffY = Math.sin(lightDir) * lightDist + 2;
+
+        const castShadow = ctx2d.createRadialGradient(
+          px + shadowOffX + 2, py + shadowOffY + 2, 0,
+          px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 1.8
         );
-        softShadow.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
-        softShadow.addColorStop(0.3, 'rgba(0, 0, 0, 0.30)');
-        softShadow.addColorStop(0.6, 'rgba(0, 0, 0, 0.08)');
-        softShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        castShadow.addColorStop(0, 'rgba(0, 0, 0, 0.65)');
+        castShadow.addColorStop(0.15, 'rgba(0, 0, 0, 0.45)');
+        castShadow.addColorStop(0.5, 'rgba(0, 0, 0, 0.12)');
+        castShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
-        ctx2d.arc(px + 3, py + 4, ballRadius * 2.0, 0, Math.PI * 2);
-        ctx2d.fillStyle = softShadow;
+        ctx2d.arc(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 1.8, 0, Math.PI * 2);
+        ctx2d.fillStyle = castShadow;
         ctx2d.fill();
 
-        const darkShadow = ctx2d.createRadialGradient(
-          px + 1,
-          py + 1.5,
-          0,
-          px + 1,
-          py + 1.5,
-          ballRadius * 1.1
+        // Ambient soft shadow (contact shadow - darker, tighter)
+        const contactShadow = ctx2d.createRadialGradient(
+          px + 1, py + 2, 0,
+          px + 1, py + 2, ballRadius * 1.2
         );
-        darkShadow.addColorStop(0, 'rgba(0, 0, 0, 0.70)');
-        darkShadow.addColorStop(0.5, 'rgba(0, 0, 0, 0.25)');
-        darkShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        contactShadow.addColorStop(0, 'rgba(0, 0, 0, 0.80)');
+        contactShadow.addColorStop(0.3, 'rgba(0, 0, 0, 0.35)');
+        contactShadow.addColorStop(0.7, 'rgba(0, 0, 0, 0.08)');
+        contactShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
-        ctx2d.arc(px + 1, py + 1.5, ballRadius * 1.1, 0, Math.PI * 2);
-        ctx2d.fillStyle = darkShadow;
+        ctx2d.arc(px + 1, py + 2, ballRadius * 1.2, 0, Math.PI * 2);
+        ctx2d.fillStyle = contactShadow;
         ctx2d.fill();
 
         const isTarget = eligibleIds.includes(b.id);
@@ -1227,23 +1319,33 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fill();
         ctx2d.restore();
 
-        // Environment reflection (light from room/windows)
+        // Environment reflection (simulated room with warm ceiling and cool windows)
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
-        const envGrad = ctx2d.createRadialGradient(
-          px + ballRadius * 0.28,
-          py - ballRadius * 0.32,
-          0,
-          px + ballRadius * 0.15,
-          py - ballRadius * 0.15,
-          ballRadius * 0.32
+        // Room ceiling light panel reflection (top area)
+        const ceilingRefl = ctx2d.createRadialGradient(
+          px - ballRadius * 0.05, py - ballRadius * 0.45, 0,
+          px - ballRadius * 0.05, py - ballRadius * 0.35, ballRadius * 0.35
         );
-        envGrad.addColorStop(0, 'rgba(200,220,255,0.14)');
-        envGrad.addColorStop(0.3, 'rgba(180,210,255,0.06)');
-        envGrad.addColorStop(1, 'rgba(160,200,255,0)');
+        ceilingRefl.addColorStop(0, 'rgba(255,245,220,0.18)');
+        ceilingRefl.addColorStop(0.4, 'rgba(255,235,200,0.08)');
+        ceilingRefl.addColorStop(1, 'rgba(200,200,180,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
-        ctx2d.fillStyle = envGrad;
+        ctx2d.fillStyle = ceilingRefl;
+        ctx2d.fill();
+
+        // Cool window reflection (left side)
+        const windowRefl = ctx2d.createRadialGradient(
+          px - ballRadius * 0.45, py - ballRadius * 0.15, 0,
+          px - ballRadius * 0.25, py - ballRadius * 0.05, ballRadius * 0.3
+        );
+        windowRefl.addColorStop(0, 'rgba(180,210,255,0.12)');
+        windowRefl.addColorStop(0.5, 'rgba(160,200,240,0.04)');
+        windowRefl.addColorStop(1, 'rgba(100,150,200,0)');
+        ctx2d.beginPath();
+        ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
+        ctx2d.fillStyle = windowRefl;
         ctx2d.fill();
         ctx2d.restore();
 
@@ -3461,7 +3563,38 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       ctx2d.restore();
 
-      // 9. Frame continuation
+      // 9. Post-processing: vignette overlay for cinematic depth
+      ctx2d.save();
+      const vigGrad = ctx2d.createRadialGradient(400, 200, 200, 400, 200, 420);
+      vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+      vigGrad.addColorStop(0.6, 'rgba(0,0,0,0)');
+      vigGrad.addColorStop(0.85, 'rgba(0,0,0,0.15)');
+      vigGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
+      ctx2d.fillStyle = vigGrad;
+      ctx2d.fillRect(0, 0, 800, 400);
+      ctx2d.restore();
+
+      // Warm light glow from overhead (subtle amber tint in center)
+      ctx2d.save();
+      ctx2d.globalCompositeOperation = 'screen';
+      const lightGlow = ctx2d.createRadialGradient(400, 180, 10, 400, 180, 320);
+      lightGlow.addColorStop(0, 'rgba(255,240,200,0.04)');
+      lightGlow.addColorStop(0.5, 'rgba(255,220,180,0.015)');
+      lightGlow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx2d.fillStyle = lightGlow;
+      ctx2d.fillRect(0, 0, 800, 400);
+      ctx2d.restore();
+
+      // Bright pass bloom (subtle glow on white areas)
+      ctx2d.save();
+      ctx2d.globalCompositeOperation = 'lighter';
+      ctx2d.globalAlpha = 0.06;
+      ctx2d.filter = 'blur(3px)';
+      ctx2d.drawImage(canvas, 0, 0);
+      ctx2d.filter = 'none';
+      ctx2d.restore();
+
+      // 10. Frame continuation
       animationId =
         requestAnimationFrame(drawLoop);
     };
