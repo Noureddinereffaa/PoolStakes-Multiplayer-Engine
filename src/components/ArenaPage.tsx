@@ -1,13 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState, Difficulty } from '../types';
 
-function hideBrowserChrome() {
-  const d = document.documentElement;
-  d.style.height = 'calc(100% + 1px)';
-  window.scrollTo(0, 1);
-  requestAnimationFrame(() => { d.style.height = ''; });
-  setTimeout(() => { window.scrollTo(0, 1); }, 300);
-}
+import { isMobileDevice, hideBrowserChrome, isStandalone, enterFullscreen as enterMobileFS } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
   Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot, Volume2, VolumeX
@@ -228,11 +222,11 @@ export default function ArenaPage({
   const [isPortrait, setIsPortrait] = useState(() => window.innerHeight > window.innerWidth);
   const overlayTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const [isMobile, setIsMobile] = useState(() => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(() => isMobileDevice());
 
   useEffect(() => {
     let wasPortrait: boolean | null = null;
-    const checkMobile = () => setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768);
+    const checkMobile = () => setIsMobile(isMobileDevice());
     const checkOrientation = () => {
       const portrait = window.innerHeight > window.innerWidth;
       if (wasPortrait === true && !portrait) {
@@ -278,25 +272,28 @@ export default function ArenaPage({
       document.body.style.height = '';
       document.body.style.top = '';
       document.body.style.left = '';
-      document.documentElement.style.overflow = prevHtmlStyle.overflow;
+      if (prevHtmlStyle.overflow) {
+        document.documentElement.style.overflow = prevHtmlStyle.overflow;
+      } else {
+        document.documentElement.style.removeProperty('overflow');
+      }
+      // إزالة أي أنماط متبقية قد تمنع التمرير
+      document.body.style.removeProperty('overscroll-behavior');
     };
   }, []);
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
 
-  const enterFullscreen = async () => {
-    hideBrowserChrome();
-    if (!containerRef.current) return false;
-    try {
-      await containerRef.current.requestFullscreen({ navigationUI: 'hide' } as any);
-      if (isMobile) try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
-      return true;
-    } catch (_) { return false; }
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {}
+      screen.orientation?.unlock?.();
+    } else {
+      if (containerRef.current) enterMobileFS(containerRef.current);
+    }
   };
-  const exitFullscreen = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (_) {} };
-  const toggleFullscreen = () => { if (isFullscreen) exitFullscreen(); else enterFullscreen(); };
 
-  const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement);
+  const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement && !isStandalone());
 
   const resetOverlayTimer = useCallback(() => {
     setShowOverlay(true);
@@ -405,8 +402,7 @@ export default function ArenaPage({
               <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'اضغط للعب' : 'TAP TO PLAY'}</div>
               <button
                 onClick={async () => {
-                  await enterFullscreen();
-                  try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
+                  if (containerRef.current) await enterMobileFS(containerRef.current);
                   setNeedsTap(false);
                 }}
                 className="mt-4 px-8 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-black text-sm font-black tracking-wider active:scale-95 transition-transform"

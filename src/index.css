@@ -9,9 +9,9 @@ canvas {
 }
 body {
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
+  overscroll-behavior: auto;
 }
 
 /* Hide scrollbar everywhere */

@@ -1,25 +1,47 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { RoomState, Ball, Difficulty } from './types';
 import { simulatePhysicsStep, isAnyBallMoving, captureFrame, powerToVelocity, getInitialBalls } from './server/physics';
+import { markPingSent, markPongReceived, resetMetrics, getConnectionGrade } from './utils/connectionQuality';
+
+interface QueuedMessage {
+  type: string;
+  payload: any;
+  timestamp: number;
+}
 
 interface UseBilliardsSocketProps {
   username?: string;
   fetchLaravelUsers: () => void;
   setApiLogs: React.Dispatch<React.SetStateAction<any[]>>;
   setErrorBanner: (msg: string | null) => void;
+  onConnectionGradeChange?: (grade: string) => void;
+}
+
+const MAX_RECONNECT_ATTEMPTS = 10;
+const BASE_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
+const PING_INTERVAL = 5000;
+const CONNECTION_TIMEOUT = 10000;
+
+function getBackoffDelay(attempt: number): number {
+  const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, attempt), MAX_RECONNECT_DELAY);
+  return delay + Math.random() * 1000;
 }
 
 export function useBilliardsSocket({
   username,
   fetchLaravelUsers,
   setApiLogs,
-  setErrorBanner
+  setErrorBanner,
+  onConnectionGradeChange,
 }: UseBilliardsSocketProps) {
   const [roomId, setRoomId] = useState('Vegas_Golden_Suite');
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [physicsFrames, setPhysicsFrames] = useState<Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null>(null);
   const [opponentAim, setOpponentAim] = useState<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [connectionGrade, setConnectionGrade] = useState<string>('excellent');
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
@@ -28,34 +50,71 @@ export function useBilliardsSocket({
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pongTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingShotRef = useRef<{ angle: number; power: number } | null>(null);
   const roomStateRef = useRef<RoomState | null>(null);
   roomStateRef.current = roomState;
-  const wasInActiveGameRef = useRef(false); // track if we were in a playing game when disconnect happened
+  const wasInActiveGameRef = useRef(false);
+  const offlineQueueRef = useRef<QueuedMessage[]>([]);
+  const isOnlineRef = useRef(navigator.onLine);
 
-  // استخدام المراجع (Refs) لحفظ أحدث القيم للدوال لتجنب الإغلاقات القديمة (Stale Closures) داخل الـ WebSocket
   const fetchRef = useRef(fetchLaravelUsers);
   const setApiLogsRef = useRef(setApiLogs);
   const setErrorRef = useRef(setErrorBanner);
   const usernameRef = useRef(username);
+  const onGradeRef = useRef(onConnectionGradeChange);
 
   useEffect(() => { fetchRef.current = fetchLaravelUsers; }, [fetchLaravelUsers]);
   useEffect(() => { setApiLogsRef.current = setApiLogs; }, [setApiLogs]);
   useEffect(() => { setErrorRef.current = setErrorBanner; }, [setErrorBanner]);
   useEffect(() => { usernameRef.current = username; }, [username]);
+  useEffect(() => { onGradeRef.current = onConnectionGradeChange; }, [onConnectionGradeChange]);
 
-  // تنظيف مسار تصويب الخصم عند تبديل الأدوار
+  useEffect(() => { setOpponentAim(null); }, [roomState?.currentTurn, roomState?.status]);
+
+  // مراقبة حالة الاتصال بالإنترنت
   useEffect(() => {
-    setOpponentAim(null);
-  }, [roomState?.currentTurn, roomState?.status]);
+    const goOnline = () => {
+      isOnlineRef.current = true;
+      setIsOffline(false);
+      if (offlineQueueRef.current.length > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+        while (offlineQueueRef.current.length > 0) {
+          const msg = offlineQueueRef.current.shift();
+          if (msg) wsRef.current.send(JSON.stringify(msg.payload));
+        }
+      }
+    };
+    const goOffline = () => {
+      isOnlineRef.current = false;
+      setIsOffline(true);
+      setConnectionGrade('dead');
+      onGradeRef.current?.('dead');
+    };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   const connect = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | Difficulty = false, isReconnect = false) => {
     if (!isReconnect) {
       reconnectAttemptRef.current = 0;
+      resetMetrics();
     }
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+    if (pingTimerRef.current) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
+    }
+    if (pongTimeoutRef.current) {
+      clearTimeout(pongTimeoutRef.current);
+      pongTimeoutRef.current = null;
     }
 
     setPhysicsFrames(null);
@@ -78,7 +137,10 @@ export function useBilliardsSocket({
     let aiScheduled = autoJoinAI;
 
     fallbackTimerRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
       setErrorRef.current('Backend Server Offline. Entering Local Practice Mode.');
+      setConnectionGrade('poor');
+      onGradeRef.current?.('poor');
       setRoomState({
         roomId: targetRoomId,
         name: (targetRoomId || '').replace(/_/g, ' '),
@@ -114,15 +176,17 @@ export function useBilliardsSocket({
         scratchOccurred: false,
         escrowHash: 'mock-offline-hash-00000000'
       });
-    }, 1000);
+    }, 2000);
 
     ws.onopen = () => {
       if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
       reconnectAttemptRef.current = 0;
+      setConnectionGrade('excellent');
+      onGradeRef.current?.('excellent');
+      setIsReconnecting(false);
       const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
 
       if (isReconnect) {
-        // Try reconnecting to existing game first
         ws.send(JSON.stringify({ type: 'reconnect', token }));
       } else {
         ws.send(JSON.stringify({
@@ -134,17 +198,47 @@ export function useBilliardsSocket({
         }));
       }
       if (mountedRef.current) setErrorRef.current(null);
+
+      // بدء مؤقت ping/pann لمراقبة جودة الاتصال
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+      pingTimerRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          markPingSent();
+          ws.send(JSON.stringify({ type: 'ping' }));
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          pongTimeoutRef.current = setTimeout(() => {
+            setConnectionGrade('poor');
+            onGradeRef.current?.('poor');
+          }, CONNECTION_TIMEOUT);
+        }
+      }, PING_INTERVAL);
+
+      while (offlineQueueRef.current.length > 0) {
+        const msg = offlineQueueRef.current.shift();
+        if (msg) ws.send(JSON.stringify(msg.payload));
+      }
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
 
+        if (msg.type === 'pong') {
+          markPongReceived();
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          const grade = getConnectionGrade();
+          setConnectionGrade(grade);
+          onGradeRef.current?.(grade);
+          return;
+        }
+
         switch (msg.type) {
           case 'sync_state':
             if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
             if (mountedRef.current) {
               setIsReconnecting(false);
+              setConnectionGrade('excellent');
+              onGradeRef.current?.('excellent');
             }
             wasInActiveGameRef.current = msg.state.status === 'playing' || msg.state.status === 'ready';
             if (mountedRef.current) {
@@ -177,7 +271,6 @@ export function useBilliardsSocket({
             }
             break;
           case 'disconnect_notice':
-            // Opponent disconnected — show waiting state
             if (mountedRef.current) {
               setRoomState((prev: any) => {
                 if (!prev) return prev;
@@ -190,7 +283,6 @@ export function useBilliardsSocket({
             setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 30000);
             break;
           case 'reconnect_notice':
-            // Opponent reconnected
             if (mountedRef.current) {
               setRoomState((prev: any) => {
                 if (!prev) return prev;
@@ -207,7 +299,6 @@ export function useBilliardsSocket({
             break;
           case 'error':
             if (isReconnect) {
-              // Reconnect failed — fall back to join
               if (mountedRef.current) setIsReconnecting(false);
               if (reconnectRef.current) {
                 const token2 = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
@@ -231,18 +322,33 @@ export function useBilliardsSocket({
     };
 
     ws.onclose = () => {
-      // Use ref to avoid stale closure — roomState in render closure may be null
+      if (pingTimerRef.current) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+      if (pongTimeoutRef.current) {
+        clearTimeout(pongTimeoutRef.current);
+        pongTimeoutRef.current = null;
+      }
+
       const currentRoom = roomStateRef.current;
       if (currentRoom && (currentRoom.status === 'playing' || currentRoom.status === 'ready')) {
         wasInActiveGameRef.current = true;
         if (mountedRef.current) setIsReconnecting(true);
       }
 
-      // Exponential backoff reconnection (1s, 2s, 4s, 8s, max 30s)
-      if (reconnectRef.current && reconnectAttemptRef.current < 5) {
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+      if (!isOnlineRef.current) {
+        setConnectionGrade('dead');
+        onGradeRef.current?.('dead');
+        return;
+      }
+
+      if (reconnectRef.current && reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
+        const delay = getBackoffDelay(reconnectAttemptRef.current);
         reconnectAttemptRef.current++;
-        if (mountedRef.current) setErrorRef.current(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...`);
+        setConnectionGrade('poor');
+        onGradeRef.current?.('poor');
+        if (mountedRef.current) setErrorRef.current(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s... (attempt ${reconnectAttemptRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
         reconnectTimerRef.current = setTimeout(() => {
           if (reconnectRef.current) {
             connect(reconnectRef.current.targetRoomId, reconnectRef.current.customStake, reconnectRef.current.autoJoinAI, true);
@@ -252,10 +358,14 @@ export function useBilliardsSocket({
         if (mountedRef.current) setIsReconnecting(false);
         wasInActiveGameRef.current = false;
         reconnectRef.current = null;
+        setConnectionGrade('dead');
+        onGradeRef.current?.('dead');
       }
     };
 
     ws.onerror = () => {
+      setConnectionGrade('poor');
+      onGradeRef.current?.('poor');
     };
   }, []);
 
@@ -265,36 +375,40 @@ export function useBilliardsSocket({
     connect(targetRoomId, customStake, autoJoinAI);
   }, [connect]);
 
-  const handlePreviewAim = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
+  function sendOrQueue(payload: Record<string, any>): boolean {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'preview_aim', angle, power, spinX: spinX || 0, spinY: spinY || 0 }));
+      wsRef.current.send(JSON.stringify(payload));
+      return true;
     }
+    offlineQueueRef.current.push({ type: payload.type, payload, timestamp: Date.now() });
+    return false;
+  }
+
+  const handlePreviewAim = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
+    sendOrQueue({ type: 'preview_aim', angle, power, spinX: spinX || 0, spinY: spinY || 0 });
   }, []);
 
   const handleShoot = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }));
-    } else if (roomState) {
-      pendingShotRef.current = { angle, power };
+    } else {
+      offlineQueueRef.current.push({ type: 'shoot', payload: { type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }, timestamp: Date.now() });
+      if (roomState) {
+        pendingShotRef.current = { angle, power };
+      }
     }
   }, [roomState]);
 
   const handleResetCueBall = useCallback((x: number, y: number) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'reset_cue_ball', x, y }));
-    }
+    sendOrQueue({ type: 'reset_cue_ball', x, y });
   }, []);
 
   const handleJoinAI = useCallback((difficulty: Difficulty = 'medium') => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'set_ai_opponent', difficulty }));
-    }
+    sendOrQueue({ type: 'set_ai_opponent', difficulty });
   }, []);
 
   const handleSendChat = useCallback((message: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'chat', message }));
-    }
+    sendOrQueue({ type: 'chat', message });
   }, []);
 
   const handleRematch = useCallback(() => {
@@ -396,6 +510,8 @@ export function useBilliardsSocket({
     setPhysicsFrames,
     opponentAim,
     isReconnecting,
+    connectionGrade,
+    isOffline,
     handleJoinRoom,
     handlePreviewAim,
     handleShoot,

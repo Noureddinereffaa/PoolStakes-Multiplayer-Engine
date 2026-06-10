@@ -1,14 +1,40 @@
 {
-  "name": "8-Ball Pool",
+  "name": "8-Ball Pool - Multiplayer",
   "short_name": "8-Ball Pool",
-  "description": "Multiplayer 8-Ball Pool with real-money stakes, provably fair gameplay, and AI opponents",
-  "start_url": "/",
+  "description": "Multiplayer 8-Ball Pool with real-money stakes, provably fair gameplay, AI opponents, and offline practice mode",
+  "start_url": "/?source=pwa",
   "display": "standalone",
   "orientation": "landscape",
   "background_color": "#000000",
-  "theme_color": "#000000",
+  "theme_color": "#020617",
   "scope": "/",
+  "id": "/",
   "prefer_related_applications": false,
+  "categories": ["games", "sports", "entertainment"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Quick Play vs AI",
+      "short_name": "vs AI",
+      "description": "Start a quick match against an AI opponent",
+      "url": "/dashboard?mode=ai&difficulty=medium",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Join Room",
+      "short_name": "Join",
+      "description": "Join a multiplayer room",
+      "url": "/dashboard?mode=join",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Rules",
+      "short_name": "Rules",
+      "description": "View game rules",
+      "url": "/rules",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },

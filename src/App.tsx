@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { RoomState, Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import RulesPage from './components/RulesPage';
 import MemberDashboard from './components/MemberDashboard';
 import ArenaPage from './components/ArenaPage';
-import { ShieldAlert, LogOut, User, X } from 'lucide-react';
+import ConnectionStatus from './components/ConnectionStatus';
+import { ShieldAlert, LogOut, User, X, Wifi, Maximize, Smartphone } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
+import { isMobileDevice, isStandalone, requestWakeLock, releaseWakeLock, enterFullscreen } from './utils/mobile';
 
 interface ToastItem {
   id: number;
@@ -42,7 +44,33 @@ let toastIdCounter = 0;
 
 export default function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [installed, setInstalled] = useState(() => localStorage.getItem('pwa_installed') === 'true');
+
+  // استعادة التمرير عند مغادرة صفحة الساحة
+  function restoreBodyScroll() {
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('position');
+    document.body.style.removeProperty('width');
+    document.body.style.removeProperty('height');
+    document.body.style.removeProperty('top');
+    document.body.style.removeProperty('left');
+    document.documentElement.style.removeProperty('overflow');
+  }
+
+  useEffect(() => {
+    const isArena = location.pathname === '/arena';
+    if (!isArena) {
+      restoreBodyScroll();
+    }
+  }, [location.pathname]);
+
+  // تأكد من التمرير عند تحميل الصفحة الرئيسية أول مرة
+  useEffect(() => {
+    if (location.pathname !== '/arena') {
+      restoreBodyScroll();
+    }
+  }, []);
   const [showInstallOverlay, setShowInstallOverlay] = useState(false);
   const deferredInstallRef = useRef<any>(null);
   const toastTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
@@ -59,9 +87,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const onInstallPrompt = (e: any) => { e.preventDefault(); deferredInstallRef.current = e; };
+    const onInstallPrompt = (e: any) => {
+      e.preventDefault();
+      deferredInstallRef.current = e;
+      if (isMobileDevice() && !installed) setShowInstallOverlay(true);
+    };
     const onInstalled = () => { setInstalled(true); localStorage.setItem('pwa_installed', 'true'); };
-    const onStandalone = () => { if (window.matchMedia('(display-mode: standalone)').matches) { setInstalled(true); localStorage.setItem('pwa_installed', 'true'); } };
+    const onStandalone = () => {
+      if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true) {
+        setInstalled(true);
+        localStorage.setItem('pwa_installed', 'true');
+      }
+    };
     window.addEventListener('beforeinstallprompt', onInstallPrompt);
     window.addEventListener('appinstalled', onInstalled);
     onStandalone();
@@ -71,7 +108,7 @@ export default function App() {
       window.removeEventListener('appinstalled', onInstalled);
       window.matchMedia('(display-mode: standalone)').removeEventListener('change', onStandalone);
     };
-  }, []);
+  }, [installed]);
 
   // Authentication & session state
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -160,6 +197,8 @@ export default function App() {
     setPhysicsFrames,
     opponentAim,
     isReconnecting,
+    connectionGrade,
+    isOffline,
     handleJoinRoom,
     handlePreviewAim,
     handleShoot,
@@ -191,6 +230,23 @@ export default function App() {
     fetchLaravelUsers();
     fetchApiLogs();
   }, []);
+
+  // Wake lock for mobile when in game
+  useEffect(() => {
+    if (roomState && (roomState.status === 'playing' || roomState.status === 'ready')) {
+      if (isMobileDevice()) requestWakeLock();
+    } else {
+      if (isMobileDevice()) releaseWakeLock();
+    }
+    return () => { releaseWakeLock(); };
+  }, [roomState?.status]);
+
+  // Auto-enter fullscreen on mobile when joining a game
+  useEffect(() => {
+    if (roomState && (roomState.status === 'playing' || roomState.status === 'ready') && isMobileDevice() && !isStandalone()) {
+      enterFullscreen(document.getElementById('arena-container') || document.body);
+    }
+  }, [roomState?.status, roomState?.roomId]);
 
   // Sync lobby connection state
   useEffect(() => {
@@ -322,13 +378,21 @@ export default function App() {
     addToast('success', 'Secure logout complete. Your USDT balance is archived.');
   };
 
-  const handleCopyRoomCode = () => {
+  const handleShareRoom = () => {
     if (!roomState) return;
-    navigator.clipboard.writeText(roomState.roomId).then(() => {
-      addToast('success', 'Room access code copied. Share it with your opponent!');
-    }).catch(() => {
-      addToast('error', 'Unable to copy invite code automatically.');
-    });
+    if ((navigator as any).share) {
+      (navigator as any).share({
+        title: '8-Ball Pool',
+        text: `Join my 8-Ball Pool game! Room: ${roomState.roomId}`,
+        url: window.location.origin,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(roomState.roomId).then(() => {
+        addToast('success', 'Room access code copied. Share it with your opponent!');
+      }).catch(() => {
+        addToast('error', 'Unable to copy invite code automatically.');
+      });
+    }
   };
 
   const onChatSubmit = (e: React.FormEvent) => {
@@ -486,7 +550,7 @@ export default function App() {
         } />
         <Route path="/arena" element={
           userSession ? (
-            <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
+            <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
 
               {/* Visual background emerald radial glow highlights */}
               <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />
@@ -538,7 +602,8 @@ export default function App() {
                 </div>
 
                 {userSession ? (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <ConnectionStatus connectionGrade={connectionGrade} isOffline={isOffline} language={language} />
                     <div className="hidden md:flex flex-col items-end text-right">
                       <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
                         <User className="w-3.5 h-3.5 text-slate-500" /> {userSession.username}
@@ -616,34 +681,32 @@ export default function App() {
         } />
       </Routes>
 
-      {/* Mobile install overlay — not installed / installed */}
+      {/* Mobile install overlay */}
       {showInstallOverlay && !installed && (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
           <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
-            <svg className="w-14 h-14 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+            <Smartphone className="w-14 h-14 text-amber-400" />
           </div>
-          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'حمّل التطبيق للعب' : 'DOWNLOAD APP TO PLAY'}</div>
+          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'ثبّت التطبيق' : 'INSTALL APP'}</div>
           <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">
             {deferredInstallRef.current
-              ? (language === 'ar' ? 'اضغط على زر التثبيت أدناه' : 'Tap the install button below')
-              : (language === 'ar' ? 'استخدم القائمة ⋮ ← تثبيت التطبيق' : 'Use browser menu ⋮ → Install app')}
+              ? (language === 'ar' ? 'جرب التطبيق الأصلي لأداء أسرع ولعب دون اتصال' : 'Get the native app for faster performance & offline play')
+              : (language === 'ar' ? 'استخدم ⋮ ← تثبيت التطبيق من المتصفح' : 'Use ⋮ → Install app from your browser menu')}
           </div>
           <button
             onClick={async () => {
               if (deferredInstallRef.current) {
                 deferredInstallRef.current.prompt();
                 const res = await deferredInstallRef.current.userChoice;
-                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح التطبيق من الشاشة الرئيسية' : 'App installed! Open from home screen.', 5000); }
+                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح من الشاشة الرئيسية' : 'App installed! Open from home screen', 5000); }
               } else {
                 setShowInstallOverlay(false);
-                addToast('success', languageRef.current === 'ar' ? 'استخدم القائمة ⋮ ← تثبيت التطبيق' : 'Use browser menu ⋮ → Install app', 6000);
+                addToast('success', languageRef.current === 'ar' ? 'استخدم القائمة ⋮ ← تثبيت التطبيق' : 'Use ⋮ → Install app', 6000);
               }
             }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-          >📲 {language === 'ar' ? 'تثبيت التطبيق' : 'INSTALL APP'}</button>
-          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline">{language === 'ar' ? 'تخطي' : 'Skip'}</button>
+          >📲 {language === 'ar' ? 'تثبيت' : 'INSTALL'}</button>
+          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline hover:text-amber-600/60 transition">{language === 'ar' ? 'تخطي' : 'Skip'}</button>
         </div>
       )}
       {showInstallOverlay && installed && (
@@ -653,12 +716,12 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <div className="text-lg font-black font-mono text-emerald-400">{language === 'ar' ? 'تم التثبيت ✓' : 'APP INSTALLED ✓'}</div>
-          <div className="text-xs text-emerald-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'افتح التطبيق من الشاشة الرئيسية' : 'Open the app from your home screen'}</div>
+          <div className="text-lg font-black font-mono text-emerald-400">{language === 'ar' ? '✓ تم التثبيت' : 'APP INSTALLED ✓'}</div>
+          <div className="text-xs text-emerald-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'افتح التطبيق من الشاشة الرئيسية لتجربة كاملة' : 'Open the app from your home screen for the full experience'}</div>
           <button
             onClick={() => { setShowInstallOverlay(false); }}
             className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-          >{language === 'ar' ? 'متابعة إلى لوحة التحكم' : 'CONTINUE TO DASHBOARD'}</button>
+          >{language === 'ar' ? 'متابعة' : 'CONTINUE'}</button>
         </div>
       )}
     </>
