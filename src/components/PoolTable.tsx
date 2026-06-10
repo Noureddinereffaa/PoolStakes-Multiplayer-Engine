@@ -206,7 +206,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
-      const basePlayMultiplier = physicsFrames.length > 350 ? 1.95 : 1.65;
+      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.6 : 1.95) : (isMobile.current ? 2.2 : 1.65);
       let animationFrameId: number;
       const animStartTime = performance.now();
       const STRIKE_ACCEL = 8;
@@ -410,6 +410,15 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     if (isMyTurnRef.current && !roomStateRef.current.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed) {
+        if (isMobile.current) {
+          // Mobile: just track aim on hover, no pull/shoot from canvas
+          if (!isAimLockedRef.current && !isInitialDown) {
+            const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+            setAimAngle(newAngle);
+            aimAngleRef.current = newAngle;
+          }
+          return;
+        }
         if (isInitialDown) {
           pullStartPosRef.current = coords;
           setIsPulling(true);
@@ -421,36 +430,20 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             initialAimAngleRef.current = newAngle;
           }
         } else if (pullStartPosRef.current) {
-          if (isMobile.current) {
-            // Mobile: aim always follows finger + power from downward drag
-            const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
-            if (cueBall && !isAimLockedRef.current) {
-              const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-              setAimAngle(newAngle);
-              aimAngleRef.current = newAngle;
-            }
-            const dragDy = coords.y - pullStartPosRef.current.y;
-            const rawPower = Math.min(100, Math.max(0, dragDy / 1.7));
-            const curvedPower = Math.pow(rawPower / 100, 0.7) * 100;
-            const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
-            setShotPower(power);
-            shotPowerRef.current = power;
-          } else {
-            if (!isAimLockedRef.current) {
-              const dx = coords.x - pullStartPosRef.current.x;
-              const dy = coords.y - pullStartPosRef.current.y;
-              const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-              const newAngle = initialAimAngleRef.current + orthoDrag * 0.003;
-              setAimAngle(newAngle);
-              aimAngleRef.current = newAngle;
-            }
-            const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
-            const rawPower = Math.min(100, dragDist / 2.4);
-            const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
-            const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
-            setShotPower(power);
-            shotPowerRef.current = power;
+          if (!isAimLockedRef.current) {
+            const dx = coords.x - pullStartPosRef.current.x;
+            const dy = coords.y - pullStartPosRef.current.y;
+            const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
+            const newAngle = initialAimAngleRef.current + orthoDrag * 0.003;
+            setAimAngle(newAngle);
+            aimAngleRef.current = newAngle;
           }
+          const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
+          const rawPower = Math.min(100, dragDist / 2.4);
+          const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
+          const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
+          setShotPower(power);
+          shotPowerRef.current = power;
         } else if (!isAimLockedRef.current) {
           const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
           setAimAngle(newAngle);
@@ -466,7 +459,19 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const handlePointerMove = (e: any) => {
     if (isAnimatingRef.current) return;
     if (isPointerActive || pullStartPosRef.current) handlePointerAction(e, false);
-    else if (isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
+    else if (isMobile.current) {
+      // Mobile: always track aim on hover without needing pointer down
+      if (isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
+        const coords = getPointerCoords(e);
+        if (coords) {
+          const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
+          if (cueBall && !cueBall.isPocketed) {
+            aimAngleRef.current = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+            setAimAngle(aimAngleRef.current);
+          }
+        }
+      }
+    } else if (isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
       const coords = getPointerCoords(e);
       if (coords) {
         const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
@@ -505,6 +510,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const handlePointerUp = () => {
     setIsPointerActive(false);
+    if (isMobile.current) return; // mobile uses external shoot button
     if (isPullingRef.current) {
       const p = shotPowerRef.current;
       setIsPulling(false);
@@ -534,15 +540,24 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   useImperativeHandle(ref, () => ({
     spinX, spinY, shotPower, isAimLocked, aimAngle,
-    setSpinX, setSpinY, setShotPower, setIsAimLocked, setAimAngle,
+    setSpinX, setSpinY, setShotPower: (v: number) => { setShotPower(v); shotPowerRef.current = v; },
+    setIsAimLocked: (v: boolean) => { setIsAimLocked(v); isAimLockedRef.current = v; },
+    setAimAngle: (v: number | ((prev: number) => number)) => {
+      if (typeof v === 'function') {
+        setAimAngle((prev) => { const n = v(prev); aimAngleRef.current = n; return n; });
+      } else {
+        setAimAngle(v); aimAngleRef.current = v;
+      }
+    },
     handleShoot: handleShootClick,
     hudNotification,
-  }), [spinX, spinY, shotPower, isAimLocked, aimAngle, hudNotification]);
+    handleResetCueBall: (x: number, y: number) => { onResetCueBall(x, y); setIsScratchPlacing(false); },
+  }), [spinX, spinY, shotPower, isAimLocked, aimAngle, hudNotification, onResetCueBall]);
 
   return (
     <div ref={containerRef} className="w-full h-full relative bg-gradient-to-b from-[#0a0604] to-[#040201] overflow-hidden">
       {/* Pure Canvas - fills container, zero overlays */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center" style={{ willChange: 'transform' }}>
         <div className="w-full h-full flex items-center justify-center">
           <canvas
             ref={canvasRef}

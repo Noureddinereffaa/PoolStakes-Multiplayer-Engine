@@ -114,10 +114,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     const ctx2d = canvas.getContext('2d');
     if (!ctx2d) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = ctx.isMobileRef.current ? Math.min(window.devicePixelRatio || 1, 1.25) : Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
     ctx2d.scale(dpr, dpr);
+    ctx2d.imageSmoothingEnabled = true;
 
     // Render loop with idle stop
     let lastFrameTime = performance.now();
@@ -686,8 +687,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx.offscreenCanvasRef.current = offCanvas;
     }
 
-    // Initialize atmospheric dust specks if empty
-    if (ctx.dustSpecksRef.current.length === 0) {
+    // Atmospheric dust specks (only on desktop — subtle ambient effect)
+    if (!ctx.isMobileRef.current && ctx.dustSpecksRef.current.length === 0) {
       for (let i = 0; i < 15; i++) {
         ctx.dustSpecksRef.current.push({
           x: Math.random() * 760 + 20,
@@ -1320,6 +1321,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.restore();
 
         // Environment reflection (simulated room with warm ceiling and cool windows)
+        if (!ctx.isMobileRef.current) {
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         // Room ceiling light panel reflection (top area)
@@ -1367,6 +1369,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fillStyle = warmGrad;
         ctx2d.fill();
         ctx2d.restore();
+        } // end if !isMobile
 
         // Number Badges - improved 3D tracking
         if (b.id !== 0 && b.number) {
@@ -3585,7 +3588,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx2d.fillRect(0, 0, 800, 400);
       ctx2d.restore();
 
-      // Bright pass bloom (subtle glow on white areas)
+      // Bright pass bloom (subtle glow on white areas) — skip on mobile for performance
+      if (!ctx.isMobileRef.current) {
       ctx2d.save();
       ctx2d.globalCompositeOperation = 'lighter';
       ctx2d.globalAlpha = 0.06;
@@ -3593,6 +3597,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx2d.drawImage(canvas, 0, 0);
       ctx2d.filter = 'none';
       ctx2d.restore();
+      }
 
       // 10. Frame continuation
       animationId =

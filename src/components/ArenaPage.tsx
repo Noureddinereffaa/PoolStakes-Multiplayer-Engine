@@ -4,7 +4,8 @@ import { RoomState, Difficulty } from '../types';
 import { isMobileDevice, hideBrowserChrome, isStandalone, enterFullscreen as enterMobileFS } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
-  Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot, Volume2, VolumeX
+  Maximize, Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, Trophy, X, Users, Bot, Volume2, VolumeX,
+  ArrowUpCircle, ArrowDownCircle, ArrowLeftCircle, ArrowRightCircle, Crosshair
 } from 'lucide-react';
 import { ProvablyFairVerify } from './ProvablyFairVerify';
 import { poolAudio } from '../utils/audio';
@@ -541,32 +542,62 @@ export default function ArenaPage({
             </motion.div>
           )}
 
-          {/* Right side compact controls */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 p-2 rounded-2xl bg-black/30 backdrop-blur-sm border border-amber-900/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+          {/* Right side controls */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 p-2 rounded-2xl bg-black/40 backdrop-blur-md border border-amber-900/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
+
+            {/* Desktop: lock + power bar + shoot */}
             {!isMobile && (
-              <button onClick={() => setIsAimLocked(!isAimLocked)}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
-              >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
-            )}
-            {!isMobile && (
-              <div className="flex flex-col items-center gap-0.5">
-                <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
-                  <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
+              <>
+                <button onClick={() => setIsAimLocked(!isAimLocked)}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
+                >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
+                <div className="flex flex-col items-center gap-0.5">
+                  <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
+                    <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
+                  </div>
+                  <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
                 </div>
-                <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
-              </div>
+                <button onClick={handleShootClick}
+                  disabled={!isMyTurn}
+                  className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+                ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+              </>
             )}
-            {!isMobile && (
-              <button onClick={handleShootClick}
+
+            {/* Mobile: aim joystick + shoot button */}
+            {isMobile && (
+              <MobileAimJoystick
+                aimAngle={aimAngle}
+                onAim={(angle) => { tableRef.current?.setAimAngle(angle); }}
                 disabled={!isMyTurn}
-                className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
-              ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+              />
             )}
+
             <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
               className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300 transition-all"
             >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
           </div>
+
+          {/* Mobile: shoot button at bottom right */}
+          {isMobile && (
+            <MobileShootButton
+              shotPower={shotPower}
+              onShoot={handleShootClick}
+              onPowerChange={(p) => tableRef.current?.setShotPower(p)}
+              disabled={!isMyTurn}
+              isAr={language === 'ar'}
+            />
+          )}
+
+          {/* Mobile arrow guides */}
+          {isMobile && (
+            <MobileArrowGuides
+              aimAngle={aimAngle}
+              shotPower={shotPower}
+              isMyTurn={isMyTurn}
+            />
+          )}
 
 
         </div>
@@ -631,5 +662,190 @@ export default function ArenaPage({
         </motion.div>
       )}
     </motion.div>
+  );
+}
+
+/* ─── Mobile Aim Joystick ─── */
+function MobileAimJoystick({ aimAngle, onAim, disabled }: {
+  aimAngle: number; onAim: (angle: number) => void; disabled: boolean;
+}) {
+  const baseRef = useRef<HTMLDivElement>(null);
+  const [delta, setDelta] = useState({ x: 0, y: 0 });
+  const aimRef = useRef(aimAngle);
+  aimRef.current = aimAngle;
+  const sensitivity = 0.012;
+
+  const handleStart = (e: React.PointerEvent) => {
+    if (disabled) return;
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - cx;
+      const dy = ev.clientY - cy;
+      const clampedDx = Math.max(-24, Math.min(24, dx));
+      const clampedDy = Math.max(-24, Math.min(24, dy));
+      setDelta({ x: clampedDx, y: clampedDy });
+      onAim(aimRef.current + clampedDx * sensitivity);
+    };
+    const up = () => {
+      setDelta({ x: 0, y: 0 });
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+    };
+    move(e.nativeEvent as any);
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
+
+  return (
+    <div className="relative flex flex-col items-center gap-1 select-none">
+      <div
+        ref={baseRef}
+        onPointerDown={handleStart}
+        className="w-12 h-12 rounded-full cursor-pointer touch-none select-none flex items-center justify-center"
+        style={{
+          background: 'radial-gradient(circle at 40% 35%, #1a1208, #0d0806 80%, #000)',
+          boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.7), 0 0 15px rgba(0,0,0,0.4), 0 0 0 1px rgba(217,119,6,0.2)',
+        }}
+      >
+        <div
+          className="w-4 h-4 rounded-full transition-all duration-75"
+          style={{
+            transform: `translate(${delta.x}px, ${delta.y}px)`,
+            background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
+            boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.3)',
+            border: '1px solid rgba(255,255,200,0.3)',
+          }}
+        />
+      </div>
+      <span className="text-[5px] font-mono text-amber-500/60 tracking-widest">AIM</span>
+      {disabled && <div className="absolute inset-0 rounded-full bg-black/40" />}
+    </div>
+  );
+}
+
+/* ─── Mobile Shoot Button (hold to charge, release to shoot) ─── */
+function MobileShootButton({ shotPower, onShoot, onPowerChange, disabled, isAr }: {
+  shotPower: number; onShoot: () => void; onPowerChange: (p: number) => void; disabled: boolean; isAr: boolean;
+}) {
+  const [charging, setCharging] = useState(false);
+  const chargeRef = useRef<ReturnType<typeof setInterval>>(undefined);
+  const powerRef = useRef(shotPower);
+  powerRef.current = shotPower;
+
+  const startCharge = () => {
+    if (disabled) return;
+    setCharging(true);
+    onPowerChange(5);
+    chargeRef.current = setInterval(() => {
+      const next = Math.min(100, powerRef.current + 3);
+      onPowerChange(next);
+    }, 30);
+  };
+
+  const stopCharge = () => {
+    setCharging(false);
+    clearInterval(chargeRef.current);
+    if (!disabled) onShoot();
+  };
+
+  useEffect(() => () => clearInterval(chargeRef.current), []);
+
+  return (
+    <div className="absolute bottom-6 right-4 z-20 flex flex-col items-center gap-1.5">
+      {/* Power indicator */}
+      <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full border border-amber-900/30">
+        <div className="w-12 h-1.5 rounded-full bg-amber-950 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-100 ${charging ? 'bg-gradient-to-r from-amber-500 to-rose-400' : 'bg-amber-500/60'}`}
+            style={{ width: `${shotPower}%` }}
+          />
+        </div>
+        <span className="text-[7px] font-mono text-amber-400/80 w-5 text-right">{shotPower}</span>
+      </div>
+      {/* Shoot button */}
+      <button
+        onPointerDown={startCharge}
+        onPointerUp={stopCharge}
+        onPointerLeave={stopCharge}
+        disabled={disabled}
+        className={`touch-none select-none w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-xl active:scale-95
+          ${disabled
+            ? 'bg-slate-800/50 border border-slate-700/30 opacity-40'
+            : charging
+              ? 'bg-gradient-to-br from-rose-500 to-rose-700 shadow-rose-500/40 scale-110 border border-rose-400/40'
+              : 'bg-gradient-to-br from-amber-500 to-amber-700 shadow-amber-500/30 border border-amber-400/30 hover:shadow-amber-500/50'
+          }`}
+      >
+        <div className={`w-5 h-5 rounded-full transition-all duration-150 ${charging ? 'bg-white/90' : 'bg-white/80'}`} />
+      </button>
+      <span className="text-[5px] font-mono text-amber-500/60 tracking-widest">
+        {isAr ? 'تسديد' : 'SHOOT'}
+      </span>
+    </div>
+  );
+}
+
+/* ─── Mobile Arrow Guides ─── */
+function MobileArrowGuides({ aimAngle, shotPower, isMyTurn }: {
+  aimAngle: number; shotPower: number; isMyTurn: boolean;
+}) {
+  const [visible, setVisible] = useState(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    setVisible(true);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setVisible(false), 2500);
+  }, [aimAngle, shotPower]);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  if (!isMyTurn) return null;
+
+  const deg = (aimAngle * 180) / Math.PI;
+  const leftArrow = deg > 10;
+  const rightArrow = deg < -10;
+  const showArrow = Math.abs(deg) > 5;
+
+  return (
+    <>
+      {/* Top: shot direction arrow */}
+      <div
+        className={`absolute top-16 left-1/2 -translate-x-1/2 z-10 transition-all duration-500 pointer-events-none
+          ${visible ? 'opacity-60' : 'opacity-0'}`}
+      >
+        <div
+          className="flex items-center gap-2"
+          style={{ transform: `rotate(${-deg}deg)` }}
+        >
+          <div className="h-px w-16 bg-gradient-to-l from-amber-400/60 to-transparent" />
+          <div className="w-0 h-0 border-t-[5px] border-t-transparent border-l-[8px] border-l-amber-400/60 border-b-[5px] border-b-transparent" />
+          <span className="text-[6px] font-mono text-amber-400/50 whitespace-nowrap tracking-widest">SHOT</span>
+        </div>
+      </div>
+
+      {/* Right side: aim direction arrows */}
+      <div className={`absolute right-14 top-1/2 -translate-y-1/2 z-10 transition-all duration-500 pointer-events-none flex flex-col items-center gap-1
+        ${visible && showArrow ? 'opacity-50' : 'opacity-0'}`}>
+        {leftArrow && <ArrowUpCircle className="w-4 h-4 text-amber-400/70 -rotate-90" />}
+        {rightArrow && <ArrowDownCircle className="w-4 h-4 text-amber-400/70 -rotate-90" />}
+        <span className="text-[5px] font-mono text-amber-500/40 tracking-widest">AIM</span>
+      </div>
+
+      {/* Bottom-left: power arrows */}
+        <div className={`absolute bottom-20 left-4 z-10 transition-all duration-500 pointer-events-none flex items-center gap-1.5
+          ${visible ? 'opacity-50' : 'opacity-0'}`}>
+          <ArrowUpCircle className="w-4 h-4 text-amber-400/70" />
+          <div className="relative h-10 w-1.5 rounded-full bg-amber-950/80 overflow-hidden border border-amber-900/30">
+            <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 to-rose-400 transition-all duration-100" style={{ height: `${shotPower}%` }} />
+          </div>
+          <ArrowDownCircle className="w-4 h-4 text-amber-400/70" />
+          <span className="text-[5px] font-mono text-amber-500/40 tracking-widest ml-1">PWR</span>
+        </div>
+    </>
   );
 }

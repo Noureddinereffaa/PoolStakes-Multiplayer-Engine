@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { isIOS, isStandalone } from '../utils/mobile';
-import { Smartphone, Download, Share2, ArrowLeft, CheckCircle, Tablet, Maximize2, ExternalLink } from 'lucide-react';
+import { Download, Share2, ArrowLeft, CheckCircle, Smartphone, Tablet, Zap, Shield, Star, Users, Trophy, Sparkles, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface PwaInstallScreenProps {
   deferredInstall: any;
@@ -8,11 +8,14 @@ interface PwaInstallScreenProps {
   onInstallComplete?: () => void;
 }
 
+const ballEmojis = ['🔴', '🟡', '🔵', '🟢', '🟠', '🟣', '⚫', '🔴', '🟡', '🔵', '🟢', '🟠', '🟣', '⚪', '⚫'];
+
 export default function PwaInstallScreen({ deferredInstall, language, onInstallComplete }: PwaInstallScreenProps) {
-  const [step, setStep] = useState<'checking' | 'install' | 'installing' | 'done' | 'open'>('checking');
+  const [step, setStep] = useState<'checking' | 'install' | 'installing' | 'open'>('checking');
   const [installError, setInstallError] = useState<string | null>(null);
   const [detectedInstalled, setDetectedInstalled] = useState(false);
   const [closeAttempted, setCloseAttempted] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
   const isAr = language === 'ar';
   const isiOS = isIOS();
   const deferredRef = useRef(deferredInstall);
@@ -48,7 +51,6 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
     return () => clearInterval(poll);
   }, [onInstallComplete]);
 
-  // Listen for appinstalled event even if it fires later
   useEffect(() => {
     const onAppInstalled = () => {
       localStorage.setItem('pwa_installed', 'true');
@@ -70,6 +72,7 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
         const result = await promptEvent.userChoice;
         if (result.outcome === 'accepted') {
           localStorage.setItem('pwa_installed', 'true');
+          setDetectedInstalled(true);
           setStep('open');
           onInstallComplete?.();
         } else {
@@ -91,19 +94,51 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
     window.close();
   };
 
+  if (step === 'checking') {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-gradient-to-b from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex items-center justify-center">
+        <div className="w-12 h-12 rounded-full border-4 border-emerald-500/30 border-t-emerald-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[9999] bg-gradient-to-b from-[#0a0a0f] via-[#0d1117] to-[#0a0a0f] flex flex-col items-center justify-center overflow-y-auto" dir={isAr ? 'rtl' : 'ltr'}>
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-[100px] pointer-events-none" />
+      {/* Ambient glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-emerald-500/5 rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-[500px] h-[500px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="relative z-10 w-full max-w-md mx-auto px-6 py-10 flex flex-col items-center gap-8">
+      {/* Floating decorative balls */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {ballEmojis.slice(0, 6).map((emoji, i) => (
+          <div
+            key={i}
+            className="absolute text-lg animate-float"
+            style={{
+              left: `${10 + i * 16}%`,
+              top: `${20 + (i % 3) * 25}%`,
+              animationDelay: `${i * 0.7}s`,
+              animationDuration: `${4 + i * 0.5}s`,
+              opacity: 0.08,
+              transform: `rotate(${i * 45}deg)`,
+            }}
+          >
+            {emoji}
+          </div>
+        ))}
+      </div>
 
-        {/* App Icon */}
-        <div className="relative">
-          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 flex items-center justify-center text-4xl shadow-2xl shadow-emerald-500/30 ring-2 ring-white/10">
+      <div className="relative z-10 w-full max-w-md mx-auto px-6 py-10 flex flex-col items-center gap-6">
+
+        {/* App Icon with animated ring */}
+        <div className="relative group">
+          <div className="absolute -inset-4 rounded-full bg-emerald-500/10 animate-pulse blur-md" />
+          <div className="relative w-24 h-24 rounded-3xl bg-gradient-to-br from-emerald-400 via-emerald-500 to-emerald-700 flex items-center justify-center text-4xl shadow-2xl shadow-emerald-500/30 ring-2 ring-white/10 group-hover:ring-emerald-400/30 transition-all duration-500">
             🎱
           </div>
-          <div className={`absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center shadow-lg ${detectedInstalled ? 'bg-emerald-500' : 'bg-amber-500'} ${!detectedInstalled ? 'animate-pulse' : ''}`}>
+          <div className={`absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center shadow-lg transition-all duration-500 ${
+            detectedInstalled ? 'bg-emerald-500 scale-100' : 'bg-amber-500 scale-110'
+          }`}>
             {detectedInstalled ? (
               <CheckCircle className="w-3.5 h-3.5 text-white" />
             ) : (
@@ -112,45 +147,72 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
           </div>
         </div>
 
-        {/* Title */}
-        <div className="text-center">
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-2">
-            {isAr ? '8-Ball Arena' : '8-Ball Arena'}
+        {/* Title + Subtitle */}
+        <div className="text-center space-y-2">
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            8-Ball Arena
           </h1>
-          <p className="text-sm text-slate-400 max-w-xs mx-auto">
+          <p className="text-sm text-slate-400 max-w-xs mx-auto leading-relaxed">
             {detectedInstalled
-              ? (isAr ? 'التطبيق مثبت ✓ افتحه من الشاشة الرئيسية' : 'App installed ✓ Open from home screen')
-              : (isAr ? 'ثبّت التطبيق لتجربة لعب احترافية' : 'Install the app for the best experience')}
+              ? (isAr ? '✓ التطبيق مثبت على جهازك' : '✓ App is installed on your device')
+              : (isAr ? 'ثبّت التطبيق واستمتع بتجربة لعب احترافية' : 'Install the app for a pro pool experience')}
           </p>
         </div>
 
-        {/* Step: Install */}
-        {step === 'install' && !detectedInstalled && (
-          <div className="w-full space-y-4">
+        {/* ════════════════════════════════════════════════ */}
+        {/* INSTALL VIEW */}
+        {/* ════════════════════════════════════════════════ */}
+        {(step === 'install' && !detectedInstalled) || showInstall ? (
+          <div className="w-full space-y-5">
+
+            {/* Social proof */}
+            <div className="flex items-center justify-center gap-6 text-center">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-[10px] font-mono text-slate-500">
+                  <strong className="text-emerald-400">12K+</strong> {isAr ? 'لاعب' : 'players'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Star className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[10px] font-mono text-slate-500">
+                  <strong className="text-amber-400">4.8</strong> ★
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-[10px] font-mono text-slate-500">
+                  <strong className="text-amber-400">#1</strong> {isAr ? 'بلياردو' : 'Pool'}
+                </span>
+              </div>
+            </div>
+
             {/* Feature cards */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {[
-                { icon: Smartphone, label: isAr ? 'أداء أسرع' : 'Faster', sub: isAr ? 'بدون تأخير' : 'No lag' },
-                { icon: Maximize2, label: isAr ? 'ملء الشاشة' : 'Fullscreen', sub: isAr ? 'تجربة غامرة' : 'Immersive' },
-                { icon: Bell, label: isAr ? 'إشعارات' : 'Notifications', sub: isAr ? 'عند دورك' : 'Your turn' },
-                { icon: Tablet, label: isAr ? 'دون اتصال' : 'Offline', sub: isAr ? 'اتصال ثابت' : 'Stable' },
+                { icon: Zap, label: isAr ? 'أداء خارق' : 'Turbo Speed', sub: isAr ? 'بدون تقطيع ولا تأخير' : 'Zero lag. Smooth 60fps', color: 'text-yellow-400', border: 'border-yellow-500/20', bg: 'bg-yellow-500/10' },
+                { icon: Tablet, label: isAr ? 'شاشة كاملة' : 'Fullscreen', sub: isAr ? 'تجربة غامرة بدون حدود' : 'Immersive edge-to-edge', color: 'text-emerald-400', border: 'border-emerald-500/20', bg: 'bg-emerald-500/10' },
+                { icon: Shield, label: isAr ? 'لعب عادل' : 'Provably Fair', sub: isAr ? 'خوارزمية شفافة ومصدقة' : 'Audited. Trusted. Fair.', color: 'text-blue-400', border: 'border-blue-500/20', bg: 'bg-blue-500/10' },
+                { icon: Smartphone, label: isAr ? 'تحكم ذكي' : 'Smart Touch', sub: isAr ? 'إيماءات بديهية وسلسة' : 'Intuitive gesture controls', color: 'text-purple-400', border: 'border-purple-500/20', bg: 'bg-purple-500/10' },
+                { icon: Bell, label: isAr ? 'إشعارات فورية' : 'Instant Alerts', sub: isAr ? 'نبّهني عندما يحين دوري' : 'Know when it\'s your turn', color: 'text-rose-400', border: 'border-rose-500/20', bg: 'bg-rose-500/10' },
+                { icon: Trophy, label: isAr ? 'بطولات حية' : 'Live Tourneys', sub: isAr ? 'تنافس مع الأبطال' : 'Compete for the crown', color: 'text-amber-400', border: 'border-amber-500/20', bg: 'bg-amber-500/10' },
               ].map((feat, i) => {
                 const Icon = feat.icon;
                 return (
-                  <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                      <Icon className="w-4 h-4 text-emerald-400" />
+                  <div key={i} className={`flex items-center gap-2.5 p-3 rounded-xl ${feat.bg} ${feat.border} border transition-all hover:scale-[1.02]`}>
+                    <div className={`w-7 h-7 rounded-lg ${feat.bg} ${feat.border} flex items-center justify-center shrink-0`}>
+                      <Icon className={`w-3.5 h-3.5 ${feat.color}`} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-xs font-bold text-white">{feat.label}</div>
-                      <div className="text-[10px] text-slate-500">{feat.sub}</div>
+                      <div className="text-[10px] font-bold text-white">{feat.label}</div>
+                      <div className="text-[8px] text-slate-500 truncate">{feat.sub}</div>
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Install section */}
+            {/* Install action */}
             {isiOS ? (
               <div className="w-full space-y-3">
                 <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
@@ -166,23 +228,23 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
                 </div>
                 <button
                   onClick={handleInstall}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.97] flex items-center justify-center gap-2 group"
                 >
-                  <Download className="w-5 h-5" />
+                  <Download className="w-5 h-5 group-hover:animate-bounce" />
                   {isAr ? 'تثبيت التطبيق' : 'Install App'}
                 </button>
                 <p className="text-[10px] text-amber-600/60 text-center">
-                  {isAr ? 'بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'After install, open from home screen'}
+                  {isAr ? 'مجاني • آمن • بدون إعلانات' : 'Free • Secure • No Ads'}
                 </p>
               </div>
             ) : (
               <div className="w-full space-y-3">
                 <button
                   onClick={handleInstall}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.97] flex items-center justify-center gap-2 group"
                 >
-                  <Download className="w-5 h-5" />
-                  {isAr ? 'تثبيت التطبيق' : 'Install App'}
+                  <Download className="w-5 h-5 group-hover:animate-bounce" />
+                  {isAr ? 'تثبيت التطبيق مجاناً' : 'Install App — Free'}
                 </button>
 
                 {!deferredInstall && (
@@ -206,82 +268,131 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
                 )}
 
                 <p className="text-[10px] text-slate-600 text-center">
-                  {isAr ? 'بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'After install, open the app from your home screen'}
+                  {isAr ? 'أقل من 30 ثانية • مجاني • تحديثات تلقائية' : 'Takes 30s • Free • Auto-updates'}
                 </p>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Installing */}
+            {/* Toggle to Open App */}
+            {(detectedInstalled || localStorage.getItem('pwa_installed') === 'true') && (
+              <button
+                onClick={() => { setShowInstall(false); setDetectedInstalled(true); setStep('open'); }}
+                className="w-full py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                {isAr ? 'التطبيق مثبت مسبقاً — افتحه' : 'Already installed — Open App'}
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        {/* ════════════════════════════════════════════════ */}
+        {/* INSTALLING */}
+        {/* ════════════════════════════════════════════════ */}
         {step === 'installing' && !detectedInstalled && (
           <div className="flex flex-col items-center gap-4 py-8">
-            <div className="w-16 h-16 rounded-full border-4 border-emerald-500/30 border-t-emerald-400 animate-spin" />
-            <p className="text-sm text-slate-400 animate-pulse">
+            <div className="w-20 h-20 rounded-full border-[3px] border-emerald-500/30 border-t-emerald-400 animate-spin" />
+            <p className="text-sm text-slate-400 animate-pulse font-mono">
               {isAr ? 'جاري التثبيت...' : 'Installing...'}
             </p>
+            <div className="flex items-center gap-3 text-[10px] text-slate-600">
+              <div className="flex items-center gap-1"><Zap className="w-3 h-3 text-emerald-500/60" />{isAr ? 'تحضير التطبيق' : 'Preparing app'}</div>
+              <div className="flex items-center gap-1"><Shield className="w-3 h-3 text-emerald-500/60" />{isAr ? 'التحقق من الأمان' : 'Security check'}</div>
+            </div>
           </div>
         )}
 
-        {/* Open App state (detected as installed) */}
-        {detectedInstalled && !closeAttempted && (
-          <div className="w-full space-y-4">
+        {/* ════════════════════════════════════════════════ */}
+        {/* OPEN APP VIEW */}
+        {/* ════════════════════════════════════════════════ */}
+        {detectedInstalled && step === 'open' && !closeAttempted && (
+          <div className="w-full space-y-5">
             <div className="flex flex-col items-center gap-3 py-4">
-              <div className="w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center">
-                <CheckCircle className="w-10 h-10 text-emerald-400" />
+              <div className="relative">
+                <div className="absolute -inset-3 rounded-full bg-emerald-500/10 animate-ping" />
+                <div className="relative w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center">
+                  <CheckCircle className="w-10 h-10 text-emerald-400" />
+                </div>
               </div>
-              <p className="text-lg font-black text-emerald-400">
-                {isAr ? '✓ تم التثبيت' : '✓ INSTALLED'}
+              <p className="text-lg font-black text-emerald-400 tracking-wider">
+                {isAr ? '✓ جاهز للانطلاق' : '✓ READY TO PLAY'}
               </p>
-              <p className="text-xs text-slate-500 text-center max-w-xs">
+              <p className="text-xs text-slate-500 text-center max-w-xs leading-relaxed">
                 {isAr
-                  ? 'التطبيق مثبت على جهازك. افتحه من الشاشة الرئيسية.'
-                  : 'The app is installed on your device. Open from home screen.'}
+                  ? 'التطبيق مثبت. ارجع إلى الشاشة الرئيسية وافتح 8-Ball Arena.'
+                  : 'Installed. Go to your home screen and tap 8-Ball Arena.'}
               </p>
             </div>
 
             <button
               onClick={handleOpenApp}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.97] flex items-center justify-center gap-2"
             >
-              <ExternalLink className="w-5 h-5" />
-              {isAr ? 'فتح التطبيق' : 'Open App'}
+              <Sparkles className="w-5 h-5" />
+              {isAr ? 'افتح التطبيق الآن' : 'Open App Now'}
             </button>
 
-            <p className="text-[10px] text-slate-600 text-center flex items-center justify-center gap-1">
+            <p className="text-[10px] text-slate-600 text-center flex items-center justify-center gap-1.5">
               <ArrowLeft className="w-3 h-3" />
-              {isAr ? 'ارجع إلى الشاشة الرئيسية وافتح التطبيق' : 'Go to home screen and open the app'}
+              {isAr ? 'ثم ارجع إلى هنا وأغلق علامة التبويب' : 'Then close this browser tab'}
             </p>
+
+            {/* Didn't install? */}
+            <button
+              onClick={() => { setShowInstall(true); setStep('install'); }}
+              className="w-full py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/5 text-slate-500 hover:text-slate-300 text-[11px] font-bold transition-all flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-3 h-3" />
+              {isAr ? 'لم يتم التثبيت؟ اضغط هنا للعودة' : 'Didn\'t install? Click here'}
+            </button>
           </div>
         )}
 
-        {/* Close attempt failed - tab didn't close */}
-        {detectedInstalled && closeAttempted && (
-          <div className="w-full space-y-4">
+        {/* Close attempt failed */}
+        {detectedInstalled && step === 'open' && closeAttempted && (
+          <div className="w-full space-y-5">
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="w-20 h-20 rounded-full bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center">
                 <Smartphone className="w-10 h-10 text-amber-400" />
               </div>
               <p className="text-lg font-black text-amber-400">
-                {isAr ? '✋ اغلق علامة التبويب' : '✋ CLOSE THIS TAB'}
+                {isAr ? '✋ أغلق علامة التبويب' : '✋ CLOSE THIS TAB'}
               </p>
-              <p className="text-xs text-slate-500 text-center max-w-xs">
+              <p className="text-xs text-slate-500 text-center max-w-xs leading-relaxed">
                 {isAr
-                  ? 'التطبيق مثبت. اخرج إلى الشاشة الرئيسية وافتح التطبيق من هناك، ثم اغلق علامة التبويب هذه.'
-                  : 'App is installed. Go to your home screen and open the app from there, then close this tab.'}
+                  ? 'التطبيق جاهز. اذهب إلى الشاشة الرئيسية وافتح 8-Ball Arena، ثم عد وأغلق علامة التبويب هذه.'
+                  : 'App is ready. Go to your home screen, open 8-Ball Arena, then close this tab.'}
               </p>
             </div>
 
             <button
               onClick={() => window.close()}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.97] flex items-center justify-center gap-2"
             >
               <ArrowLeft className="w-5 h-5" />
               {isAr ? 'إغلاق علامة التبويب' : 'Close Tab'}
             </button>
+
+            <button
+              onClick={() => { setCloseAttempted(false); }}
+              className="w-full py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:bg-white/5 text-slate-500 hover:text-slate-300 text-[11px] font-bold transition-all"
+            >
+              {isAr ? 'رجوع' : 'Go back'}
+            </button>
           </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          33% { transform: translateY(-12px) rotate(3deg); }
+          66% { transform: translateY(6px) rotate(-2deg); }
+        }
+        .animate-float {
+          animation: float 5s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
@@ -295,8 +406,4 @@ function Step({ num, text, ios }: { num: string; text: string; ios?: boolean }) 
       <span className="text-xs text-slate-400">{text}</span>
     </div>
   );
-}
-
-function Bell(props: any) {
-  return <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" {...props}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>;
 }
