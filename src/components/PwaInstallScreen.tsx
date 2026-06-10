@@ -12,6 +12,7 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
   const [step, setStep] = useState<'checking' | 'install' | 'installing' | 'done' | 'open'>('checking');
   const [installError, setInstallError] = useState<string | null>(null);
   const [detectedInstalled, setDetectedInstalled] = useState(false);
+  const [closeAttempted, setCloseAttempted] = useState(false);
   const isAr = language === 'ar';
   const isiOS = isIOS();
   const deferredRef = useRef(deferredInstall);
@@ -86,16 +87,8 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
   };
 
   const handleOpenApp = () => {
-    // Try to open the installed app via URL scheme or just tell user
-    const isIOSDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    if (isiOSDevice) {
-      // iOS: The user is already in Safari, they need to open from home screen
-      window.location.href = '/';
-    } else {
-      // Android: Try to launch via URL
-      window.location.href = '/';
-    }
+    setCloseAttempted(true);
+    window.close();
   };
 
   return (
@@ -231,7 +224,7 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
         )}
 
         {/* Open App state (detected as installed) */}
-        {detectedInstalled && (
+        {detectedInstalled && !closeAttempted && (
           <div className="w-full space-y-4">
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center">
@@ -247,7 +240,6 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
               </p>
             </div>
 
-            {/* Open App button */}
             <button
               onClick={handleOpenApp}
               className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
@@ -260,6 +252,33 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
               <ArrowLeft className="w-3 h-3" />
               {isAr ? 'ارجع إلى الشاشة الرئيسية وافتح التطبيق' : 'Go to home screen and open the app'}
             </p>
+          </div>
+        )}
+
+        {/* Close attempt failed - tab didn't close */}
+        {detectedInstalled && closeAttempted && (
+          <div className="w-full space-y-4">
+            <div className="flex flex-col items-center gap-3 py-4">
+              <div className="w-20 h-20 rounded-full bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center">
+                <Smartphone className="w-10 h-10 text-amber-400" />
+              </div>
+              <p className="text-lg font-black text-amber-400">
+                {isAr ? '✋ اغلق علامة التبويب' : '✋ CLOSE THIS TAB'}
+              </p>
+              <p className="text-xs text-slate-500 text-center max-w-xs">
+                {isAr
+                  ? 'التطبيق مثبت. اخرج إلى الشاشة الرئيسية وافتح التطبيق من هناك، ثم اغلق علامة التبويب هذه.'
+                  : 'App is installed. Go to your home screen and open the app from there, then close this tab.'}
+              </p>
+            </div>
+
+            <button
+              onClick={() => window.close()}
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              {isAr ? 'إغلاق علامة التبويب' : 'Close Tab'}
+            </button>
           </div>
         )}
       </div>
