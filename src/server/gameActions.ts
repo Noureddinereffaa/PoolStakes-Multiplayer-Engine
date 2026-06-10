@@ -7,7 +7,7 @@ import {
   userSockets, rematchingRooms, payingOutRooms, getOrCreateRoom, broadcastRoom,
   pushRoomLog, cancelForfeitTimer, startForfeitTimer, DISCONNECT_TIMEOUT_MS,
   enforceSingleSocket, removeUserSocket, pushEventLog, sendFullState, cleanupRoom,
-  registerRoomTimeout, roomLocks
+  registerRoomTimeout, roomLocks, generateRoomCode, getPublicRooms, findRoomByCode
 } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
@@ -725,4 +725,100 @@ export function handleDisconnect(ws: WebSocket): void {
   }
 
   activeSockets.delete(ws);
+}
+
+// ── Create Room ─────────────────────────────────────────────────
+export async function handleCreateRoom(ws: WebSocket, msg: Extract<SocketMessage, { type: 'create_room' }>): Promise<void> {
+  const { stake, isPublic } = msg;
+  const mapping = playerRoomMap.get(ws);
+  if (!mapping) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Authenticate first by joining a session.' }));
+    return;
+  }
+
+  const code = generateRoomCode();
+  const roomId = `room_${code}_${Date.now()}`;
+  const room = getOrCreateRoom(roomId, `Room ${code}`, stake);
+  room.roomCode = code;
+  room.isPublic = isPublic !== false;
+  room.createdAt = Date.now();
+
+  pushEventLog('room_created_by_code', { roomId, code, stake, isPublic });
+  ws.send(JSON.stringify({ type: 'room_created', roomId, roomCode: code }));
+}
+
+// ── List Public Rooms ───────────────────────────────────────────
+export function handleListRooms(ws: WebSocket, msg: Extract<SocketMessage, { type: 'list_rooms' }>): void {
+  const rooms = getPublicRooms(msg.stake);
+  ws.send(JSON.stringify({ type: 'rooms_list', rooms }));
+}
+
+// ── Join by Code ────────────────────────────────────────────────
+export async function handleJoinByCode(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join_by_code' }>): Promise<void> {
+  const { code, username, token } = msg;
+  const room = findRoomByCode(code);
+
+  if (!room) {
+    ws.send(JSON.stringify({ type: 'room_not_found', message: `No room found with code: ${code}` }));
+    return;
+  }
+
+  // Forward to handleJoin using the room's internal ID and stake
+  await handleJoin(ws, { type: 'join', roomId: room.roomId, username, stake: room.stake, token });
+}
+
+// ── Join Random ─────────────────────────────────────────────────
+export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join_random' }>): Promise<void> {
+  const { stake, username, token } = msg;
+  const mapping = playerRoomMap.get(ws);
+
+  if (!mapping) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Please login first.' }));
+    return;
+  }
+
+  // Find an available public room with matching stake
+  let targetRoom: RoomState | undefined;
+  for (const room of activeRooms.values()) {
+    if (room.status === 'waiting' && room.isPublic && room.stake === stake && room.players.length === 1) {
+      targetRoom = room;
+      break;
+    }
+  }
+
+  if (targetRoom) {
+    // Join existing waiting room
+    await handleJoin(ws, { type: 'join', roomId: targetRoom.roomId, username, stake, token });
+  } else {
+    // Create a new public room
+    const code = generateRoomCode();
+    const roomId = `room_${code}_${Date.now()}`;
+    const room = getOrCreateRoom(roomId, `Public ${stake}`, stake);
+    room.roomCode = code;
+    room.isPublic = true;
+    room.createdAt = Date.now();
+    await handleJoin(ws, { type: 'join', roomId, username, stake, token });
+  }
+}
+
+// ── Cancel Waiting ──────────────────────────────────────────────
+export function handleCancelWaiting(ws: WebSocket): void {
+  const mapping = playerRoomMap.get(ws);
+  if (!mapping) return;
+
+  const room = activeRooms.get(mapping.roomId);
+  if (room && room.status === 'waiting' && room.players.length === 1) {
+    // Remove player and clean up
+    const pIdx = room.players.findIndex(p => p.id === mapping.playerId);
+    if (pIdx !== -1) room.players.splice(pIdx, 1);
+
+    const set = clientsByRoom.get(mapping.roomId);
+    if (set) {
+      set.delete(ws);
+      if (set.size === 0) cleanupRoom(mapping.roomId);
+    }
+    playerRoomMap.delete(ws);
+    ws.send(JSON.stringify({ type: 'sync_state', state: { ...room, players: [] } }));
+    pushEventLog('cancel_waiting', { roomId: mapping.roomId });
+  }
 }

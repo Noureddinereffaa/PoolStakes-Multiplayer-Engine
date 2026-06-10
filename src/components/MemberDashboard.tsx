@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RoomState, Difficulty, MatchHistory as MatchType } from '../types';
 import {
   LayoutDashboard, Swords, History, BookOpen, LogOut, Wallet, Trophy,
   TrendingUp, Target, Users, Cpu, Play, ArrowDownRight, ArrowUpRight,
-  X, Medal, ChevronRight, Star, Settings
+  X, ChevronRight, Settings, Copy, Share2, Search, Eye, DoorOpen,
+  Hash, RefreshCw, Lock, Globe
 } from 'lucide-react';
 import { Lang } from '../i18n';
-import { motion } from 'framer-motion';
 import MatchHistory from './MatchHistory';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -23,19 +23,31 @@ interface Props {
   onNavigateRules: () => void;
   onDeposit?: (amount: number, address: string, method: string) => void;
   onWithdraw?: (amount: number, address: string, method: string) => void;
+  publicRooms: Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }>;
+  roomCreationCode: string | null;
+  onCreateRoom: (stake: number, isPublic: boolean) => void;
+  onListRooms: (stake?: number) => void;
+  onJoinByCode: (code: string) => void;
+  onJoinRandom: (stake: number) => void;
+  onCancelWaiting: () => void;
 }
 
-const STAKES = [5, 25, 50, 100, 250, 500];
+const STAKES = [5, 10, 25, 50, 100, 250, 500];
 
 export default function MemberDashboard({
   userSession, stake, roomId, joinDifficulty,
   laravelUsers, matchHistory, language, setLanguage,
   onSetStake, onSetRoomId, onSetJoinDifficulty, onJoinRoom, onNavigateRules,
   onDeposit, onWithdraw,
+  publicRooms, roomCreationCode, onCreateRoom, onListRooms, onJoinByCode, onJoinRandom, onCancelWaiting,
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'play' | 'history'>('play');
+  const [playMode, setPlayMode] = useState<'private' | 'quick' | 'code'>('quick');
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [isPrivateMode, setIsPrivateMode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [depAmt, setDepAmt] = useState('100');
@@ -45,6 +57,31 @@ export default function MemberDashboard({
   const [wdAddr, setWdAddr] = useState('');
   const [wdMethod, setWdMethod] = useState<'crypto' | 'bank'>('crypto');
   const isAr = language === 'ar';
+
+  // Refresh public rooms periodically
+  const [roomListStake, setRoomListStake] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    onListRooms(roomListStake);
+    const interval = setInterval(() => onListRooms(roomListStake), 10000);
+    return () => clearInterval(interval);
+  }, [roomListStake, onListRooms]);
+
+  // Copy room code to clipboard
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    });
+  };
+
+  // Share room code
+  const handleShareCode = (code: string) => {
+    if (navigator.share) {
+      navigator.share({ title: '8-Ball Pool Room', text: `Join my 8-Ball Pool room! Code: ${code}`, url: '' });
+    } else {
+      handleCopyCode(code);
+    }
+  };
 
   const topPlayers = [...laravelUsers].filter(u => u.id !== 'ai-bot').sort((a, b) => b.balance - a.balance).slice(0, 5);
   const userRank = topPlayers.findIndex(u => u.id === userSession.id) + 1;
@@ -234,82 +271,289 @@ export default function MemberDashboard({
 
             {/* ── CONTENT: PLAY TAB ── */}
             {activeTab === 'play' && (
-              <div className="grid lg:grid-cols-2 gap-5">
-                {/* Host Match */}
-                <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-5 relative overflow-hidden">
-                  <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-emerald-500 to-cyan-500" />
-                  <h2 className="font-black text-white mb-1 flex items-center gap-2">
-                    <Swords className="w-4 h-4 text-emerald-400" /> {isAr ? 'استضافة مباراة' : 'Host Match'}
-                  </h2>
-                  <p className="text-xs text-slate-500 mb-5">{isAr ? 'حدد الرهان وشارك الرمز مع الخصم' : 'Set stake and share room code with opponent.'}</p>
+              <div className="space-y-5">
+                {/* Mode selector tabs */}
+                <div className="flex gap-1 rounded-xl bg-white/5 p-1">
+                  {([
+                    { id: 'quick', icon: Swords, label: isAr ? 'لعب عشوائي' : 'Quick Play' },
+                    { id: 'private', icon: Lock, label: isAr ? 'غرفة خاصة' : 'Private Room' },
+                    { id: 'code', icon: Hash, label: isAr ? 'رمز الغرفة' : 'Join by Code' },
+                  ] as const).map(mode => (
+                    <button
+                      key={mode.id}
+                      onClick={() => { setPlayMode(mode.id); }}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition ${
+                        playMode === mode.id ? 'bg-emerald-500/20 text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-white'
+                      }`}
+                    >
+                      <mode.icon className="w-4 h-4" />
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wide mb-1.5 block">{isAr ? 'رمز الغرفة' : 'Room Code'}</label>
-                      <input
-                        value={roomId} onChange={e => onSetRoomId(e.target.value)}
-                        placeholder={isAr ? 'أدخل رمز الغرفة' : 'Enter room code'}
-                        className="w-full bg-[#07070a] border border-white/8 rounded-lg px-4 py-2.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-emerald-500 transition"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wide mb-2 block">{isAr ? 'مبلغ الرهان' : 'Stake'}</label>
-                      <div className="grid grid-cols-6 gap-1.5 mb-3">
+                {/* ── QUICK PLAY MODE ── */}
+                {playMode === 'quick' && (
+                  <div className="grid lg:grid-cols-5 gap-5">
+                    {/* Stake selector + action */}
+                    <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-[#0a0a0f] p-5">
+                      <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-emerald-500 to-cyan-500" style={{ position: 'relative', margin: '-20px -20px 0', borderRadius: '16px 16px 0 0' }} />
+                      <h2 className="font-black text-white mb-1 flex items-center gap-2">
+                        <Swords className="w-4 h-4 text-emerald-400" /> {isAr ? 'اختر الرهان' : 'Choose Stake'}
+                      </h2>
+                      <p className="text-xs text-slate-500 mb-4">{isAr ? 'اختر مبلغ الرهان وانضم إلى غرفة عشوائية' : 'Pick a stake and join a random match.'}</p>
+
+                      <div className="grid grid-cols-3 gap-2 mb-4">
                         {STAKES.map(v => (
-                          <button key={v} type="button" onClick={() => onSetStake(v)}
-                            className={`py-1.5 rounded-lg text-xs font-bold transition border ${stake === v ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'}`}
+                          <button key={v} type="button" onClick={() => { onSetStake(v); onListRooms(v); }}
+                            className={`py-3 rounded-xl text-sm font-black transition border ${
+                              stake === v ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'
+                            }`}
                           >${v}</button>
                         ))}
                       </div>
-                      <input type="number" min={5} max={10000} value={stake}
-                        onChange={e => onSetStake(Math.max(5, parseInt(e.target.value) || 5))}
-                        className="w-full bg-[#07070a] border border-white/8 rounded-lg px-4 py-2 text-sm text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 transition"
-                      />
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => onJoinRandom(stake)}
+                          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black transition shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 text-sm"
+                        >
+                          <Play className="w-4 h-4" /> {isAr ? 'دخول سريع' : 'Quick Join'}
+                        </button>
+                        <button
+                          onClick={() => onCreateRoom(stake, true)}
+                          className="flex-1 py-3 rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 font-bold transition flex items-center justify-center gap-2 text-sm"
+                        >
+                          <Globe className="w-4 h-4" /> {isAr ? 'غرفة مفتوحة' : 'Open Room'}
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => onJoinRoom(roomId, stake)}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black transition shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2"
-                    >
-                      <Play className="w-4 h-4" /> {isAr ? 'إطلاق الغرفة' : 'Launch Room'}
-                    </button>
-                  </div>
-                </div>
 
-                {/* Practice AI */}
-                <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-5 relative overflow-hidden">
-                  <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-amber-500 to-orange-500" />
-                  <h2 className="font-black text-white mb-1 flex items-center gap-2">
-                    <Cpu className="w-4 h-4 text-amber-400" /> {isAr ? 'تدريب مع الذكاء الاصطناعي' : 'Practice vs AI'}
-                  </h2>
-                  <p className="text-xs text-slate-500 mb-5">{isAr ? 'صفر مراهنات — صقل مهاراتك مجاناً' : 'Zero stakes — sharpen your game for free.'}</p>
+                    {/* Public rooms list */}
+                    <div className="lg:col-span-3 rounded-2xl border border-white/5 bg-[#0a0a0f] p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-black text-sm text-white flex items-center gap-2">
+                          <Eye className="w-4 h-4 text-cyan-400" /> {isAr ? 'الغرف المفتوحة' : 'Open Rooms'}
+                        </h2>
+                        <button onClick={() => onListRooms(roomListStake)} className="text-[10px] text-slate-500 hover:text-white flex items-center gap-1">
+                          <RefreshCw className="w-3 h-3" /> {isAr ? 'تحديث' : 'Refresh'}
+                        </button>
+                      </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wide mb-2 block">{isAr ? 'مستوى الصعوبة' : 'AI Difficulty'}</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(['easy', 'medium', 'hard'] as const).map(d => (
-                          <button key={d} type="button" onClick={() => onSetJoinDifficulty(d)}
-                            className={`py-2.5 rounded-lg border text-xs font-bold transition flex flex-col items-center gap-0.5 ${
-                              joinDifficulty === d ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'
-                            }`}
+                      {publicRooms.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 text-slate-600">
+                          <Search className="w-8 h-8 mb-2 opacity-50" />
+                          <p className="text-xs">{isAr ? 'لا توجد غرف مفتوحة الآن' : 'No open rooms available'}</p>
+                          <p className="text-[10px] mt-1">{isAr ? 'أنشئ غرفة وانتظر المنافس' : 'Create a room and wait for an opponent'}</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                          {publicRooms.map(r => (
+                            <div key={r.roomId} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] transition group">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xs font-bold text-emerald-400">
+                                  ${r.stake}
+                                </div>
+                                <div>
+                                  <div className="text-xs font-bold text-white">{isAr ? `غرفة ${r.stake} USDT` : `$${r.stake} Room`}</div>
+                                  <div className="text-[10px] text-slate-500 font-mono">
+                                    {r.roomCode ? `#${r.roomCode}` : ''} · {r.players}/2 {isAr ? 'لاعبين' : 'players'}
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => onJoinRandom(r.stake)}
+                                className="px-4 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition opacity-0 group-hover:opacity-100"
+                              >
+                                {isAr ? 'انضمام' : 'Join'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Room creation code display */}
+                      {roomCreationCode && (
+                        <div className="mt-4 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wide">{isAr ? 'تم إنشاء الغرفة' : 'Room Created'}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">{isAr ? 'شارك الرمز' : 'Share the code'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 py-2 px-3 rounded-lg bg-[#07070a] border border-white/8 font-mono text-lg font-black text-emerald-400 tracking-widest text-center">
+                              {roomCreationCode}
+                            </div>
+                            <button onClick={() => handleCopyCode(roomCreationCode)} className="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/20 transition">
+                              {copiedCode ? <span className="text-[10px]">✓</span> : <Copy className="w-4 h-4" />}
+                            </button>
+                            <button onClick={() => handleShareCode(roomCreationCode)} className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 hover:bg-cyan-500/20 transition">
+                              <Share2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-slate-600 mt-2">{isAr ? 'اللاعب الثاني يدخل هذا الرمز للانضمام' : 'Second player enters this code to join'}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Practice vs AI */}
+                    <div className="lg:col-span-5 rounded-2xl border border-amber-500/15 bg-[#0a0a0f] p-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                            <Cpu className="w-4 h-4 text-amber-400" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-sm text-white">{isAr ? 'تدريب مع الذكاء الاصطناعي' : 'Practice vs AI'}</h3>
+                            <p className="text-[10px] text-slate-500">{isAr ? 'بدون رهان — صقل مهاراتك' : 'Zero stake — sharpen your skills'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            {(['easy', 'medium', 'hard'] as const).map(d => (
+                              <button key={d} onClick={() => onSetJoinDifficulty(d)}
+                                className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold transition ${
+                                  joinDifficulty === d ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-white/8 text-slate-500 hover:text-white'
+                                }`}
+                              >{d}</button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => onJoinRoom(`PRACTICE_${Date.now()}`, 0, joinDifficulty)}
+                            className="px-5 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs transition flex items-center gap-2"
                           >
-                            <span className="uppercase">{d}</span>
-                            <span className="text-[9px] opacity-60">{d === 'easy' ? '★☆☆' : d === 'medium' ? '★★☆' : '★★★'}</span>
+                            <Cpu className="w-3.5 h-3.5" /> {isAr ? 'ابدأ' : 'Start'}
                           </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── PRIVATE ROOM MODE ── */}
+                {playMode === 'private' && (
+                  <div className="grid lg:grid-cols-2 gap-5">
+                    <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-5">
+                      <div className="relative" style={{ margin: '-20px -20px 0', padding: '20px 20px 0' }}>
+                        <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-violet-500 to-purple-500" style={{ borderRadius: '16px 16px 0 0' }} />
+                      </div>
+                      <h2 className="font-black text-white mb-1 flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-violet-400" /> {isAr ? 'إنشاء غرفة خاصة' : 'Create Private Room'}
+                      </h2>
+                      <p className="text-xs text-slate-500 mb-5">{isAr ? 'أنشئ غرفة برمز سري وشاركه مع أصدقائك فقط' : 'Create a secret room and share the code with friends only.'}</p>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wide mb-2 block">{isAr ? 'مبلغ الرهان' : 'Stake Amount'}</label>
+                          <div className="grid grid-cols-7 gap-1.5 mb-3">
+                            {STAKES.map(v => (
+                              <button key={v} type="button" onClick={() => onSetStake(v)}
+                                className={`py-2 rounded-lg text-xs font-bold transition border ${stake === v ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'}`}
+                              >${v}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => onCreateRoom(stake, false)}
+                          className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-400 hover:to-purple-500 text-white font-black transition shadow-lg shadow-violet-500/15 flex items-center justify-center gap-2"
+                        >
+                          <Lock className="w-4 h-4" /> {isAr ? 'إنشاء غرفة سرية' : 'Create Secret Room'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Room code display after creation */}
+                    <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-5">
+                      <h2 className="font-black text-white mb-1 flex items-center gap-2">
+                        <Share2 className="w-4 h-4 text-cyan-400" /> {isAr ? 'رمز الغرفة' : 'Room Code'}
+                      </h2>
+                      <p className="text-xs text-slate-500 mb-5">{isAr ? 'شارك هذا الرمز مع من تريد اللعب معه' : 'Share this code with who you want to play with.'}</p>
+
+                      {roomCreationCode ? (
+                        <div className="space-y-4">
+                          <div className="p-6 rounded-xl bg-[#07070a] border border-white/8 text-center">
+                            <div className="text-3xl font-black font-mono text-violet-400 tracking-[0.3em] select-all">
+                              {roomCreationCode}
+                            </div>
+                            <div className="text-[9px] text-slate-600 mt-2 font-mono">{isAr ? 'رمز الغرفة الخاصة' : 'Private room code'}</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleCopyCode(roomCreationCode)} className="flex-1 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-sm hover:bg-emerald-500/20 transition flex items-center justify-center gap-2">
+                              {copiedCode ? <span>✓ {isAr ? 'تم النسخ' : 'Copied'}</span> : <><Copy className="w-4 h-4" /> {isAr ? 'نسخ' : 'Copy'}</>}
+                            </button>
+                            <button onClick={() => handleShareCode(roomCreationCode)} className="flex-1 py-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold text-sm hover:bg-cyan-500/20 transition flex items-center justify-center gap-2">
+                              <Share2 className="w-4 h-4" /> {isAr ? 'مشاركة' : 'Share'}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-600 text-center">{isAr ? 'في انتظار انضمام الخصم...' : 'Waiting for opponent to join...'}</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-600">
+                          <Lock className="w-10 h-10 mb-3 opacity-30" />
+                          <p className="text-xs">{isAr ? 'لم يتم إنشاء غرفة بعد' : 'No room created yet'}</p>
+                          <p className="text-[10px] mt-1">{isAr ? 'اختر الرهان واضغط "إنشاء"' : 'Select a stake and create one'}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── JOIN BY CODE MODE ── */}
+                {playMode === 'code' && (
+                  <div className="grid lg:grid-cols-2 gap-5">
+                    <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-5">
+                      <div className="relative" style={{ margin: '-20px -20px 0', padding: '20px 20px 0' }}>
+                        <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500" style={{ borderRadius: '16px 16px 0 0' }} />
+                      </div>
+                      <h2 className="font-black text-white mb-1 flex items-center gap-2">
+                        <DoorOpen className="w-4 h-4 text-cyan-400" /> {isAr ? 'انضمام إلى غرفة' : 'Join a Room'}
+                      </h2>
+                      <p className="text-xs text-slate-500 mb-5">{isAr ? 'أدخل رمز الغرفة الذي استلمته من صديقك' : 'Enter the room code you received from a friend.'}</p>
+
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wide mb-1.5 block">{isAr ? 'رمز الغرفة' : 'Room Code'}</label>
+                          <input
+                            value={joinCodeInput}
+                            onChange={e => setJoinCodeInput(e.target.value.toUpperCase())}
+                            placeholder={isAr ? 'أدخل الرمز (مثال: A7K3B9)' : 'Enter code (e.g. A7K3B9)'}
+                            maxLength={6}
+                            className="w-full bg-[#07070a] border border-white/8 rounded-lg px-4 py-3 text-lg text-slate-100 font-mono font-black tracking-[0.3em] text-center focus:outline-none focus:border-cyan-500 transition uppercase"
+                          />
+                        </div>
+                        <button
+                          onClick={() => { if (joinCodeInput.length >= 4) onJoinByCode(joinCodeInput); }}
+                          disabled={joinCodeInput.length < 4}
+                          className={`w-full py-3 rounded-xl font-black transition flex items-center justify-center gap-2 text-sm ${
+                            joinCodeInput.length >= 4
+                              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/15'
+                              : 'bg-white/5 text-slate-600 cursor-not-allowed'
+                          }`}
+                        >
+                          <DoorOpen className="w-4 h-4" /> {isAr ? 'انضمام' : 'Join Room'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-5">
+                      <h2 className="font-black text-white mb-1 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-slate-400" /> {isAr ? 'كيف تعمل؟' : 'How it works'}
+                      </h2>
+                      <div className="space-y-4 mt-4">
+                        {[
+                          { step: '1', text: isAr ? 'صديقك ينشئ غرفة خاصة وينسخ الرمز' : 'Your friend creates a private room and copies the code' },
+                          { step: '2', text: isAr ? 'يرسل لك الرمز عبر واتساب أو أي وسيلة' : 'They share the code with you via WhatsApp or any messenger' },
+                          { step: '3', text: isAr ? 'تدخل الرمز هنا وتضغط "انضمام"' : 'You enter the code here and click "Join Room"' },
+                          { step: '4', text: isAr ? 'يبدأ اللعب مباشرة بعد تأكيد الرهان' : 'The match starts right after stake confirmation' },
+                        ].map(item => (
+                          <div key={item.step} className="flex items-start gap-3">
+                            <div className="w-6 h-6 rounded-full bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-[10px] font-bold text-cyan-400 shrink-0">{item.step}</div>
+                            <p className="text-xs text-slate-400">{item.text}</p>
+                          </div>
                         ))}
                       </div>
                     </div>
-                    <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-amber-300/70">
-                      {isAr ? '3 انتصارات في مستوى Hard تمنحك شارة محترف' : 'Win 3 Hard matches to earn the Pro rank badge.'}
-                    </div>
-                    <button
-                      onClick={() => onJoinRoom(`PRACTICE_${Date.now()}`, 0, joinDifficulty)}
-                      className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black transition shadow-lg shadow-amber-500/15 flex items-center justify-center gap-2"
-                    >
-                      <Cpu className="w-4 h-4" /> {isAr ? 'ابدأ التدريب (0 USDT)' : 'Enter Practice Arena (0 USDT)'}
-                    </button>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

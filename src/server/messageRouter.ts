@@ -9,7 +9,12 @@ import {
   handleResetCueBall,
   handleChat,
   handleRematch,
-  handleDisconnect
+  handleDisconnect,
+  handleCreateRoom,
+  handleListRooms,
+  handleJoinByCode,
+  handleJoinRandom,
+  handleCancelWaiting,
 } from './gameActions';
 import { pushEventLog } from './state';
 
@@ -43,6 +48,21 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       break;
     case 'leave':
       handleDisconnect(ws);
+      break;
+    case 'create_room':
+      await handleCreateRoom(ws, msg);
+      break;
+    case 'list_rooms':
+      handleListRooms(ws, msg);
+      break;
+    case 'join_by_code':
+      await handleJoinByCode(ws, msg);
+      break;
+    case 'join_random':
+      await handleJoinRandom(ws, msg);
+      break;
+    case 'cancel_waiting':
+      handleCancelWaiting(ws);
       break;
     default:
       if (ws.readyState === WebSocket.OPEN) {

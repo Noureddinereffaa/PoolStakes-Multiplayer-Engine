@@ -172,7 +172,14 @@ export default function App() {
     handleJoinAI,
     handleSendChat,
     handleRematch,
-    handleQuitRoom
+    handleQuitRoom,
+    publicRooms,
+    roomCreationCode,
+    handleCreateRoom,
+    handleListRooms,
+    handleJoinByCode,
+    handleJoinRandom,
+    handleCancelWaiting,
   } = useBilliardsSocket({
     username: userSession?.username,
     fetchLaravelUsers,
@@ -505,6 +512,13 @@ export default function App() {
                   addToast('success', `Withdrawal approved: ${amount} USDT sent to ${address || userSession.walletAddress || 'wallet'}.`);
                 }
               }}
+              publicRooms={publicRooms}
+              roomCreationCode={roomCreationCode}
+              onCreateRoom={handleCreateRoom}
+              onListRooms={handleListRooms}
+              onJoinByCode={handleJoinByCode}
+              onJoinRandom={handleJoinRandom}
+              onCancelWaiting={handleCancelWaiting}
             />
           ) : (
             <Navigate to="/" replace />

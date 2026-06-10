@@ -1,6 +1,9 @@
-import { useEffect, useState, useRef, ReactNode } from 'react';
+import { useEffect, useState, useRef, useCallback, ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { isMobileDevice, isStandalone } from '../utils/mobile';
 import PwaInstallScreen from './PwaInstallScreen';
+
+const ALLOWED_MOBILE_PATHS = ['/'];
 
 interface InstallGuardProps {
   children: ReactNode;
@@ -9,41 +12,48 @@ interface InstallGuardProps {
 }
 
 export default function InstallGuard({ children, language, onInstallComplete }: InstallGuardProps) {
+  const location = useLocation();
   const [installState, setInstallState] = useState<'loading' | 'blocked' | 'allowed'>('loading');
   const deferredInstallRef = useRef<any>(null);
+  const isMobile = useRef(false);
+
+  const checkInstallState = useCallback(() => {
+    const mobile = isMobileDevice();
+    isMobile.current = mobile;
+    if (!mobile) return 'allowed';
+
+    const standalone = isStandalone();
+    const lsFlag = localStorage.getItem('pwa_installed') === 'true';
+
+    if (standalone) {
+      if (!lsFlag) localStorage.setItem('pwa_installed', 'true');
+      return 'allowed';
+    }
+
+    if (lsFlag) {
+      return 'blocked';
+    }
+
+    return 'blocked';
+  }, []);
 
   useEffect(() => {
-    const check = () => {
-      const isMobile = isMobileDevice();
-      const isInstalled = isStandalone() || localStorage.getItem('pwa_installed') === 'true';
+    setInstallState(checkInstallState());
+  }, [checkInstallState, location.pathname]);
 
-      if (!isMobile) {
-        setInstallState('allowed');
-        return;
-      }
-
-      if (isInstalled && isStandalone()) {
-        setInstallState('allowed');
-        return;
-      }
-
-      setInstallState('blocked');
-    };
-
-    check();
-
-    const onInstallPrompt = (e: any) => {
+  useEffect(() => {
+    const handlePrompt = (e: any) => {
       e.preventDefault();
       deferredInstallRef.current = e;
     };
 
-    const onAppInstalled = () => {
+    const handleInstalled = () => {
       localStorage.setItem('pwa_installed', 'true');
-      setInstallState('allowed');
+      setInstallState(checkInstallState());
       onInstallComplete?.();
     };
 
-    const onStandaloneChange = () => {
+    const handleStandalone = () => {
       if (isStandalone()) {
         localStorage.setItem('pwa_installed', 'true');
         setInstallState('allowed');
@@ -51,16 +61,33 @@ export default function InstallGuard({ children, language, onInstallComplete }: 
       }
     };
 
-    window.addEventListener('beforeinstallprompt', onInstallPrompt);
-    window.addEventListener('appinstalled', onAppInstalled);
-    window.matchMedia('(display-mode: standalone)').addEventListener('change', onStandaloneChange);
+    window.addEventListener('beforeinstallprompt', handlePrompt);
+    window.addEventListener('appinstalled', handleInstalled);
+    window.matchMedia('(display-mode: standalone)').addEventListener('change', handleStandalone);
+
+    const poll = setInterval(() => {
+      if (isStandalone()) {
+        localStorage.setItem('pwa_installed', 'true');
+        setInstallState('allowed');
+        onInstallComplete?.();
+        clearInterval(poll);
+      }
+    }, 2000);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', onInstallPrompt);
-      window.removeEventListener('appinstalled', onAppInstalled);
-      window.matchMedia('(display-mode: standalone)').removeEventListener('change', onStandaloneChange);
+      window.removeEventListener('beforeinstallprompt', handlePrompt);
+      window.removeEventListener('appinstalled', handleInstalled);
+      window.matchMedia('(display-mode: standalone)').removeEventListener('change', handleStandalone);
+      clearInterval(poll);
     };
-  }, [onInstallComplete]);
+  }, [checkInstallState, onInstallComplete]);
+
+  const isOnHomePage = ALLOWED_MOBILE_PATHS.includes(location.pathname);
+
+  // Mobile browser on home page → show content normally
+  if (isMobile.current && installState === 'blocked' && isOnHomePage) {
+    return <>{children}</>;
+  }
 
   if (installState === 'loading') {
     return (
@@ -77,8 +104,9 @@ export default function InstallGuard({ children, language, onInstallComplete }: 
         language={language}
         onInstallComplete={() => {
           localStorage.setItem('pwa_installed', 'true');
-          setInstallState('allowed');
-          onInstallComplete?.();
+          const state = checkInstallState();
+          setInstallState(state);
+          if (state === 'allowed') onInstallComplete?.();
         }}
       />
     );

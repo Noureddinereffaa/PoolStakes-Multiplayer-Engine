@@ -42,6 +42,8 @@ export function useBilliardsSocket({
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [connectionGrade, setConnectionGrade] = useState<string>('excellent');
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [publicRooms, setPublicRooms] = useState<Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }>>([]);
+  const [roomCreationCode, setRoomCreationCode] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
@@ -297,6 +299,22 @@ export function useBilliardsSocket({
           case 'laravel_api_log':
             if (mountedRef.current) setApiLogsRef.current(prev => [msg, ...prev]);
             break;
+          case 'room_created':
+            if (mountedRef.current) {
+              setRoomCreationCode(msg.roomCode);
+              setRoomId(msg.roomId);
+            }
+            break;
+          case 'rooms_list':
+            if (mountedRef.current) setPublicRooms(msg.rooms);
+            break;
+          case 'join_success':
+            if (mountedRef.current) setRoomId(msg.roomId);
+            break;
+          case 'room_not_found':
+            if (mountedRef.current) setErrorRef.current(msg.message);
+            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
+            break;
           case 'error':
             if (isReconnect) {
               if (mountedRef.current) setIsReconnecting(false);
@@ -446,8 +464,36 @@ export function useBilliardsSocket({
     if (mountedRef.current) {
       setRoomState(null);
       setPhysicsFrames(null);
+      setRoomCreationCode(null);
     }
     fetchRef.current();
+  }, []);
+
+  const handleCreateRoom = useCallback((stake: number, isPublic: boolean = true) => {
+    setRoomCreationCode(null);
+    sendOrQueue({ type: 'create_room', stake, isPublic });
+  }, []);
+
+  const handleListRooms = useCallback((stake?: number) => {
+    sendOrQueue({ type: 'list_rooms', stake });
+  }, []);
+
+  const handleJoinByCode = useCallback((code: string) => {
+    const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+    sendOrQueue({ type: 'join_by_code', code, username: usernameRef.current ?? '', token });
+  }, []);
+
+  const handleJoinRandom = useCallback((stake: number) => {
+    const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+    sendOrQueue({ type: 'join_random', stake, username: usernameRef.current ?? '', token });
+  }, []);
+
+  const handleCancelWaiting = useCallback(() => {
+    sendOrQueue({ type: 'cancel_waiting' });
+    if (mountedRef.current) {
+      setRoomState(null);
+      setRoomCreationCode(null);
+    }
   }, []);
 
   // إغلاق الاتصال تلقائياً عند إزالة المكون (Unmount)
@@ -512,6 +558,8 @@ export function useBilliardsSocket({
     isReconnecting,
     connectionGrade,
     isOffline,
+    publicRooms,
+    roomCreationCode,
     handleJoinRoom,
     handlePreviewAim,
     handleShoot,
@@ -519,6 +567,11 @@ export function useBilliardsSocket({
     handleJoinAI,
     handleSendChat,
     handleRematch,
-    handleQuitRoom
+    handleQuitRoom,
+    handleCreateRoom,
+    handleListRooms,
+    handleJoinByCode,
+    handleJoinRandom,
+    handleCancelWaiting,
   };
 }

@@ -100,6 +100,34 @@ export function pushMatchLog(entry: MatchHistory): void {
   }
 }
 
+const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function generateRoomCode(): string {
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  }
+  return code;
+}
+
+export function getPublicRooms(stakeFilter?: number): Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }> {
+  const list: Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }> = [];
+  for (const [id, room] of activeRooms) {
+    if (room.status === 'waiting' && room.isPublic && room.players.length < 2) {
+      if (stakeFilter !== undefined && room.stake !== stakeFilter) continue;
+      list.push({ roomId: id, roomCode: room.roomCode || '', stake: room.stake, players: room.players.length, status: room.status });
+    }
+  }
+  return list;
+}
+
+export function findRoomByCode(code: string): RoomState | undefined {
+  for (const room of activeRooms.values()) {
+    if (room.roomCode === code && room.players.length < 2) return room;
+  }
+  return undefined;
+}
+
 export function getOrCreateRoom(roomId: string, name: string, stake = 10): RoomState {
   if (activeRooms.has(roomId)) {
     return activeRooms.get(roomId)!;
@@ -122,6 +150,7 @@ export function getOrCreateRoom(roomId: string, name: string, stake = 10): RoomS
     animVersion: 0,
     disconnectedPlayerIds: [],
     reconnectDeadlines: {},
+    createdAt: Date.now(),
   };
 
   activeRooms.set(roomId, newRoom);

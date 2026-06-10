@@ -57,6 +57,9 @@ export interface RoomState {
   disconnectedPlayerIds?: string[]; // players currently disconnected during active game
   reconnectDeadlines?: Record<string, number>; // playerId → deadline timestamp
   forfeitedPlayerId?: string; // player who forfeited by not reconnecting
+  roomCode?: string; // short shareable code for private rooms
+  isPublic?: boolean; // visible in public room listing
+  createdAt?: number; // timestamp for room cleanup
 }
 
 export interface GameConfig {
@@ -81,8 +84,18 @@ export type SocketMessage =
   | { type: 'chat'; message: string }
   | { type: 'set_ai_opponent'; difficulty?: Difficulty }
   | { type: 'rematch' }
+  // New room management messages:
+  | { type: 'create_room'; stake: number; isPublic?: boolean }
+  | { type: 'list_rooms'; stake?: number }
+  | { type: 'join_by_code'; code: string; username: string; token?: string }
+  | { type: 'join_random'; stake: number; username: string; token?: string }
+  | { type: 'cancel_waiting' }
   // Server to client messages:
   | { type: 'sync_state'; state: RoomState }
+  | { type: 'room_created'; roomId: string; roomCode: string }
+  | { type: 'rooms_list'; rooms: Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }> }
+  | { type: 'join_success'; roomId: string }
+  | { type: 'room_not_found'; message: string }
   | { type: 'physics_frames'; frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> }
   | { type: 'disconnect_notice'; playerId: string; deadline: number }
   | { type: 'reconnect_notice'; playerId: string }

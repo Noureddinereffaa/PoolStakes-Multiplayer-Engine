@@ -421,25 +421,29 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             initialAimAngleRef.current = newAngle;
           }
         } else if (pullStartPosRef.current) {
-          if (!isAimLockedRef.current) {
-            const dx = coords.x - pullStartPosRef.current.x;
-            const dy = coords.y - pullStartPosRef.current.y;
-            const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-            const newAngle = initialAimAngleRef.current + orthoDrag * 0.003;
-            setAimAngle(newAngle);
-            aimAngleRef.current = newAngle;
-          }
           if (isMobile.current) {
-            const dx = coords.x - pullStartPosRef.current.x;
-            const dy = coords.y - pullStartPosRef.current.y;
-            const baseAngle = initialAimAngleRef.current;
-            const towardCue = -(dx * Math.cos(baseAngle) + dy * Math.sin(baseAngle));
-            const rawPower = Math.min(100, Math.max(0, towardCue) / 1.7);
-            const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
+            // Mobile: aim always follows finger + power from downward drag
+            const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
+            if (cueBall && !isAimLockedRef.current) {
+              const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+              setAimAngle(newAngle);
+              aimAngleRef.current = newAngle;
+            }
+            const dragDy = coords.y - pullStartPosRef.current.y;
+            const rawPower = Math.min(100, Math.max(0, dragDy / 1.7));
+            const curvedPower = Math.pow(rawPower / 100, 0.7) * 100;
             const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
             setShotPower(power);
             shotPowerRef.current = power;
           } else {
+            if (!isAimLockedRef.current) {
+              const dx = coords.x - pullStartPosRef.current.x;
+              const dy = coords.y - pullStartPosRef.current.y;
+              const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
+              const newAngle = initialAimAngleRef.current + orthoDrag * 0.003;
+              setAimAngle(newAngle);
+              aimAngleRef.current = newAngle;
+            }
             const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
             const rawPower = Math.min(100, dragDist / 2.4);
             const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;

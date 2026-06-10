@@ -544,19 +544,25 @@ export default function ArenaPage({
           {/* Right side compact controls */}
           <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 p-2 rounded-2xl bg-black/30 backdrop-blur-sm border border-amber-900/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
-            <button onClick={() => setIsAimLocked(!isAimLocked)}
-              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
-            >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
-            <div className="flex flex-col items-center gap-0.5">
-              <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
-                <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
+            {!isMobile && (
+              <button onClick={() => setIsAimLocked(!isAimLocked)}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
+              >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
+            )}
+            {!isMobile && (
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
+                  <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
+                </div>
+                <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
               </div>
-              <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
-            </div>
-            <button onClick={handleShootClick}
-              disabled={!isMyTurn}
-              className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
-            ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+            )}
+            {!isMobile && (
+              <button onClick={handleShootClick}
+                disabled={!isMyTurn}
+                className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+              ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+            )}
             <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
               className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300 transition-all"
             >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
