@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { RoomState, Difficulty, MatchHistory as MatchType } from './types';
+import { Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import RulesPage from './components/RulesPage';
 import MemberDashboard from './components/MemberDashboard';
@@ -94,7 +94,7 @@ export default function App() {
   const [stake, setStake] = useState(25);
 
   // Real-time API & Database logs
-  const [apiLogs, setApiLogs] = useState<any[]>([]);
+  const [, setApiLogs] = useState<any[]>([]);
   const [laravelUsers, setLaravelUsers] = useState<any[]>([]);
   const [matchHistory, setMatchHistory] = useState<MatchType[]>([]);
 
@@ -115,8 +115,6 @@ export default function App() {
   const [chatMessage, setChatMessage] = useState('');
   const [joinDifficulty, setJoinDifficulty] = useState<Difficulty>('medium');
   const [language, setLanguage] = useState<'en' | 'ar'>('en');
-  const languageRef = useRef(language);
-  languageRef.current = language;
 
   // Initial DB fetches & periodic sync checks
   const fetchLaravelUsers = async () => {

@@ -78,7 +78,7 @@ export function getAdaptiveSettings(): { frameSkip: boolean; reducedParticles: b
   switch (grade) {
     case 'excellent': return { frameSkip: false, reducedParticles: false, lowResCanvas: false, disableShadows: false, reducedAnimations: false };
     case 'good': return { frameSkip: false, reducedParticles: false, lowResCanvas: false, disableShadows: false, reducedAnimations: true };
-    case 'poor': return { frameSkip: true, reducedParticles: true, lowResCanvas: true, disableShadows: true, reducedAnimations: true };
+    case 'poor':
     case 'dead': return { frameSkip: true, reducedParticles: true, lowResCanvas: true, disableShadows: true, reducedAnimations: true };
   }
 }

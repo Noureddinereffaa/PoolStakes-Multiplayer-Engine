@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
-import { isIOS, isAndroid, isStandalone, shareRoomCode } from '../utils/mobile';
-import { Smartphone, AppWindow, Download, Share2, ArrowLeft, RotateCcw, CheckCircle, Tablet, Maximize2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { isIOS, isStandalone } from '../utils/mobile';
+import { Smartphone, AppWindow, Download, Share2, ArrowLeft, CheckCircle, Tablet, Maximize2 } from 'lucide-react';
 
 interface PwaInstallScreenProps {
   deferredInstall: any;
@@ -13,7 +13,6 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
   const [installError, setInstallError] = useState<string | null>(null);
   const isAr = language === 'ar';
   const isiOS = isIOS();
-  const isAndroidDevice = isAndroid();
 
   useEffect(() => {
     if (isStandalone()) {
