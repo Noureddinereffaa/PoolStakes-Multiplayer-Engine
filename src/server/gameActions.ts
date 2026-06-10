@@ -10,6 +10,7 @@ import {
   registerRoomTimeout, roomLocks, generateRoomCode, getPublicRooms, findRoomByCode
 } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
+import { sendPushNotification } from './push';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -352,8 +353,8 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   }
 
   const totalSteps = iterations;
-  const basePlayMultiplier = totalSteps > 350 ? 1.95 : 1.65;
-  const animationDurationMs = (totalSteps * 16.66) / basePlayMultiplier + 150;
+  const basePlayMultiplier = totalSteps > 350 ? 2.4 : 2.0;
+  const animationDurationMs = (totalSteps * 16.66) / basePlayMultiplier + 80;
 
   const timer = setTimeout(() => {
     if ((room.animVersion || 0) !== currentAnimVersion) return;
@@ -363,6 +364,13 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
     room.turnTimer = 60;
     evaluateShotRules(room, ballsPocketedThisShot, cueBallPocketed, contactTracker.firstContactBallId, shooterName, playerId, isBreakShot, contactTracker.cushionContactOccurred);
     broadcastRoom(roomId);
+
+    if (room.status === 'playing' && room.currentTurn !== 'ai-bot') {
+      const turnPlayer = room.players.find(p => p.id === room.currentTurn);
+      if (turnPlayer) {
+        sendPushNotification(turnPlayer.id, '🎱 Your turn!', `It's your shot in ${room.name}.`, '/');
+      }
+    }
 
     if (room.status === 'playing' && room.currentTurn === 'ai-bot') {
       triggerAiShot(room);

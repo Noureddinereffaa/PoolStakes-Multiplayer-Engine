@@ -3,6 +3,7 @@ import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchL
 import { prisma } from './db';
 import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H } from './physics';
 import { logger } from './logger';
+import { sendPushNotification } from './push';
 
 /** Find a valid position for the cue ball that doesn't overlap other balls */
 export function findValidCueBallPosition(balls: Ball[], preferHeadArea = false): { x: number; y: number } {
@@ -153,6 +154,10 @@ export async function concludeMatch(room: RoomState, winner: Player, loser: Play
   pushRoomLog(room, `Match history recorded.`);
   pushEventLog('match_concluded', { winner: winner.username, loser: loser.username, roomId: room.roomId, prize, commission });
   logger.info('Match concluded', { winner: winner.username, loser: loser.username, room: room.roomId, prize, commission });
+
+  // Push notifications
+  sendPushNotification(winner.id, '🏆 You won!', `You defeated ${loser.username} in ${room.name}!`, '/');
+  sendPushNotification(loser.id, '😔 You lost', `${winner.username} won the match in ${room.name}.`, '/');
 }
 
 export function evaluateShotRules(
@@ -820,8 +825,8 @@ export function triggerAiShot(room: RoomState): void {
       }
     }
 
-    const basePlayMultiplier = frames.length > 350 ? 1.95 : 1.65;
-    const animationDurationMs = (frames.length * 16.66) / basePlayMultiplier + 150;
+    const basePlayMultiplier = frames.length > 350 ? 2.4 : 2.0;
+    const animationDurationMs = (frames.length * 16.66) / basePlayMultiplier + 80;
 
     setTimeout(() => {
       if ((room.animVersion || 0) !== currentAnimVersion) return;

@@ -59,10 +59,12 @@ export function hideBrowserChrome(): void {
 export async function enterFullscreen(element: HTMLElement): Promise<boolean> {
   hideBrowserChrome();
   try {
+    if (document.fullscreenElement) return true;
     await element.requestFullscreen({ navigationUI: 'hide' } as any);
     if (isMobileDevice()) {
       try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
     }
+    document.documentElement.classList.add('is-fullscreen');
     return true;
   } catch (_) {
     return false;
@@ -71,8 +73,16 @@ export async function enterFullscreen(element: HTMLElement): Promise<boolean> {
 
 export async function exitFullscreen(): Promise<void> {
   try {
-    if (document.fullscreenElement) await document.exitFullscreen();
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      document.documentElement.classList.remove('is-fullscreen');
+    }
   } catch (_) {}
+  try { (screen.orientation as any)?.unlock?.(); } catch (_) {}
+}
+
+export function isFullscreen(): boolean {
+  return !!document.fullscreenElement;
 }
 
 export function shareRoomCode(roomId: string): void {

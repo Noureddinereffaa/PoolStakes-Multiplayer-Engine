@@ -206,10 +206,10 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
-      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.6 : 1.95) : (isMobile.current ? 2.2 : 1.65);
+      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 3.5 : 1.95) : (isMobile.current ? 3.0 : 1.65);
       let animationFrameId: number;
       const animStartTime = performance.now();
-      const STRIKE_ACCEL = 8;
+      const STRIKE_ACCEL = isMobile.current ? 3 : 8;
       const physicsStartTime = animStartTime + STRIKE_ACCEL;
       animatedBallsRef.current = initialBallsCopy.map(b => {
         const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);
@@ -502,8 +502,13 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const executeAuthorizedShot = (angle: number, power: number, sX: number, sY: number) => {
     if (!isMyTurnRef.current || isAnimatingRef.current) return;
-    strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: 450 };
+    // Immediate local cue strike feedback — no wait for server
+    strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: isMobile.current ? 80 : 450 };
     setIsAnimating(true);
+    if (isMobile.current) {
+      poolAudio.playCueHit(power);
+      haptic(30);
+    }
     onShoot(angle, power, sX, sY);
     setSpinX(0); setSpinY(0);
   };

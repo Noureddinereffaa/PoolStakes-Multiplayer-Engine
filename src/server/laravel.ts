@@ -481,4 +481,39 @@ export function registerLaravelRoutes(app: Express, broadcastToAllWebSockets: (m
       res.status(500).json({ error: 'Failed to retrieve logs' });
     }
   });
+
+  // ── Push Notification Routes ──────────────────────────────────
+  app.get('/api/push/vapid-key', (_req, res) => {
+    const vapidKey = process.env.VAPID_PUBLIC_KEY || '';
+    res.json({ publicKey: vapidKey, enabled: !!vapidKey });
+  });
+
+  app.post('/api/push/subscribe', async (req, res) => {
+    try {
+      const { endpoint, keys } = req.body;
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ error: 'Invalid subscription object' });
+      }
+      const { subscribeUser } = require('./push');
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      if (!token) return res.status(401).json({ error: 'Unauthorized' });
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
+      await subscribeUser(decoded.id, { endpoint, keys });
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  app.post('/api/push/unsubscribe', async (req, res) => {
+    try {
+      const { endpoint } = req.body;
+      if (!endpoint) return res.status(400).json({ error: 'Missing endpoint' });
+      const { unsubscribeUser } = require('./push');
+      await unsubscribeUser(endpoint);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
 }

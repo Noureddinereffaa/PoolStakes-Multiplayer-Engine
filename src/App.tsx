@@ -7,6 +7,7 @@ import InstallGuard from './components/InstallGuard';
 import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
+import { usePushNotifications } from './hooks/usePushNotifications';
 import { isMobileDevice, isStandalone, requestWakeLock, releaseWakeLock, enterFullscreen } from './utils/mobile';
 
 const ArenaPage = lazy(() => import('./components/ArenaPage'));
@@ -193,6 +194,9 @@ export default function App() {
     setApiLogs,
     setErrorBanner: (msg: string | null) => msg !== null ? addToast('error', msg, 5000) : null
   });
+
+  const sessionToken = userSession?.token || null;
+  usePushNotifications(sessionToken);
 
   // Check saved session on load
   useEffect(() => {

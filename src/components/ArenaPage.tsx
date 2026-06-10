@@ -1,11 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState, Difficulty } from '../types';
 
-import { isMobileDevice, hideBrowserChrome, isStandalone, enterFullscreen as enterMobileFS } from '../utils/mobile';
+import { isMobileDevice, hideBrowserChrome, isStandalone, enterFullscreen as enterMobileFS, exitFullscreen as exitMobileFS, isFullscreen as checkFullscreen } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
-  Minimize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, X, Users, Bot, Volume2, VolumeX,
-  ArrowUpCircle, ArrowDownCircle
+  Minimize, Maximize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, X, Users, Bot, Volume2, VolumeX,
 } from 'lucide-react';
 import { ProvablyFairVerify } from './ProvablyFairVerify';
 import { poolAudio } from '../utils/audio';
@@ -287,8 +286,7 @@ export default function ArenaPage({
 
   const toggleFullscreen = () => {
     if (isFullscreen) {
-      try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {}
-      screen.orientation?.unlock?.();
+      exitMobileFS();
     } else {
       if (containerRef.current) enterMobileFS(containerRef.current);
     }
@@ -419,33 +417,37 @@ export default function ArenaPage({
         {showOverlay && (
           <motion.header initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-0 inset-x-0 z-40 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-2 py-1.5 backdrop-blur-sm"
+            className="absolute top-0 inset-x-0 z-40 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-2 backdrop-blur-sm"
+            style={{ paddingTop: 'calc(var(--sat) + 4px)', paddingBottom: '4px' }}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[10px] shadow-lg shrink-0">🎱</div>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <div className={`w-1 h-1 rounded-full shrink-0 ${isMyTurn ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
-                  <span className="text-[8px] font-bold text-amber-200 font-mono truncate max-w-[60px]">{myPlayer?.username || 'You'}</span>
-                  {mySide && <span className={`text-[5px] font-bold px-1 py-0.5 rounded ${mySide === 'solids' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{mySide}</span>}
-                  <div className="flex items-center gap-px">{myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={10} />)}</div>
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className="w-[clamp(14px,3vw,22px)] h-[clamp(14px,3vw,22px)] rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[clamp(6px,1.2vw,10px)] shadow-lg shrink-0">🎱</div>
+                <div className="flex items-center gap-1 min-w-0">
+                  <div className={`w-[clamp(3px,0.6vw,5px)] h-[clamp(3px,0.6vw,5px)] rounded-full shrink-0 ${isMyTurn ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
+                  <span className="text-[clamp(6px,1.4vw,10px)] font-bold text-amber-200 font-mono truncate max-w-[clamp(40px,10vw,80px)]">{myPlayer?.username || 'You'}</span>
+                  {mySide && <span className={`text-[clamp(4px,0.8vw,7px)] font-bold px-[clamp(2px,0.4vw,4px)] py-[clamp(1px,0.2vw,2px)] rounded ${mySide === 'solids' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{mySide}</span>}
+                  <div className="flex items-center gap-px">{myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 9 : 12} />)}</div>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <span className={`text-[9px] font-black font-mono leading-none ${timerVal <= 10 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>{timerVal}<span className="text-[5px] text-amber-600/60 ml-0.5">s</span></span>
-                <div className="w-8 h-[1.5px] rounded-full bg-amber-950 overflow-hidden">
+              <div className="flex items-center gap-1">
+                <span className={`text-[clamp(7px,1.6vw,11px)] font-black font-mono leading-none ${timerVal <= 10 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>{timerVal}<span className="text-[clamp(3px,0.7vw,6px)] text-amber-600/60 ml-0.5">s</span></span>
+                <div className="w-[clamp(20px,5vw,40px)] h-[1.5px] rounded-full bg-amber-950 overflow-hidden">
                   <div className={`h-full rounded-full bg-gradient-to-r ${timerColor} transition-all duration-1000`} style={{ width: `${timerPct}%` }} />
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <div className="flex items-center gap-px">{opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={10} />)}</div>
-                  {opponent?.username?.startsWith('Bot_') && <span className="text-[5px] bg-amber-500/20 text-amber-400 px-1 py-0.5 rounded font-bold">BOT</span>}
-                  {opponentSide && <span className={`text-[5px] font-bold px-1 py-0.5 rounded ${opponentSide === 'solids' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{opponentSide}</span>}
-                  <span className="text-[8px] font-bold text-amber-200 font-mono truncate max-w-[60px]">{opponent?.username || 'Waiting...'}</span>
-                  <div className={`w-1 h-1 rounded-full shrink-0 ${!isMyTurn && roomState.status === 'playing' ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
+              <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">
+                <div className="flex items-center gap-1 min-w-0">
+                  <div className="flex items-center gap-px">{opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 9 : 12} />)}</div>
+                  {opponent?.username?.startsWith('Bot_') && <span className="text-[clamp(4px,0.8vw,7px)] bg-amber-500/20 text-amber-400 px-[clamp(2px,0.4vw,4px)] py-[clamp(1px,0.2vw,2px)] rounded font-bold">BOT</span>}
+                  {opponentSide && <span className={`text-[clamp(4px,0.8vw,7px)] font-bold px-[clamp(2px,0.4vw,4px)] py-[clamp(1px,0.2vw,2px)] rounded ${opponentSide === 'solids' ? 'bg-amber-400/20 text-amber-300' : 'bg-blue-500/20 text-blue-300'}`}>{opponentSide}</span>}
+                  <span className="text-[clamp(6px,1.4vw,10px)] font-bold text-amber-200 font-mono truncate max-w-[clamp(40px,10vw,80px)]">{opponent?.username || 'Waiting...'}</span>
+                  <div className={`w-[clamp(3px,0.6vw,5px)] h-[clamp(3px,0.6vw,5px)] rounded-full shrink-0 ${!isMyTurn && roomState.status === 'playing' ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
                 </div>
-                <button onClick={toggleFullscreen} className="hidden md:inline-flex p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Minimize className="w-2.5 h-2.5" /></button>
+                <button onClick={toggleFullscreen}
+                  className="p-[clamp(2px,0.5vw,5px)] rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"
+                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                >{isFullscreen ? <Minimize className="w-[clamp(8px,1.6vw,12px)] h-[clamp(8px,1.6vw,12px)]" /> : <Maximize className="w-[clamp(8px,1.6vw,12px)] h-[clamp(8px,1.6vw,12px)]" />}</button>
                 <button onClick={() => setShowSidebar(prev => !prev)} className="p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Users className="w-2.5 h-2.5" /></button>
                 <button onClick={onQuitRoom} className="hidden md:inline-flex px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-[7px] font-bold transition shrink-0">{language === 'ar' ? 'مغادرة' : 'Quit'}</button>
               </div>
@@ -566,12 +568,15 @@ export default function ArenaPage({
               </>
             )}
 
-            {/* Mobile: aim joystick + shoot button */}
+            {/* Mobile: swipe to shoot */}
             {isMobile && (
-              <MobileAimJoystick
+              <MobileSwipeShooter
                 aimAngle={aimAngle}
                 onAim={(angle) => { tableRef.current?.setAimAngle(angle); }}
+                onPowerChange={(p) => tableRef.current?.setShotPower(p)}
+                onShoot={handleShootClick}
                 disabled={!isMyTurn}
+                shotPower={shotPower}
               />
             )}
 
@@ -579,28 +584,6 @@ export default function ArenaPage({
               className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300 transition-all"
             >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
           </div>
-
-          {/* Mobile: shoot button at bottom right */}
-          {isMobile && (
-            <MobileShootButton
-              shotPower={shotPower}
-              onShoot={handleShootClick}
-              onPowerChange={(p) => tableRef.current?.setShotPower(p)}
-              disabled={!isMyTurn}
-              isAr={language === 'ar'}
-            />
-          )}
-
-          {/* Mobile arrow guides */}
-          {isMobile && (
-            <MobileArrowGuides
-              aimAngle={aimAngle}
-              shotPower={shotPower}
-              isMyTurn={isMyTurn}
-            />
-          )}
-
-
         </div>
 
         {/* Sidebar */}
@@ -666,187 +649,85 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Aim Joystick ─── */
-function MobileAimJoystick({ aimAngle, onAim, disabled }: {
-  aimAngle: number; onAim: (angle: number) => void; disabled: boolean;
+/* ─── Mobile Swipe Shooter (drag to aim & shoot in one gesture) ─── */
+function MobileSwipeShooter({ shotPower, aimAngle, onAim, onPowerChange, onShoot, disabled }: {
+  shotPower: number; aimAngle: number; onAim: (angle: number) => void; onPowerChange: (p: number) => void; onShoot: () => void; disabled: boolean;
 }) {
-  const baseRef = useRef<HTMLDivElement>(null);
-  const [delta, setDelta] = useState({ x: 0, y: 0 });
-  const aimRef = useRef(aimAngle);
-  aimRef.current = aimAngle;
-  const sensitivity = 0.012;
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const startAngleRef = useRef(0);
+  const elRef = useRef<HTMLDivElement>(null);
 
-  const handleStart = (e: React.PointerEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
-    const rect = el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const move = (ev: PointerEvent) => {
-      const dx = ev.clientX - cx;
-      const dy = ev.clientY - cy;
-      const clampedDx = Math.max(-24, Math.min(24, dx));
-      const clampedDy = Math.max(-24, Math.min(24, dy));
-      setDelta({ x: clampedDx, y: clampedDy });
-      onAim(aimRef.current + clampedDx * sensitivity);
-    };
-    const up = () => {
-      setDelta({ x: 0, y: 0 });
-      el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
-    };
-    move(e.nativeEvent as any);
-    el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
+    startAngleRef.current = aimAngle;
+    setDragPos({ x: e.clientX, y: e.clientY });
   };
 
-  return (
-    <div className="relative flex flex-col items-center gap-1 select-none">
-      <div
-        ref={baseRef}
-        onPointerDown={handleStart}
-        className="w-12 h-12 rounded-full cursor-pointer touch-none select-none flex items-center justify-center"
-        style={{
-          background: 'radial-gradient(circle at 40% 35%, #1a1208, #0d0806 80%, #000)',
-          boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.7), 0 0 15px rgba(0,0,0,0.4), 0 0 0 1px rgba(217,119,6,0.2)',
-        }}
-      >
-        <div
-          className="w-4 h-4 rounded-full transition-all duration-75"
-          style={{
-            transform: `translate(${delta.x}px, ${delta.y}px)`,
-            background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
-            boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.3)',
-            border: '1px solid rgba(255,255,200,0.3)',
-          }}
-        />
-      </div>
-      <span className="text-[5px] font-mono text-amber-500/60 tracking-widest">AIM</span>
-      {disabled && <div className="absolute inset-0 rounded-full bg-black/40" />}
-    </div>
-  );
-}
-
-/* ─── Mobile Shoot Button (hold to charge, release to shoot) ─── */
-function MobileShootButton({ shotPower, onShoot, onPowerChange, disabled, isAr }: {
-  shotPower: number; onShoot: () => void; onPowerChange: (p: number) => void; disabled: boolean; isAr: boolean;
-}) {
-  const [charging, setCharging] = useState(false);
-  const chargeRef = useRef<ReturnType<typeof setInterval>>(undefined);
-  const powerRef = useRef(shotPower);
-  powerRef.current = shotPower;
-
-  const startCharge = () => {
-    if (disabled) return;
-    setCharging(true);
-    onPowerChange(5);
-    chargeRef.current = setInterval(() => {
-      const next = Math.min(100, powerRef.current + 3);
-      onPowerChange(next);
-    }, 30);
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragPos) return;
+    if (!elRef.current) return;
+    const rect = elRef.current.getBoundingClientRect();
+    const dx = e.clientX - dragPos.x;
+    // Horizontal drag → aim angle (left/right fine-tune)
+    const angleDelta = dx * 0.006;
+    onAim(startAngleRef.current + angleDelta);
+    // Vertical from bottom edge → power
+    const relY = (rect.bottom - e.clientY) / rect.height;
+    onPowerChange(Math.max(5, Math.min(100, Math.round(relY * 100))));
   };
 
-  const stopCharge = () => {
-    setCharging(false);
-    clearInterval(chargeRef.current);
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!dragPos) return;
+    const el = e.currentTarget;
+    try { el.releasePointerCapture(e.pointerId); } catch {}
+    setDragPos(null);
     if (!disabled) onShoot();
   };
 
-  useEffect(() => () => clearInterval(chargeRef.current), []);
-
   return (
-    <div className="absolute bottom-6 right-4 z-20 flex flex-col items-center gap-1.5">
-      {/* Power indicator */}
-      <div className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm px-2 py-1 rounded-full border border-amber-900/30">
-        <div className="w-12 h-1.5 rounded-full bg-amber-950 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-100 ${charging ? 'bg-gradient-to-r from-amber-500 to-rose-400' : 'bg-amber-500/60'}`}
-            style={{ width: `${shotPower}%` }}
-          />
-        </div>
-        <span className="text-[7px] font-mono text-amber-400/80 w-5 text-right">{shotPower}</span>
-      </div>
-      {/* Shoot button */}
-      <button
-        onPointerDown={startCharge}
-        onPointerUp={stopCharge}
-        onPointerLeave={stopCharge}
-        disabled={disabled}
-        className={`touch-none select-none w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-xl active:scale-95
-          ${disabled
-            ? 'bg-slate-800/50 border border-slate-700/30 opacity-40'
-            : charging
-              ? 'bg-gradient-to-br from-rose-500 to-rose-700 shadow-rose-500/40 scale-110 border border-rose-400/40'
-              : 'bg-gradient-to-br from-amber-500 to-amber-700 shadow-amber-500/30 border border-amber-400/30 hover:shadow-amber-500/50'
-          }`}
-      >
-        <div className={`w-5 h-5 rounded-full transition-all duration-150 ${charging ? 'bg-white/90' : 'bg-white/80'}`} />
-      </button>
-      <span className="text-[5px] font-mono text-amber-500/60 tracking-widest">
-        {isAr ? 'تسديد' : 'SHOOT'}
-      </span>
-    </div>
-  );
-}
-
-/* ─── Mobile Arrow Guides ─── */
-function MobileArrowGuides({ aimAngle, shotPower, isMyTurn }: {
-  aimAngle: number; shotPower: number; isMyTurn: boolean;
-}) {
-  const [visible, setVisible] = useState(true);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => {
-    setVisible(true);
-    clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setVisible(false), 2500);
-  }, [aimAngle, shotPower]);
-
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-
-  if (!isMyTurn) return null;
-
-  const deg = (aimAngle * 180) / Math.PI;
-  const leftArrow = deg > 10;
-  const rightArrow = deg < -10;
-  const showArrow = Math.abs(deg) > 5;
-
-  return (
-    <>
-      {/* Top: shot direction arrow */}
+    <div className="absolute right-2 bottom-2 z-20 touch-none select-none"
+      style={{ width: 'clamp(36px, 8vw, 52px)', height: 'clamp(100px, 35vh, 180px)' }}
+    >
       <div
-        className={`absolute top-16 left-1/2 -translate-x-1/2 z-10 transition-all duration-500 pointer-events-none
-          ${visible ? 'opacity-60' : 'opacity-0'}`}
+        ref={elRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className={`relative w-full h-full rounded-xl border cursor-pointer overflow-hidden
+          ${disabled ? 'opacity-30' : ''}`}
+        style={{
+          background: 'linear-gradient(180deg, #1a1208 0%, #0d0806 50%, #000 100%)',
+          borderColor: dragPos ? 'rgba(245,158,11,0.5)' : 'rgba(217,119,6,0.25)',
+          boxShadow: dragPos
+            ? 'inset 0 0 30px rgba(245,158,11,0.1), 0 0 20px rgba(245,158,11,0.15)'
+            : 'inset 0 0 15px rgba(0,0,0,0.5), 0 0 10px rgba(0,0,0,0.3)',
+        }}
       >
+        {/* Power fill (from bottom) */}
         <div
-          className="flex items-center gap-2"
-          style={{ transform: `rotate(${-deg}deg)` }}
-        >
-          <div className="h-px w-16 bg-gradient-to-l from-amber-400/60 to-transparent" />
-          <div className="w-0 h-0 border-t-[5px] border-t-transparent border-l-[8px] border-l-amber-400/60 border-b-[5px] border-b-transparent" />
-          <span className="text-[6px] font-mono text-amber-400/50 whitespace-nowrap tracking-widest">SHOT</span>
-        </div>
-      </div>
-
-      {/* Right side: aim direction arrows */}
-      <div className={`absolute right-14 top-1/2 -translate-y-1/2 z-10 transition-all duration-500 pointer-events-none flex flex-col items-center gap-1
-        ${visible && showArrow ? 'opacity-50' : 'opacity-0'}`}>
-        {leftArrow && <ArrowUpCircle className="w-4 h-4 text-amber-400/70 -rotate-90" />}
-        {rightArrow && <ArrowDownCircle className="w-4 h-4 text-amber-400/70 -rotate-90" />}
-        <span className="text-[5px] font-mono text-amber-500/40 tracking-widest">AIM</span>
-      </div>
-
-      {/* Bottom-left: power arrows */}
-        <div className={`absolute bottom-20 left-4 z-10 transition-all duration-500 pointer-events-none flex items-center gap-1.5
-          ${visible ? 'opacity-50' : 'opacity-0'}`}>
-          <ArrowUpCircle className="w-4 h-4 text-amber-400/70" />
-          <div className="relative h-10 w-1.5 rounded-full bg-amber-950/80 overflow-hidden border border-amber-900/30">
-            <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 to-rose-400 transition-all duration-100" style={{ height: `${shotPower}%` }} />
+          className="absolute bottom-0 inset-x-0 transition-all duration-75 rounded-b-xl"
+          style={{
+            height: `${shotPower}%`,
+            background: 'linear-gradient(0deg, rgba(245,158,11,0.2) 0%, rgba(217,119,6,0.05) 100%)',
+            boxShadow: 'inset 0 0 20px rgba(245,158,11,0.1)',
+          }}
+        />
+        {/* Drag indicator */}
+        {dragPos && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-1 h-1 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" />
           </div>
-          <ArrowDownCircle className="w-4 h-4 text-amber-400/70" />
-          <span className="text-[5px] font-mono text-amber-500/40 tracking-widest ml-1">PWR</span>
+        )}
+      </div>
+      {/* Labels */}
+      {!dragPos && (
+        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[5px] font-mono text-amber-500/50 tracking-widest whitespace-nowrap pointer-events-none">
+          SHOOT
         </div>
-    </>
+      )}
+    </div>
   );
 }
