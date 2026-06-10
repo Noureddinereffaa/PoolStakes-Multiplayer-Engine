@@ -45,8 +45,10 @@ export function useBilliardsSocket({
   const [publicRooms, setPublicRooms] = useState<Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }>>([]);
   const [roomCreationCode, setRoomCreationCode] = useState<string | null>(null);
   const [pendingShotTick, setPendingShotTick] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const lobbyWsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | Difficulty } | null>(null);
@@ -242,6 +244,7 @@ export function useBilliardsSocket({
               setIsReconnecting(false);
               setConnectionGrade('excellent');
               onGradeRef.current?.('excellent');
+              setIsSearching(false);
             }
             wasInActiveGameRef.current = msg.state.status === 'playing' || msg.state.status === 'ready';
             if (mountedRef.current) {
@@ -379,6 +382,7 @@ export function useBilliardsSocket({
         reconnectRef.current = null;
         setConnectionGrade('dead');
         onGradeRef.current?.('dead');
+        setIsSearching(false);
       }
     };
 
@@ -387,8 +391,128 @@ export function useBilliardsSocket({
       onGradeRef.current?.('poor');
     };
   }, []);
+  
+  const connectLobby = useCallback(() => {
+    if (lobbyWsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    const wsHost = window.location.host;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${wsHost}/ws`;
+
+    const ws = new WebSocket(wsUrl);
+    lobbyWsRef.current = ws;
+
+    ws.onopen = () => {
+      const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+      ws.send(JSON.stringify({ type: 'authenticate', token }));
+
+      while (offlineQueueRef.current.length > 0) {
+        const msg = offlineQueueRef.current.shift();
+        if (msg) ws.send(JSON.stringify(msg.payload));
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+          case 'authenticated':
+            break;
+          case 'sync_state':
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setRoomState(msg.state);
+            }
+            break;
+          case 'physics_frames':
+            if (mountedRef.current) {
+              setPhysicsFrames(
+                (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
+                  frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
+                )
+              );
+            }
+            break;
+          case 'preview_aim':
+            if (mountedRef.current) {
+              setOpponentAim({
+                angle: msg.angle,
+                power: msg.power,
+                spinX: msg.spinX || 0,
+                spinY: msg.spinY || 0,
+              });
+            }
+            break;
+          case 'disconnect_notice':
+            if (mountedRef.current) {
+              setRoomState((prev: any) => {
+                if (!prev) return prev;
+                const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
+                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
+                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
+              });
+            }
+            break;
+          case 'reconnect_notice':
+            if (mountedRef.current) {
+              setRoomState((prev: any) => {
+                if (!prev) return prev;
+                const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
+                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
+                delete reconnectDeadlines[msg.playerId];
+                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
+              });
+            }
+            break;
+          case 'laravel_api_log':
+            if (mountedRef.current) setApiLogsRef.current(prev => [msg, ...prev]);
+            break;
+          case 'rooms_list':
+            if (mountedRef.current) setPublicRooms(msg.rooms);
+            break;
+          case 'room_created':
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setRoomCreationCode(msg.roomCode);
+              setRoomId(msg.roomId);
+            }
+            break;
+          case 'join_success':
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setRoomId(msg.roomId);
+            }
+            break;
+          case 'room_not_found':
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setErrorRef.current(msg.message);
+            }
+            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
+            break;
+          case 'error':
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setErrorRef.current(msg.message);
+            }
+            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
+            break;
+        }
+      } catch (err) {
+        console.error('Error decoding lobby ws msg:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      lobbyWsRef.current = null;
+    };
+
+    ws.onerror = () => {};
+  }, []);
 
   const handleJoinRoom = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | Difficulty = false) => {
+    setIsSearching(false);
     reconnectRef.current = { targetRoomId, customStake, autoJoinAI };
     reconnectAttemptRef.current = 0;
     connect(targetRoomId, customStake, autoJoinAI);
@@ -399,6 +523,11 @@ export function useBilliardsSocket({
       wsRef.current.send(JSON.stringify(payload));
       return true;
     }
+    if (lobbyWsRef.current && lobbyWsRef.current.readyState === WebSocket.OPEN) {
+      lobbyWsRef.current.send(JSON.stringify(payload));
+      return true;
+    }
+    connectLobby();
     offlineQueueRef.current.push({ type: payload.type, payload, timestamp: Date.now() });
     return false;
   }
@@ -473,7 +602,8 @@ export function useBilliardsSocket({
 
   const handleCreateRoom = useCallback((stake: number, isPublic: boolean = true) => {
     setRoomCreationCode(null);
-    sendOrQueue({ type: 'create_room', stake, isPublic });
+    const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+    sendOrQueue({ type: 'create_room', stake, isPublic, token });
   }, []);
 
   const handleListRooms = useCallback((stake?: number) => {
@@ -487,10 +617,12 @@ export function useBilliardsSocket({
 
   const handleJoinRandom = useCallback((stake: number) => {
     const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+    setIsSearching(true);
     sendOrQueue({ type: 'join_random', stake, username: usernameRef.current ?? '', token });
   }, []);
 
   const handleCancelWaiting = useCallback(() => {
+    setIsSearching(false);
     sendOrQueue({ type: 'cancel_waiting' });
     if (mountedRef.current) {
       setRoomState(null);
@@ -562,6 +694,7 @@ export function useBilliardsSocket({
     isOffline,
     publicRooms,
     roomCreationCode,
+    isSearching,
     handleJoinRoom,
     handlePreviewAim,
     handleShoot,
@@ -575,5 +708,6 @@ export function useBilliardsSocket({
     handleJoinByCode,
     handleJoinRandom,
     handleCancelWaiting,
+    connectLobby,
   };
 }

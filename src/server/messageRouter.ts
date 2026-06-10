@@ -15,6 +15,7 @@ import {
   handleJoinByCode,
   handleJoinRandom,
   handleCancelWaiting,
+  handleAuthenticate,
 } from './gameActions';
 import { pushEventLog } from './state';
 
@@ -63,6 +64,9 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       break;
     case 'cancel_waiting':
       handleCancelWaiting(ws);
+      break;
+    case 'authenticate':
+      handleAuthenticate(ws, msg);
       break;
     default:
       if (ws.readyState === WebSocket.OPEN) {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { Difficulty, MatchHistory as MatchType } from './types';
+import { RoomState, Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import ConnectionStatus from './components/ConnectionStatus';
 import InstallGuard from './components/InstallGuard';
@@ -8,7 +8,7 @@ import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
 import { usePushNotifications } from './hooks/usePushNotifications';
-import { isMobileDevice, isStandalone, requestWakeLock, releaseWakeLock, enterFullscreen } from './utils/mobile';
+import { isMobileDevice, requestWakeLock, releaseWakeLock } from './utils/mobile';
 
 const ArenaPage = lazy(() => import('./components/ArenaPage'));
 const MemberDashboard = lazy(() => import('./components/MemberDashboard'));
@@ -57,7 +57,11 @@ export default function App() {
     document.body.style.removeProperty('height');
     document.body.style.removeProperty('top');
     document.body.style.removeProperty('left');
+    document.body.style.removeProperty('overscroll-behavior');
     document.documentElement.style.removeProperty('overflow');
+    document.documentElement.style.removeProperty('height');
+    document.documentElement.style.removeProperty('position');
+    window.scrollTo(0, 0);
   }
 
   useEffect(() => {
@@ -188,6 +192,8 @@ export default function App() {
     handleJoinByCode,
     handleJoinRandom,
     handleCancelWaiting,
+    isSearching,
+    connectLobby,
   } = useBilliardsSocket({
     username: userSession?.username,
     fetchLaravelUsers,
@@ -204,16 +210,46 @@ export default function App() {
     if (saved) {
       try {
         const Parsed = JSON.parse(saved);
-        if (mountedRef.current) setUserSession(Parsed);
-        navigate('/dashboard');
+        if (Parsed.token) {
+          // Verify token is still valid with the server
+          authFetch('/api/laravel/users').then(res => {
+            if (res.ok) {
+              if (mountedRef.current) setUserSession(Parsed);
+              navigate('/dashboard');
+            } else {
+              // Token expired or invalid - clear session
+              localStorage.removeItem('billiards_session');
+              if (mountedRef.current) navigate('/');
+            }
+          }).catch(() => {
+            // Network error - still allow access (maybe offline)
+            if (mountedRef.current) setUserSession(Parsed);
+            navigate('/dashboard');
+          });
+        }
       } catch (e) {
         console.error('Failed to parse saved session:', e);
+        localStorage.removeItem('billiards_session');
       }
     }
 
     fetchLaravelUsers();
     fetchApiLogs();
   }, []);
+
+  // Auto-navigate to arena when a game is ready (2 players joined) from dashboard
+  const prevRoomStateRef = useRef<RoomState | null>(null);
+  useEffect(() => {
+    const prev = prevRoomStateRef.current;
+    const curr = roomState;
+    prevRoomStateRef.current = curr;
+    if (!curr || location.pathname !== '/dashboard') return;
+    const prevPlayers = prev?.players?.length ?? 0;
+    const currPlayers = curr.players?.length ?? 0;
+    if ((prevPlayers < 2 && currPlayers >= 2) || curr.status === 'ready' || curr.status === 'playing') {
+      navigate('/arena');
+    }
+  }, [roomState, location.pathname, navigate]);
 
   // Wake lock for mobile when in game
   useEffect(() => {
@@ -224,13 +260,6 @@ export default function App() {
     }
     return () => { releaseWakeLock(); };
   }, [roomState?.status]);
-
-  // Auto-enter fullscreen on mobile when joining a game
-  useEffect(() => {
-    if (roomState && (roomState.status === 'playing' || roomState.status === 'ready') && isMobileDevice() && !isStandalone()) {
-      enterFullscreen(document.getElementById('arena-container') || document.body);
-    }
-  }, [roomState?.status, roomState?.roomId]);
 
   // Sync lobby connection state
   useEffect(() => {
@@ -526,11 +555,14 @@ export default function App() {
               }}
               publicRooms={publicRooms}
               roomCreationCode={roomCreationCode}
+              isSearching={isSearching}
               onCreateRoom={handleCreateRoom}
               onListRooms={handleListRooms}
               onJoinByCode={handleJoinByCode}
               onJoinRandom={handleJoinRandom}
               onCancelWaiting={handleCancelWaiting}
+              onConnectLobby={connectLobby}
+              onSignOut={handleSignout}
             />
             </Suspense>
           ) : (

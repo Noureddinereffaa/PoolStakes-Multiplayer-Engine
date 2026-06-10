@@ -23,13 +23,16 @@ interface Props {
   onNavigateRules: () => void;
   onDeposit?: (amount: number, address: string, method: string) => void;
   onWithdraw?: (amount: number, address: string, method: string) => void;
+  onSignOut?: () => void;
   publicRooms: Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }>;
   roomCreationCode: string | null;
+  isSearching: boolean;
   onCreateRoom: (stake: number, isPublic: boolean) => void;
   onListRooms: (stake?: number) => void;
   onJoinByCode: (code: string) => void;
   onJoinRandom: (stake: number) => void;
   onCancelWaiting: () => void;
+  onConnectLobby: () => void;
 }
 
 const STAKES = [5, 10, 25, 50, 100, 250, 500];
@@ -38,8 +41,8 @@ export default function MemberDashboard({
   userSession, stake, roomId, joinDifficulty,
   laravelUsers, matchHistory, language, setLanguage,
   onSetStake, onSetRoomId, onSetJoinDifficulty, onJoinRoom, onNavigateRules,
-  onDeposit, onWithdraw,
-  publicRooms, roomCreationCode, onCreateRoom, onListRooms, onJoinByCode, onJoinRandom, onCancelWaiting,
+  onDeposit, onWithdraw, onSignOut,
+  publicRooms, roomCreationCode, isSearching, onCreateRoom, onListRooms, onJoinByCode, onJoinRandom, onCancelWaiting, onConnectLobby,
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,6 +60,11 @@ export default function MemberDashboard({
   const [wdAddr, setWdAddr] = useState('');
   const [wdMethod, setWdMethod] = useState<'crypto' | 'bank'>('crypto');
   const isAr = language === 'ar';
+
+  // Establish lobby WebSocket connection on mount
+  useEffect(() => {
+    onConnectLobby();
+  }, [onConnectLobby]);
 
   // Refresh public rooms periodically
   const [roomListStake, setRoomListStake] = useState<number | undefined>(undefined);
@@ -97,7 +105,7 @@ export default function MemberDashboard({
   ];
 
   return (
-    <div dir={isAr ? 'rtl' : 'ltr'} className="min-h-screen bg-[#07070a] text-slate-100 flex">
+    <div dir={isAr ? 'rtl' : 'ltr'} className="min-h-screen bg-[#07070a] text-slate-100 flex overscroll-none">
       {/* ── SIDEBAR ── */}
       <aside className="hidden lg:flex flex-col w-64 border-r border-white/5 bg-[#0a0a0f] shrink-0">
         <div className="p-5 border-b border-white/5">
@@ -134,7 +142,7 @@ export default function MemberDashboard({
             {isAr ? 'English' : 'العربية'}
           </button>
           <button
-            onClick={() => { localStorage.removeItem('billiards_session'); navigate('/'); }}
+            onClick={onSignOut || (() => { localStorage.removeItem('billiards_session'); navigate('/'); })}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition"
           >
             <LogOut className="w-4 h-4" />
@@ -144,7 +152,7 @@ export default function MemberDashboard({
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div className="flex-1 flex flex-col min-h-screen">
+      <div className="flex-1 flex flex-col min-h-0">
         {/* ── TOP BAR ── */}
         <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0f]/90 backdrop-blur-xl">
           <div className="flex items-center justify-between px-5 h-14">
@@ -158,7 +166,7 @@ export default function MemberDashboard({
               {/* Mobile nav buttons */}
               <div className="flex lg:hidden items-center gap-2">
                 <button onClick={onNavigateRules} className="px-2.5 py-1.5 rounded-lg border border-white/10 text-xs font-bold text-slate-400 hover:text-white transition">{isAr ? 'القواعد' : 'Rules'}</button>
-                <button onClick={() => { localStorage.removeItem('billiards_session'); navigate('/'); }} className="px-2.5 py-1.5 rounded-lg border border-red-500/20 text-xs font-bold text-red-400 hover:bg-red-500/10 transition">{isAr ? 'خروج' : 'Sign Out'}</button>
+                <button onClick={onSignOut || (() => { localStorage.removeItem('billiards_session'); navigate('/'); })} className="px-2.5 py-1.5 rounded-lg border border-red-500/20 text-xs font-bold text-red-400 hover:bg-red-500/10 transition">{isAr ? 'خروج' : 'Sign Out'}</button>
               </div>
 
               {/* Balance badge */}
@@ -176,10 +184,10 @@ export default function MemberDashboard({
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-6xl mx-auto px-5 py-6 space-y-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          <div className="max-w-6xl mx-auto px-4 py-4 sm:px-5 sm:py-6 space-y-4 sm:space-y-6">
             {/* ── STATS ROW ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
               <StatCard
                 icon={Wallet} label={isAr ? 'الرصيد' : 'Balance'} value={`$${userSession.balance.toFixed(2)}`}
                 sub={userSession.walletAddress ? `${userSession.walletAddress.slice(0, 6)}...` : ''}
@@ -273,7 +281,7 @@ export default function MemberDashboard({
             {activeTab === 'play' && (
               <div className="space-y-5">
                 {/* Mode selector tabs */}
-                <div className="flex gap-1 rounded-xl bg-white/5 p-1">
+                <div className="flex gap-1.5 rounded-xl bg-white/5 p-1.5">
                   {([
                     { id: 'quick', icon: Swords, label: isAr ? 'لعب عشوائي' : 'Quick Play' },
                     { id: 'private', icon: Lock, label: isAr ? 'غرفة خاصة' : 'Private Room' },
@@ -282,12 +290,12 @@ export default function MemberDashboard({
                     <button
                       key={mode.id}
                       onClick={() => { setPlayMode(mode.id); }}
-                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition ${
+                      className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-3 sm:py-2.5 px-2 rounded-lg text-xs sm:text-sm font-bold transition min-h-[44px] ${
                         playMode === mode.id ? 'bg-emerald-500/20 text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-white'
                       }`}
                     >
-                      <mode.icon className="w-4 h-4" />
-                      {mode.label}
+                      <mode.icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{mode.label}</span>
                     </button>
                   ))}
                 </div>
@@ -306,23 +314,28 @@ export default function MemberDashboard({
                       <div className="grid grid-cols-3 gap-2 mb-4">
                         {STAKES.map(v => (
                           <button key={v} type="button" onClick={() => { onSetStake(v); onListRooms(v); }}
-                            className={`py-3 rounded-xl text-sm font-black transition border ${
+                            className={`py-3 sm:py-3.5 rounded-xl text-sm sm:text-base font-black transition border min-h-[48px] ${
                               stake === v ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'
                             }`}
                           >${v}</button>
                         ))}
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <button
                           onClick={() => onJoinRandom(stake)}
-                          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black transition shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 text-sm"
+                          disabled={isSearching}
+                          className={`w-full sm:flex-1 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black transition shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]`}
                         >
-                          <Play className="w-4 h-4" /> {isAr ? 'دخول سريع' : 'Quick Join'}
+                          {isSearching ? (
+                            <><span className="w-4 h-4 rounded-full border-2 border-slate-950/30 border-t-slate-950 animate-spin" /> {isAr ? 'جارٍ البحث…' : 'Searching…'}</>
+                          ) : (
+                            <><Play className="w-4 h-4" /> {isAr ? 'دخول سريع' : 'Quick Join'}</>
+                          )}
                         </button>
                         <button
                           onClick={() => onCreateRoom(stake, true)}
-                          className="flex-1 py-3 rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 font-bold transition flex items-center justify-center gap-2 text-sm"
+                          className="w-full sm:flex-1 py-3.5 rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 font-bold transition flex items-center justify-center gap-2 text-sm sm:text-base min-h-[48px]"
                         >
                           <Globe className="w-4 h-4" /> {isAr ? 'غرفة مفتوحة' : 'Open Room'}
                         </button>
@@ -444,10 +457,10 @@ export default function MemberDashboard({
                       <div className="space-y-4">
                         <div>
                           <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wide mb-2 block">{isAr ? 'مبلغ الرهان' : 'Stake Amount'}</label>
-                          <div className="grid grid-cols-7 gap-1.5 mb-3">
+                          <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 sm:gap-1.5 mb-3">
                             {STAKES.map(v => (
                               <button key={v} type="button" onClick={() => onSetStake(v)}
-                                className={`py-2 rounded-lg text-xs font-bold transition border ${stake === v ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'}`}
+                                className={`py-2 rounded-lg text-xs font-bold transition border min-h-[40px] ${stake === v ? 'bg-emerald-500 border-emerald-500 text-slate-950' : 'border-white/8 text-slate-500 hover:border-white/20 hover:text-white'}`}
                               >${v}</button>
                             ))}
                           </div>
@@ -633,26 +646,26 @@ export default function MemberDashboard({
         </div>
 
         {/* ── MOBILE BOTTOM NAV ── */}
-        <nav className="lg:hidden flex border-t border-white/5 bg-[#0a0a0f]">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: isAr ? 'الرئيسية' : 'Home', path: '/dashboard' },
-            { id: 'play', icon: Swords, label: isAr ? 'العب' : 'Play', path: '', onClick: () => setActiveTab('play') },
-            { id: 'history', icon: History, label: isAr ? 'السجل' : 'History', path: '', onClick: () => setActiveTab('history') },
-            { id: 'rules', icon: BookOpen, label: isAr ? 'القواعد' : 'Rules', path: '', onClick: onNavigateRules },
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => item.onClick ? item.onClick() : navigate(item.path)}
-              className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-bold transition ${
-                (item.path && location.pathname === item.path) || (item.id === 'play' && activeTab === 'play') || (item.id === 'history' && activeTab === 'history')
-                  ? 'text-emerald-400' : 'text-slate-600 hover:text-slate-400'
-              }`}
-            >
-              <item.icon className="w-4 h-4" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
+          <nav className="lg:hidden flex border-t border-white/5 bg-[#0a0a0f] safe-area-bottom">
+            {[
+              { id: 'dashboard', icon: LayoutDashboard, label: isAr ? 'الرئيسية' : 'Home', path: '/dashboard' },
+              { id: 'play', icon: Swords, label: isAr ? 'العب' : 'Play', path: '', onClick: () => setActiveTab('play') },
+              { id: 'history', icon: History, label: isAr ? 'السجل' : 'History', path: '', onClick: () => setActiveTab('history') },
+              { id: 'rules', icon: BookOpen, label: isAr ? 'القواعد' : 'Rules', path: '', onClick: onNavigateRules },
+            ].map(item => (
+              <button
+                key={item.id}
+                onClick={() => item.onClick ? item.onClick() : navigate(item.path)}
+                className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-[10px] font-bold transition min-h-[56px] ${
+                  (item.path && location.pathname === item.path) || (item.id === 'play' && activeTab === 'play') || (item.id === 'history' && activeTab === 'history')
+                    ? 'text-emerald-400' : 'text-slate-600 hover:text-slate-400'
+                }`}
+              >
+                <item.icon className="w-5 h-5" />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
       </div>
     </div>
   );
@@ -674,13 +687,13 @@ function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: 
     violet: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
   };
   return (
-    <div className="rounded-2xl border border-white/5 bg-[#0a0a0f] p-4">
-      <div className={`w-8 h-8 rounded-lg border flex items-center justify-center mb-2.5 ${colors[color]}`}>
-        <Icon className="w-4 h-4" />
+    <div className="rounded-xl sm:rounded-2xl border border-white/5 bg-[#0a0a0f] p-3 sm:p-4">
+      <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center mb-1.5 sm:mb-2.5 ${colors[color]}`}>
+        <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
       </div>
-      <div className="text-xl font-black text-white">{value}</div>
-      <div className="text-xs text-slate-500 mt-0.5">{label}</div>
-      <div className="text-[10px] text-slate-600 mt-0.5">{sub}</div>
+      <div className="text-base sm:text-xl font-black text-white">{value}</div>
+      <div className="text-[10px] sm:text-xs text-slate-500 mt-0.5">{label}</div>
+      <div className="text-[8px] sm:text-[10px] text-slate-600 mt-0.5 truncate">{sub}</div>
     </div>
   );
 }

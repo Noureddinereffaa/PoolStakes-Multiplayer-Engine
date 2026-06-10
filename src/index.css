@@ -17,3 +17,16 @@ body {
 /* Hide scrollbar everywhere */
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
+
+/* Safe area padding for mobile notches */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Prevent overscroll bounce on mobile */
+.overscroll-none {
+  overscroll-behavior: none;
+}
+.overscroll-contain {
+  overscroll-behavior: contain;
+}

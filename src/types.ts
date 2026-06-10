@@ -85,13 +85,15 @@ export type SocketMessage =
   | { type: 'set_ai_opponent'; difficulty?: Difficulty }
   | { type: 'rematch' }
   // New room management messages:
-  | { type: 'create_room'; stake: number; isPublic?: boolean }
+  | { type: 'authenticate'; token?: string }
+  | { type: 'create_room'; stake: number; isPublic?: boolean; token?: string }
   | { type: 'list_rooms'; stake?: number }
   | { type: 'join_by_code'; code: string; username: string; token?: string }
   | { type: 'join_random'; stake: number; username: string; token?: string }
   | { type: 'cancel_waiting' }
   // Server to client messages:
   | { type: 'sync_state'; state: RoomState }
+  | { type: 'authenticated' }
   | { type: 'room_created'; roomId: string; roomCode: string }
   | { type: 'rooms_list'; rooms: Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }> }
   | { type: 'join_success'; roomId: string }

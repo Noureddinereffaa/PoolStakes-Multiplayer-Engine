@@ -767,12 +767,33 @@ export function handleDisconnect(ws: WebSocket): void {
   activeSockets.delete(ws);
 }
 
+// ── Authenticate (lobby session, no room join) ─────────────────
+export function handleAuthenticate(ws: WebSocket, msg: { token?: string }): void {
+  if (!msg.token) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Token required.' }));
+    return;
+  }
+  try {
+    jwt.verify(msg.token, JWT_SECRET);
+    activeSockets.add(ws);
+    ws.send(JSON.stringify({ type: 'authenticated' }));
+  } catch {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' }));
+  }
+}
+
 // ── Create Room ─────────────────────────────────────────────────
 export async function handleCreateRoom(ws: WebSocket, msg: Extract<SocketMessage, { type: 'create_room' }>): Promise<void> {
-  const { stake, isPublic } = msg;
-  const mapping = playerRoomMap.get(ws);
-  if (!mapping) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Authenticate first by joining a session.' }));
+  const { stake, isPublic, token } = msg;
+  if (!token) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' }));
+    return;
+  }
+  let decoded: { id: string; username: string };
+  try {
+    decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+  } catch {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' }));
     return;
   }
 
@@ -783,8 +804,13 @@ export async function handleCreateRoom(ws: WebSocket, msg: Extract<SocketMessage
   room.isPublic = isPublic !== false;
   room.createdAt = Date.now();
 
-  pushEventLog('room_created_by_code', { roomId, code, stake, isPublic });
+  // Auto-join creator
+  await handleJoin(ws, { type: 'join', roomId, username: decoded.username, stake, token });
+
+  // Send room_created so client can show the code
   ws.send(JSON.stringify({ type: 'room_created', roomId, roomCode: code }));
+
+  pushEventLog('room_created_by_code', { roomId, code, stake, isPublic });
 }
 
 // ── List Public Rooms ───────────────────────────────────────────
@@ -810,10 +836,14 @@ export async function handleJoinByCode(ws: WebSocket, msg: Extract<SocketMessage
 // ── Join Random ─────────────────────────────────────────────────
 export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join_random' }>): Promise<void> {
   const { stake, username, token } = msg;
-  const mapping = playerRoomMap.get(ws);
-
-  if (!mapping) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Please login first.' }));
+  if (!token) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' }));
+    return;
+  }
+  try {
+    jwt.verify(token, JWT_SECRET) as { id: string; username: string };
+  } catch {
+    ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' }));
     return;
   }
 
@@ -827,10 +857,8 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
   }
 
   if (targetRoom) {
-    // Join existing waiting room
     await handleJoin(ws, { type: 'join', roomId: targetRoom.roomId, username, stake, token });
   } else {
-    // Create a new public room
     const code = generateRoomCode();
     const roomId = `room_${code}_${Date.now()}`;
     const room = getOrCreateRoom(roomId, `Public ${stake}`, stake);
