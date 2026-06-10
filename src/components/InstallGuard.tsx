@@ -14,7 +14,7 @@ interface InstallGuardProps {
 export default function InstallGuard({ children, language, onInstallComplete }: InstallGuardProps) {
   const location = useLocation();
   const [installState, setInstallState] = useState<'loading' | 'blocked' | 'allowed'>('loading');
-  const deferredInstallRef = useRef<any>(null);
+  const [deferredInstall, setDeferredInstall] = useState<any>(null);
   const isMobile = useRef(false);
 
   const checkInstallState = useCallback(() => {
@@ -37,6 +37,14 @@ export default function InstallGuard({ children, language, onInstallComplete }: 
     return 'blocked';
   }, []);
 
+  // Capture any already-fired beforeinstallprompt from main.tsx
+  useEffect(() => {
+    import('../main').then((m) => {
+      const pending = m.getPendingInstallPrompt();
+      if (pending) setDeferredInstall(pending);
+    });
+  }, []);
+
   useEffect(() => {
     setInstallState(checkInstallState());
   }, [checkInstallState, location.pathname]);
@@ -44,7 +52,7 @@ export default function InstallGuard({ children, language, onInstallComplete }: 
   useEffect(() => {
     const handlePrompt = (e: any) => {
       e.preventDefault();
-      deferredInstallRef.current = e;
+      setDeferredInstall(e);
     };
 
     const handleInstalled = () => {
@@ -100,7 +108,7 @@ export default function InstallGuard({ children, language, onInstallComplete }: 
   if (installState === 'blocked') {
     return (
       <PwaInstallScreen
-        deferredInstall={deferredInstallRef.current}
+        deferredInstall={deferredInstall}
         language={language}
         onInstallComplete={() => {
           localStorage.setItem('pwa_installed', 'true');

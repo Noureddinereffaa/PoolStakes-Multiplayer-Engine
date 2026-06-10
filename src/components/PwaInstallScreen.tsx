@@ -157,68 +157,66 @@ export default function PwaInstallScreen({ deferredInstall, language, onInstallC
               })}
             </div>
 
-            {/* iOS install instructions */}
-            {isiOS && (
-              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
-                <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
-                  <Share2 className="w-4 h-4" />
-                  {isAr ? 'طريقة التثبيت على iPhone/iPad' : 'How to install on iPhone/iPad'}
-                </div>
-                <div className="space-y-2">
-                  <Step num="1" text={isAr ? 'اضغط زر المشاركة' : 'Tap the Share button'} ios />
-                  <Step num="2" text={isAr ? 'اختر "إضافة إلى الشاشة الرئيسية"' : 'Choose "Add to Home Screen"'} ios />
-                  <Step num="3" text={isAr ? 'اضغط "إضافة" بالأعلى' : 'Tap "Add"'} ios />
-                </div>
-              </div>
-            )}
-
-            {/* Install button */}
-            {!!deferredInstall && !isiOS && (
-              <button
-                onClick={handleInstall}
-                className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
-              >
-                <Download className="w-5 h-5" />
-                {isAr ? 'تثبيت التطبيق' : 'Install App'}
-              </button>
-            )}
-
-            {/* Manual install guide (when beforeinstallprompt not available) */}
-            {!deferredInstall && !isiOS && (
-              <div className="space-y-3">
-                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                  <div className="flex items-center gap-2 text-amber-400 text-xs font-bold mb-2">
-                    <Smartphone className="w-4 h-4" />
-                    {isAr ? 'التثبيت اليدوي' : 'Manual Install'}
+            {/* Install section */}
+            {isiOS ? (
+              <div className="w-full space-y-3">
+                <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                    <Share2 className="w-4 h-4" />
+                    {isAr ? 'طريقة التثبيت على iPhone/iPad' : 'How to install on iPhone/iPad'}
                   </div>
                   <div className="space-y-2">
-                    <Step num="1" text={isAr ? 'اضغط على ⋮ في المتصفح' : 'Tap ⋮ in browser'} />
-                    <Step num="2" text={isAr ? 'اختر "تثبيت التطبيق"' : 'Select "Install app"'} />
-                    <Step num="3" text={isAr ? 'اضغط "تثبيت"' : 'Tap "Install"'} />
+                    <Step num="1" text={isAr ? 'اضغط زر المشاركة' : 'Tap the Share button'} ios />
+                    <Step num="2" text={isAr ? 'اختر "إضافة إلى الشاشة الرئيسية"' : 'Choose "Add to Home Screen"'} ios />
+                    <Step num="3" text={isAr ? 'اضغط "إضافة" بالأعلى' : 'Tap "Add"'} ios />
                   </div>
                 </div>
                 <button
                   onClick={handleInstall}
-                  className="w-full py-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-sm hover:bg-emerald-500/20 transition flex items-center justify-center gap-2"
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2"
                 >
-                  <Download className="w-4 h-4" />
-                  {isAr ? 'حاول مرة أخرى' : 'Try Again'}
+                  <Download className="w-5 h-5" />
+                  {isAr ? 'تثبيت التطبيق' : 'Install App'}
                 </button>
+                <p className="text-[10px] text-amber-600/60 text-center">
+                  {isAr ? 'بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'After install, open from home screen'}
+                </p>
+              </div>
+            ) : (
+              <div className="w-full space-y-3">
+                <button
+                  onClick={handleInstall}
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black text-sm transition-all shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <Download className="w-5 h-5" />
+                  {isAr ? 'تثبيت التطبيق' : 'Install App'}
+                </button>
+
+                {!deferredInstall && (
+                  <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                    <div className="flex items-center gap-2 text-amber-400 text-xs font-bold mb-2">
+                      <Smartphone className="w-4 h-4" />
+                      {isAr ? 'التثبيت اليدوي' : 'Manual Install'}
+                    </div>
+                    <div className="space-y-2">
+                      <Step num="1" text={isAr ? 'اضغط على ⋮ في المتصفح' : 'Tap ⋮ in browser'} />
+                      <Step num="2" text={isAr ? 'اختر "تثبيت التطبيق"' : 'Select "Install app"'} />
+                      <Step num="3" text={isAr ? 'اضغط "تثبيت"' : 'Tap "Install"'} />
+                    </div>
+                  </div>
+                )}
+
+                {installError && (
+                  <div className="text-center text-[11px] text-red-400/80 font-mono bg-red-500/5 border border-red-500/20 rounded-lg p-2">
+                    {installError}
+                  </div>
+                )}
+
+                <p className="text-[10px] text-slate-600 text-center">
+                  {isAr ? 'بعد التثبيت، افتح التطبيق من الشاشة الرئيسية' : 'After install, open the app from your home screen'}
+                </p>
               </div>
             )}
-
-            {/* Error */}
-            {installError && (
-              <div className="text-center text-[11px] text-red-400/80 font-mono bg-red-500/5 border border-red-500/20 rounded-lg p-2">
-                {installError}
-              </div>
-            )}
-
-            <p className="text-[10px] text-slate-600 text-center">
-              {isAr
-                ? 'بعد التثبيت، افتح التطبيق من الشاشة الرئيسية'
-                : 'After install, open the app from your home screen'}
-            </p>
           </div>
         )}
 

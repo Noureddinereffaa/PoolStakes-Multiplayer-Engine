@@ -25,6 +25,18 @@ import './index.css';
 
 setupAudioOnInteraction();
 
+// Capture beforeinstallprompt before React mounts (fires early during page load)
+let _pendingInstallPrompt: any = null;
+window.addEventListener('beforeinstallprompt', (e: any) => {
+  e.preventDefault();
+  _pendingInstallPrompt = e;
+});
+export function getPendingInstallPrompt(): any {
+  const p = _pendingInstallPrompt;
+  _pendingInstallPrompt = null; // consume once
+  return p;
+}
+
 function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return;
 
