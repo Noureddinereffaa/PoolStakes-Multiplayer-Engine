@@ -6,7 +6,8 @@ import RulesPage from './components/RulesPage';
 import MemberDashboard from './components/MemberDashboard';
 import ArenaPage from './components/ArenaPage';
 import ConnectionStatus from './components/ConnectionStatus';
-import { ShieldAlert, LogOut, User, X, Wifi, Maximize, Smartphone } from 'lucide-react';
+import InstallGuard from './components/InstallGuard';
+import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
 import { isMobileDevice, isStandalone, requestWakeLock, releaseWakeLock, enterFullscreen } from './utils/mobile';
@@ -30,11 +31,6 @@ function getAuthToken(): string | null {
   try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || null; } catch { return null; }
 }
 
-function isMobileAndNotInstalled(): boolean {
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-  return isMobile && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches;
-}
-
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const token = getAuthToken();
   return fetch(url, { ...options, headers: { ...(options.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
@@ -45,8 +41,6 @@ let toastIdCounter = 0;
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [installed, setInstalled] = useState(() => localStorage.getItem('pwa_installed') === 'true');
-
   // استعادة التمرير عند مغادرة صفحة الساحة
   function restoreBodyScroll() {
     document.body.style.removeProperty('overflow');
@@ -71,8 +65,6 @@ export default function App() {
       restoreBodyScroll();
     }
   }, []);
-  const [showInstallOverlay, setShowInstallOverlay] = useState(false);
-  const deferredInstallRef = useRef<any>(null);
   const toastTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const mountedRef = useRef(true);
   const gameoverProcessedRef = useRef<Set<string>>(new Set());
@@ -85,30 +77,6 @@ export default function App() {
       toastTimersRef.current.clear();
     };
   }, []);
-
-  useEffect(() => {
-    const onInstallPrompt = (e: any) => {
-      e.preventDefault();
-      deferredInstallRef.current = e;
-      if (isMobileDevice() && !installed) setShowInstallOverlay(true);
-    };
-    const onInstalled = () => { setInstalled(true); localStorage.setItem('pwa_installed', 'true'); };
-    const onStandalone = () => {
-      if (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true) {
-        setInstalled(true);
-        localStorage.setItem('pwa_installed', 'true');
-      }
-    };
-    window.addEventListener('beforeinstallprompt', onInstallPrompt);
-    window.addEventListener('appinstalled', onInstalled);
-    onStandalone();
-    window.matchMedia('(display-mode: standalone)').addEventListener('change', onStandalone);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onInstallPrompt);
-      window.removeEventListener('appinstalled', onInstalled);
-      window.matchMedia('(display-mode: standalone)').removeEventListener('change', onStandalone);
-    };
-  }, [installed]);
 
   // Authentication & session state
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -437,7 +405,7 @@ export default function App() {
   const activeEscrow = roomState && roomState.status !== 'waiting' && roomState.status !== 'gameover' ? roomState.stake * 2 : 0;
 
   return (
-    <>
+    <InstallGuard language={language} onInstallComplete={() => localStorage.setItem('pwa_installed', 'true')}>
       {/* Toast notification stack */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-md">
         {toasts.map((toast) => (
@@ -519,10 +487,6 @@ export default function App() {
               onSetRoomId={setRoomId}
               onSetJoinDifficulty={setJoinDifficulty}
               onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
-                if (isMobile && !installed && !(navigator as any).standalone && !window.matchMedia('(display-mode: standalone)').matches) {
-                  return setShowInstallOverlay(true);
-                }
                 handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
                 navigate('/arena');
               }}
@@ -680,50 +644,6 @@ export default function App() {
           )
         } />
       </Routes>
-
-      {/* Mobile install overlay */}
-      {showInstallOverlay && !installed && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
-          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-amber-600/30 to-amber-800/30 border-2 border-amber-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(245,158,11,0.2)]">
-            <Smartphone className="w-14 h-14 text-amber-400" />
-          </div>
-          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'ثبّت التطبيق' : 'INSTALL APP'}</div>
-          <div className="text-xs text-amber-600/60 font-mono text-center px-8 max-w-[320px]">
-            {deferredInstallRef.current
-              ? (language === 'ar' ? 'جرب التطبيق الأصلي لأداء أسرع ولعب دون اتصال' : 'Get the native app for faster performance & offline play')
-              : (language === 'ar' ? 'استخدم ⋮ ← تثبيت التطبيق من المتصفح' : 'Use ⋮ → Install app from your browser menu')}
-          </div>
-          <button
-            onClick={async () => {
-              if (deferredInstallRef.current) {
-                deferredInstallRef.current.prompt();
-                const res = await deferredInstallRef.current.userChoice;
-                if (res.outcome === 'accepted') { setInstalled(true); setShowInstallOverlay(false); addToast('success', languageRef.current === 'ar' ? 'تم التثبيت! افتح من الشاشة الرئيسية' : 'App installed! Open from home screen', 5000); }
-              } else {
-                setShowInstallOverlay(false);
-                addToast('success', languageRef.current === 'ar' ? 'استخدم القائمة ⋮ ← تثبيت التطبيق' : 'Use ⋮ → Install app', 6000);
-              }
-            }}
-            className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-          >📲 {language === 'ar' ? 'تثبيت' : 'INSTALL'}</button>
-          <button onClick={() => setShowInstallOverlay(false)} className="mt-2 text-[11px] text-amber-600/40 font-mono underline hover:text-amber-600/60 transition">{language === 'ar' ? 'تخطي' : 'Skip'}</button>
-        </div>
-      )}
-      {showInstallOverlay && installed && (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center gap-4 px-6">
-          <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-emerald-600/30 to-emerald-800/30 border-2 border-emerald-500/50 flex items-center justify-center shadow-[0_0_60px_rgba(16,185,129,0.2)]">
-            <svg className="w-14 h-14 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <div className="text-lg font-black font-mono text-emerald-400">{language === 'ar' ? '✓ تم التثبيت' : 'APP INSTALLED ✓'}</div>
-          <div className="text-xs text-emerald-600/60 font-mono text-center px-8 max-w-[320px]">{language === 'ar' ? 'افتح التطبيق من الشاشة الرئيسية لتجربة كاملة' : 'Open the app from your home screen for the full experience'}</div>
-          <button
-            onClick={() => { setShowInstallOverlay(false); }}
-            className="mt-6 px-10 py-4 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-base font-black tracking-wider active:scale-95 transition-all shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_50px_rgba(16,185,129,0.6)]"
-          >{language === 'ar' ? 'متابعة' : 'CONTINUE'}</button>
-        </div>
-      )}
-    </>
+    </InstallGuard>
   );
 }
