@@ -274,7 +274,9 @@ export default function ArenaPage({
     document.body.style.height = '100%';
     document.body.style.top = '0';
     document.body.style.left = '0';
+    document.body.style.touchAction = 'none';
     document.documentElement.style.overflow = 'hidden';
+    document.documentElement.style.touchAction = 'none';
 
     // Mobile: aggressively hide browser chrome + auto-fullscreen
     if (isMobile) {
@@ -297,7 +299,9 @@ export default function ArenaPage({
       document.body.style.removeProperty('height');
       document.body.style.removeProperty('top');
       document.body.style.removeProperty('left');
+      document.body.style.removeProperty('touch-action');
       document.documentElement.style.removeProperty('overflow');
+      document.documentElement.style.removeProperty('touch-action');
       document.body.style.removeProperty('overscroll-behavior');
     };
   }, []);
@@ -395,15 +399,39 @@ export default function ArenaPage({
 
   if (!roomState) {
     return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-50 bg-gradient-to-b from-[#0a0604] to-black flex items-center justify-center">
-        <div className="flex flex-col items-center gap-6 p-8 rounded-2xl bg-black/40 border border-amber-900/20 shadow-[0_0_50px_rgba(0,0,0,0.5)] backdrop-blur-sm">
-          <div className="text-amber-400 animate-pulse text-lg font-mono font-bold flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping shadow-[0_0_10px_#f59e0b]" />
-            {language === 'ar' ? 'جاري الاتصال...' : 'Connecting to arena...'}
+      <div className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden overscroll-none select-none">
+        {/* Skeleton Header */}
+        <div className="h-12 bg-gradient-to-b from-black/80 to-transparent px-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 rounded-full bg-amber-900/30 animate-pulse" />
+            <div className="w-20 h-3 rounded bg-amber-900/20 animate-pulse" />
           </div>
-          <button onClick={onQuitRoom} className="px-6 py-3 rounded-xl bg-amber-950/50 hover:bg-amber-900/60 border border-amber-800/40 text-amber-300 font-black transition shadow-lg backdrop-blur-sm">{language === 'ar' ? 'إلغاء' : 'Cancel'}</button>
+          <div className="w-16 h-4 rounded bg-amber-900/20 animate-pulse" />
         </div>
-      </motion.div>
+        
+        {/* Skeleton Table Area */}
+        <div className="flex-1 w-full max-w-6xl mx-auto flex items-center justify-center p-2 sm:p-4">
+          <div className="w-full aspect-[2/1] rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-br from-[#1a0c06] to-[#0a0402] border-[16px] sm:border-[24px] border-[#2a1005] shadow-[0_0_60px_rgba(0,0,0,0.8)_inset] relative overflow-hidden">
+            <div className="absolute inset-0 bg-emerald-950/20 animate-pulse" />
+            
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-6">
+                <span className="w-5 h-5 rounded-full bg-amber-500 animate-ping shadow-[0_0_20px_#f59e0b]" />
+                <div className="text-amber-500/70 font-mono font-bold text-xs sm:text-sm uppercase tracking-widest">
+                  {language === 'ar' ? 'جاري تجهيز الطاولة...' : 'PREPARING ARENA...'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Skeleton Footer Controls */}
+        <div className="h-20 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center pb-4">
+          <button onClick={onQuitRoom} className="px-8 py-2.5 rounded-xl bg-amber-950/40 border border-amber-900/30 text-amber-600 font-black tracking-widest hover:bg-amber-900/60 hover:text-amber-400 transition-colors">
+            {language === 'ar' ? 'إلغاء وإلعودة' : 'CANCEL & RETURN'}
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -586,18 +614,6 @@ export default function ArenaPage({
           {/* Mobile: bottom power buttons (left + right) with drag-to-power + release-to-shoot */}
           {isMobile && (
             <>
-              <div className="absolute left-0 bottom-0 z-20">
-                <MobilePowerButton side="left" shotPower={shotPower}
-                  disabled={!isMyTurn}
-                  onPowerChange={(p) => tableRef.current?.setShotPower(p)}
-                  onShoot={handleShootClick} />
-              </div>
-              <div className="absolute right-0 bottom-0 z-20">
-                <MobilePowerButton side="right" shotPower={shotPower}
-                  disabled={!isMyTurn}
-                  onPowerChange={(p) => tableRef.current?.setShotPower(p)}
-                  onShoot={handleShootClick} />
-              </div>
               {/* Mobile: connection quality dot (bottom center) */}
               <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none">
                 <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_4px_rgba(0,0,0,0.5)] ${

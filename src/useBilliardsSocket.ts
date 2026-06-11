@@ -103,6 +103,143 @@ export function useBilliardsSocket({
     };
   }, []);
 
+  // Shared message handler – used by both connect() and ensureWsConnected()
+  const handleSocketMessage = (event: MessageEvent, fallbackTimer: ReturnType<typeof setTimeout> | null, isReconnectCheck: boolean = false) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === 'pong') {
+          markPongReceived();
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          const grade = getConnectionGrade();
+          setConnectionGrade(grade);
+          onGradeRef.current?.(grade);
+          return;
+        }
+
+        switch (msg.type) {
+          case 'sync_state':
+            if (fallbackTimer) clearTimeout(fallbackTimer);
+            if (mountedRef.current) {
+              setIsReconnecting(false);
+              setConnectionGrade('excellent');
+              onGradeRef.current?.('excellent');
+              setIsSearching(false);
+            }
+            wasInActiveGameRef.current = msg.state.status === 'playing' || msg.state.status === 'ready';
+            if (msg.state.status === 'gameover') {
+              reconnectRef.current = null;
+              reconnectAttemptRef.current = 0;
+            }
+            if (mountedRef.current) {
+              setRoomState(msg.state);
+              setOpponentAim(null);
+            }
+            try {
+              sessionStorage.setItem('arena_room_id', msg.state.roomId || '');
+              sessionStorage.setItem('arena_stake', String(msg.state.stake || 0));
+            } catch {}
+            break;
+          case 'physics_frames':
+            if (mountedRef.current) {
+              setOpponentAim(null);
+              setPhysicsFrames(
+                (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
+                  frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
+                )
+              );
+            }
+            break;
+          case 'preview_aim':
+            if (mountedRef.current) {
+              setOpponentAim({
+                angle: msg.angle,
+                power: msg.power,
+                spinX: msg.spinX || 0,
+                spinY: msg.spinY || 0,
+              });
+            }
+            break;
+          case 'disconnect_notice':
+            if (mountedRef.current) {
+              setRoomState((prev: any) => {
+                if (!prev) return prev;
+                const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
+                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
+                const players = prev.players.map((p: any) =>
+                  p.id === msg.playerId ? { ...p, isConnected: false } : p
+                );
+                return { ...prev, disconnectedPlayerIds, reconnectDeadlines, players };
+              });
+            }
+            if (mountedRef.current) setErrorRef.current('Opponent disconnected. Waiting for reconnection...');
+            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 30000);
+            break;
+          case 'reconnect_notice':
+            if (mountedRef.current) {
+              setRoomState((prev: any) => {
+                if (!prev) return prev;
+                const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
+                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
+                delete reconnectDeadlines[msg.playerId];
+                const players = prev.players.map((p: any) =>
+                  p.id === msg.playerId ? { ...p, isConnected: true } : p
+                );
+                return { ...prev, disconnectedPlayerIds, reconnectDeadlines, players };
+              });
+            }
+            if (mountedRef.current) setErrorRef.current(null);
+            break;
+          case 'laravel_api_log':
+            if (mountedRef.current) setApiLogsRef.current((prev: any) => [msg, ...prev]);
+            break;
+          case 'room_created':
+            if (mountedRef.current) {
+              setRoomCreationCode(msg.roomCode);
+              setRoomId(msg.roomId);
+            }
+            break;
+          case 'rooms_list':
+            if (mountedRef.current) setPublicRooms(msg.rooms);
+            break;
+          case 'searching':
+            if (mountedRef.current) setIsSearching(true);
+            break;
+          case 'join_success':
+            if (mountedRef.current) setRoomId(msg.roomId);
+            break;
+          case 'room_not_found':
+            if (mountedRef.current) setErrorRef.current(msg.message);
+            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
+            break;
+          case 'cancel_waiting_confirmed':
+            try { sessionStorage.removeItem('arena_room_id'); sessionStorage.removeItem('arena_stake'); } catch {}
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setRoomState(null);
+              setRoomCreationCode(null);
+            }
+            break;
+          case 'error':
+            if (mountedRef.current) setIsSearching(false);
+            if (isReconnectCheck) {
+              if (mountedRef.current) {
+                setIsReconnecting(false);
+                setErrorRef.current(msg.message || 'Reconnection failed. The match may have ended.');
+              }
+              reconnectRef.current = null;
+              reconnectAttemptRef.current = 0;
+            } else {
+              if (mountedRef.current) setErrorRef.current(msg.message);
+              setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
+            }
+            break;
+        }
+      } catch (err) {
+        console.error('Error decoding client websocket msg:', err);
+      }
+  };
+
   const connect = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | Difficulty = false, isReconnect = false) => {
     if (!isReconnect) {
       reconnectAttemptRef.current = 0;
@@ -133,7 +270,8 @@ export function useBilliardsSocket({
     }
 
     const wsHost = window.location.host;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const forceWss = import.meta.env.VITE_ENFORCE_WSS === 'true';
+    const protocol = forceWss || window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${wsHost}/ws`;
 
     const ws = new WebSocket(wsUrl);
@@ -228,140 +366,7 @@ export function useBilliardsSocket({
       }
     };
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === 'pong') {
-          markPongReceived();
-          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
-          const grade = getConnectionGrade();
-          setConnectionGrade(grade);
-          onGradeRef.current?.(grade);
-          return;
-        }
-
-        switch (msg.type) {
-          case 'sync_state':
-            if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
-            if (mountedRef.current) {
-              setIsReconnecting(false);
-              setConnectionGrade('excellent');
-              onGradeRef.current?.('excellent');
-              setIsSearching(false);
-            }
-            wasInActiveGameRef.current = msg.state.status === 'playing' || msg.state.status === 'ready';
-            // Clear reconnect state when game ends
-            if (msg.state.status === 'gameover') {
-              reconnectRef.current = null;
-              reconnectAttemptRef.current = 0;
-            }
-            if (mountedRef.current) {
-              setRoomState(msg.state);
-              setOpponentAim(null);
-            }
-            // Persist room info for reconnection after page refresh
-            try {
-              sessionStorage.setItem('arena_room_id', msg.state.roomId || '');
-              sessionStorage.setItem('arena_stake', String(msg.state.stake || 0));
-            } catch {}
-            break;
-          case 'physics_frames':
-            if (mountedRef.current) {
-              setOpponentAim(null);
-              setPhysicsFrames(
-                (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
-                  frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
-                )
-              );
-            }
-            break;
-          case 'preview_aim':
-            if (mountedRef.current) {
-              setOpponentAim({
-                angle: msg.angle,
-                power: msg.power,
-                spinX: msg.spinX || 0,
-                spinY: msg.spinY || 0,
-              });
-            }
-            break;
-          case 'disconnect_notice':
-            if (mountedRef.current) {
-              setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
-                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
-                const players = prev.players.map((p: any) =>
-                  p.id === msg.playerId ? { ...p, isConnected: false } : p
-                );
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines, players };
-              });
-            }
-            if (mountedRef.current) setErrorRef.current('Opponent disconnected. Waiting for reconnection...');
-            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 30000);
-            break;
-          case 'reconnect_notice':
-            if (mountedRef.current) {
-              setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
-                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
-                delete reconnectDeadlines[msg.playerId];
-                const players = prev.players.map((p: any) =>
-                  p.id === msg.playerId ? { ...p, isConnected: true } : p
-                );
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines, players };
-              });
-            }
-            if (mountedRef.current) setErrorRef.current(null);
-            break;
-          case 'laravel_api_log':
-            if (mountedRef.current) setApiLogsRef.current(prev => [msg, ...prev]);
-            break;
-          case 'room_created':
-            if (mountedRef.current) {
-              setRoomCreationCode(msg.roomCode);
-              setRoomId(msg.roomId);
-            }
-            break;
-          case 'rooms_list':
-            if (mountedRef.current) setPublicRooms(msg.rooms);
-            break;
-          case 'join_success':
-            if (mountedRef.current) setRoomId(msg.roomId);
-            break;
-          case 'room_not_found':
-            if (mountedRef.current) setErrorRef.current(msg.message);
-            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
-            break;
-          case 'cancel_waiting_confirmed':
-            try { sessionStorage.removeItem('arena_room_id'); sessionStorage.removeItem('arena_stake'); } catch {}
-            if (mountedRef.current) {
-              setIsSearching(false);
-              setRoomState(null);
-              setRoomCreationCode(null);
-            }
-            break;
-          case 'error':
-            if (mountedRef.current) setIsSearching(false);
-            if (isReconnect) {
-              if (mountedRef.current) {
-                setIsReconnecting(false);
-                setErrorRef.current(msg.message || 'Reconnection failed. The match may have ended.');
-              }
-              reconnectRef.current = null;
-              reconnectAttemptRef.current = 0;
-            } else {
-              if (mountedRef.current) setErrorRef.current(msg.message);
-              setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
-            }
-            break;
-        }
-      } catch (err) {
-        console.error('Error decoding client websocket msg:', err);
-      }
-    };
+    ws.onmessage = (event) => handleSocketMessage(event, fallbackTimerRef.current, isReconnect);
 
     ws.onclose = () => {
       if (pingTimerRef.current) {
@@ -417,7 +422,8 @@ export function useBilliardsSocket({
     if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING)) return;
     // Establish a WS connection for lobby operations (authenticate without joining a room)
     const wsHost = window.location.host;
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const forceWss = import.meta.env.VITE_ENFORCE_WSS === 'true';
+    const protocol = forceWss || window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${wsHost}/ws`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -452,101 +458,7 @@ export function useBilliardsSocket({
       }
     };
 
-    // Full message handler — same as connect() but without aiScheduled logic
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'pong') {
-          markPongReceived();
-          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
-          const grade = getConnectionGrade();
-          setConnectionGrade(grade);
-          onGradeRef.current?.(grade);
-          return;
-        }
-        switch (msg.type) {
-          case 'sync_state':
-            if (fallbackTimer) clearTimeout(fallbackTimer);
-            if (mountedRef.current) {
-              setIsReconnecting(false);
-              setConnectionGrade('excellent');
-              setIsSearching(false);
-              setRoomState(msg.state);
-              setOpponentAim(null);
-            }
-            try { sessionStorage.setItem('arena_room_id', msg.state.roomId || ''); sessionStorage.setItem('arena_stake', String(msg.state.stake || 0)); } catch {}
-            break;
-          case 'physics_frames':
-            if (mountedRef.current) {
-              setOpponentAim(null);
-              setPhysicsFrames(
-                (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
-                  frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
-                )
-              );
-            }
-            break;
-          case 'preview_aim':
-            if (mountedRef.current) {
-              setOpponentAim({ angle: msg.angle, power: msg.power, spinX: msg.spinX || 0, spinY: msg.spinY || 0 });
-            }
-            break;
-          case 'disconnect_notice':
-            if (mountedRef.current) {
-              setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
-                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
-              });
-              setErrorRef.current('Opponent disconnected. Waiting for reconnection...');
-              setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 30000);
-            }
-            break;
-          case 'reconnect_notice':
-            if (mountedRef.current) {
-              setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
-                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
-                delete reconnectDeadlines[msg.playerId];
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
-              });
-              setErrorRef.current(null);
-            }
-            break;
-          case 'laravel_api_log':
-            if (mountedRef.current) setApiLogsRef.current((prev: any) => [msg, ...prev]);
-            break;
-          case 'room_created':
-            if (mountedRef.current) { setRoomCreationCode(msg.roomCode); setRoomId(msg.roomId); }
-            break;
-          case 'rooms_list':
-            if (mountedRef.current) setPublicRooms(msg.rooms);
-            break;
-          case 'searching':
-            if (mountedRef.current) setIsSearching(true);
-            break;
-          case 'join_success':
-            if (mountedRef.current) setRoomId(msg.roomId);
-            break;
-          case 'room_not_found':
-            if (mountedRef.current) setErrorRef.current(msg.message);
-            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
-            break;
-          case 'cancel_waiting_confirmed':
-            try { sessionStorage.removeItem('arena_room_id'); sessionStorage.removeItem('arena_stake'); } catch {}
-            if (mountedRef.current) { setIsSearching(false); setRoomState(null); setRoomCreationCode(null); }
-            break;
-          case 'error':
-            if (mountedRef.current) { setIsSearching(false); setErrorRef.current(msg.message); }
-            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
-            break;
-        }
-      } catch (err) {
-        console.error('Error decoding ws msg:', err);
-      }
-    };
+    ws.onmessage = (event) => handleSocketMessage(event, fallbackTimer, false);
 
     ws.onclose = () => {
       if (pingTimerRef.current) { clearInterval(pingTimerRef.current); pingTimerRef.current = null; }

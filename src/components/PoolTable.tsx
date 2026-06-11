@@ -149,11 +149,21 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     if (!isAnimating) turnStartTimestampRef.current = Date.now();
   }, [roomState?.currentTurn, isAnimating]);
 
+  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (isMyTurn && !isAnimating && roomState.status === 'playing') {
-      onPreviewAim?.(aimAngle, shotPower, spinX, spinY);
+      if (previewTimeoutRef.current) {
+        clearTimeout(previewTimeoutRef.current);
+      }
+      previewTimeoutRef.current = setTimeout(() => {
+        onPreviewAim?.(aimAngle, shotPower, spinX, spinY);
+      }, 16);
     }
-  }, [aimAngle, shotPower, spinX, spinY, isMyTurn, isAnimating, roomState.status]);
+    return () => {
+      if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current);
+    };
+  }, [aimAngle, shotPower, spinX, spinY, isMyTurn, isAnimating, roomState.status, onPreviewAim]);
 
   useEffect(() => {
     if (roomState?.log?.length) {
@@ -510,22 +520,18 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             const dy = coords.y - cueBall.y;
             const dist = Math.hypot(dx, dy);
             
-            // Three zones:
-            // < 35px from cue ball center = Pull-back (power control like real pool)
-            // < 130px = Rotate Aim
-            // Anywhere else = Camera Pan
-            if (dist < 35) {
+            // Two zones:
+            // < 45px from cue ball center = Pull-back (power control like real pool)
+            // Anywhere else = Rotate Aim
+            if (dist < 45) {
               setDragMode('pull');
               dragModeRef.current = 'pull';
               pullStartPosRef.current = coords;
               setIsPulling(true);
               isPullingRef.current = true;
-            } else if (dist < 130) {
+            } else {
               setDragMode('rotate');
               dragModeRef.current = 'rotate';
-            } else {
-              setDragMode('pan');
-              dragModeRef.current = 'pan';
             }
           } else {
             // pointer move logic
@@ -553,25 +559,21 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               pullStartPosRef.current = coords;
             } 
             else if (dragModeRef.current === 'rotate') {
-              // Smoothly return camera to 0,0 when rotating
-              setCameraOffset(prev => ({ x: prev.x * 0.85, y: prev.y * 0.85 }));
+              // Always ensure camera is centered
+              setCameraOffset({ x: 0, y: 0 });
               
-              const screenX = coords.x + cameraOffsetRef.current.x;
+              const screenX = coords.x;
               const deltaX = screenX - dragStartXRef.current;
               dragStartXRef.current = screenX;
 
               const sens = isFineAimRef.current ? SHIFT_MODIFIER : 1;
-              const velocity = deltaX * DRAG_ROTATION_SENSITIVITY;
-              
-              const adaptive = Math.abs(velocity) < 0.015 ? velocity * 0.35 : velocity * 1.0;
-              aimInertiaVelocityRef.current = adaptive * sens;
+              const angleChange = deltaX * 0.005 * sens;
 
-              const rawAngle = aimAngleRef.current + adaptive * sens;
-              targetAimAngleRef.current = rawAngle;
+              const newAngle = aimAngleRef.current + angleChange;
+              targetAimAngleRef.current = newAngle;
               
-              const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR;
-              setAimAngle(smoothed);
-              aimAngleRef.current = smoothed;
+              setAimAngle(newAngle);
+              aimAngleRef.current = newAngle;
             }
           }
         }
@@ -581,20 +583,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const [isPointerActive, setIsPointerActive] = useState(false);
 
-  useEffect(() => {
-    let frameId: number;
-    const loop = () => {
-      if (!isPointerActive && Math.abs(aimInertiaVelocityRef.current) > 0.0001 && isMobile.current) {
-        aimInertiaVelocityRef.current *= 0.92;
-        const newAngle = aimAngleRef.current + aimInertiaVelocityRef.current;
-        setAimAngle(newAngle);
-        aimAngleRef.current = newAngle;
-      }
-      frameId = requestAnimationFrame(loop);
-    };
-    frameId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frameId);
-  }, [isPointerActive]);
+  // Inertia loop removed for 1-to-1 precise manual control
 
   const handlePointerDown = (e: any) => { if (isAnimatingRef.current) return; setIsPointerActive(true); handlePointerAction(e, true); };
   const handlePointerMove = (e: any) => {
@@ -734,9 +723,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   }), [spinX, spinY, shotPower, isAimLocked, aimAngle, hudNotification, onResetCueBall]);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative bg-gradient-to-b from-[#0a0604] to-[#040201] overflow-hidden">
+    <div ref={containerRef} className="w-full h-full relative bg-gradient-to-b from-[#0a0604] to-[#040201] overflow-hidden touch-none" style={{ touchAction: 'none' }}>
       {/* Pure Canvas - fills container, zero overlays */}
-      <div className="absolute inset-0 flex items-center justify-center transition-transform duration-700 ease-out" style={{ 
+      <div className="absolute inset-0 flex items-center justify-center transition-transform duration-700 ease-out touch-none" style={{ 
         willChange: 'transform',
         transform: isPointerActive && !isScratchPlacing && !isAnimating ? 'scale(1.06)' : 'scale(1.00)'
       }}>

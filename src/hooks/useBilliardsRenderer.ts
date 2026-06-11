@@ -132,7 +132,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     const ctx2d = canvas.getContext('2d');
     if (!ctx2d) return;
 
-    const dpr = ctx.isMobileRef.current ? Math.min(window.devicePixelRatio || 1, 1.25) : Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = window.devicePixelRatio || 1;
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
     ctx2d.scale(dpr, dpr);
@@ -148,10 +148,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     // Cache static background table graphics on offscreen canvas for extreme performance
     if (!ctx.offscreenCanvasRef.current) {
       const offCanvas = document.createElement('canvas');
-      offCanvas.width = 800;
-      offCanvas.height = 400;
+      offCanvas.width = 800 * dpr;
+      offCanvas.height = 400 * dpr;
       const offCtx = offCanvas.getContext('2d');
       if (offCtx) {
+        offCtx.scale(dpr, dpr);
         // ── Outer table frame (wood rails) ──
         const RAIL_W = 28;
         const INNER = RAIL_W;

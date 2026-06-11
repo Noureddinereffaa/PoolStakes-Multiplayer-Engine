@@ -718,6 +718,38 @@ export function triggerAiShot(room: RoomState, opts?: {
     // ترتيب حسب الجودة (أقل score أفضل)
     scoredTargets.sort((a, b) => a.totalScore - b.totalScore);
 
+    // AI Lookahead: محاكاة فيزيائية مبسطة لأفضل 3 خيارات في المستوى الصعب
+    if (diff === 'hard' && scoredTargets.length > 0) {
+      const topCandidates = scoredTargets.slice(0, 3);
+      for (const cand of topCandidates) {
+        const simBalls = room.balls.map(b => ({ ...b }));
+        const simCb = simBalls.find(b => b.id === 0);
+        if (!simCb) continue;
+        const aiForce = powerToVelocity(cand.power);
+        simCb.vx = Math.cos(cand.angle) * aiForce;
+        simCb.vy = Math.sin(cand.angle) * aiForce;
+
+        let iterations = 0;
+        let scratch = false;
+        let pocketedTarget = false;
+        const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
+        while (iterations < 600 && isAnyBallMoving(simBalls)) {
+          simulatePhysicsStep(simBalls, contactTracker);
+          iterations++;
+        }
+        
+        const endCb = simBalls.find(b => b.id === 0);
+        if (!endCb || endCb.isPocketed) scratch = true;
+        const endTarget = simBalls.find(b => b.id === cand.target.id);
+        if (endTarget && endTarget.isPocketed) pocketedTarget = true;
+        
+        if (scratch) cand.totalScore += 2000; // تجنب الـ scratch تماماً
+        if (pocketedTarget) cand.totalScore -= 500; // كافئ الهدف المضمون
+      }
+      // إعادة الترتيب بعد المحاكاة
+      scoredTargets.sort((a, b) => a.totalScore - b.totalScore);
+    }
+
     // هل هناك أهداف ممكنة؟
     const isClutch = targets.length <= 2; // ضغط: كرات قليلة متبقية
     const shouldUseSafety = scoredTargets.length === 0 && isHard;

@@ -247,7 +247,7 @@ export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { ty
   if (room.currentTurn !== playerId) return;
   for (const client of clientsByRoom.get(roomId) || []) {
     if (client !== ws && client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'preview_aim', angle: msg.angle, power: msg.power }));
+      client.send(JSON.stringify({ type: 'preview_aim', angle: msg.angle, power: msg.power, spinX: msg.spinX, spinY: msg.spinY }));
     }
   }
 }
@@ -384,6 +384,15 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
 
 // ── Chat ─────────────────────────────────────────────────────
 const chatCooldowns = new Map<string, number>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [playerId, timestamp] of chatCooldowns.entries()) {
+    if (now - timestamp > 5000) {
+      chatCooldowns.delete(playerId);
+    }
+  }
+}, 60000);
 
 export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'chat' }>): void {
   const mapping = playerRoomMap.get(ws);

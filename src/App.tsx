@@ -9,7 +9,7 @@ import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
 import { usePushNotifications } from './hooks/usePushNotifications';
-import { isMobileDevice, requestWakeLock, releaseWakeLock } from './utils/mobile';
+import { isMobileDevice, requestWakeLock, releaseWakeLock, enterFullscreen } from './utils/mobile';
 import { PageLoader } from './components/ui/Spinner';
 
 const ArenaPage = lazy(() => import('./components/ArenaPage'));
@@ -550,6 +550,7 @@ export default function App() {
               onSetJoinDifficulty={setJoinDifficulty}
               onJoinRoom={(targetRoomId: string, customStake: number, autoJoinAI?: boolean | Difficulty) => {
                 handleJoinRoom(targetRoomId, customStake, autoJoinAI || false);
+                enterFullscreen(document.documentElement);
                 navigate('/arena');
               }}
               onNavigateRules={() => navigate('/rules')}
@@ -572,10 +573,19 @@ export default function App() {
               publicRooms={publicRooms}
               roomCreationCode={roomCreationCode}
               isSearching={isSearching}
-              onCreateRoom={handleCreateRoom}
+              onCreateRoom={(stake, isPublic) => {
+                enterFullscreen(document.documentElement);
+                handleCreateRoom(stake, isPublic);
+              }}
               onListRooms={handleListRooms}
-              onJoinByCode={handleJoinByCode}
-              onJoinRandom={handleJoinRandom}
+              onJoinByCode={(code) => {
+                enterFullscreen(document.documentElement);
+                handleJoinByCode(code);
+              }}
+              onJoinRandom={(stake) => {
+                enterFullscreen(document.documentElement);
+                handleJoinRandom(stake);
+              }}
               onCancelWaiting={handleCancelWaiting}
               onSignOut={handleSignout}
             />
