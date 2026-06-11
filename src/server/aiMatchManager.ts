@@ -89,7 +89,11 @@ export function handleStartAiMatch(ws: WebSocket, msg: { difficulty?: Difficulty
   broadcastAiRoom(roomId);
 
   // If AI goes first (never — human always breaks)
-  if (match.currentTurn === 'ai-bot') triggerAiShot(match as any);
+  if (match.currentTurn === 'ai-bot') triggerAiShot(match as any, {
+    animSet: aiAnimatingIds,
+    clientsMap: aiClientsByRoom,
+    broadcastFn: broadcastAiRoom,
+  });
 }
 
 // ── Handle set_ai_opponent (backward compat) ──────────
@@ -112,7 +116,11 @@ export function handleSetAiOpponent(ws: WebSocket, msg: { difficulty?: Difficult
   match.log.push(`AI Opponent (${match.aiDifficulty.toUpperCase()}) joined.`);
   broadcastAiRoom(mapping.roomId);
 
-  if (match.currentTurn === 'ai-bot') triggerAiShot(match as any);
+  if (match.currentTurn === 'ai-bot') triggerAiShot(match as any, {
+    animSet: aiAnimatingIds,
+    clientsMap: aiClientsByRoom,
+    broadcastFn: broadcastAiRoom,
+  });
 }
 
 // ── Shoot ──────────────────────────────────────────────
@@ -189,7 +197,11 @@ export function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number
     aiAnimatingIds.delete(mapping.roomId);
     evaluateShotRules(match as any, pocketed, cuePocketed, contactTracker.firstContactBallId, shooterName, mapping.playerId, isBreakShot, contactTracker.cushionContactOccurred);
     broadcastAiRoom(mapping.roomId);
-    if (match.status === 'playing' && match.currentTurn === 'ai-bot') triggerAiShot(match as any);
+    if (match.status === 'playing' && match.currentTurn === 'ai-bot') triggerAiShot(match as any, {
+      animSet: aiAnimatingIds,
+      clientsMap: aiClientsByRoom,
+      broadcastFn: broadcastAiRoom,
+    });
   }, duration);
 
   if (!aiTimeouts.has(mapping.roomId)) aiTimeouts.set(mapping.roomId, new Set());

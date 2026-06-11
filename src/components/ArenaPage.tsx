@@ -1,7 +1,16 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState, Difficulty } from '../types';
 
-import { isMobileDevice, hideBrowserChrome, isStandalone, enterFullscreen as enterMobileFS, exitFullscreen as exitMobileFS, isFullscreen as checkFullscreen } from '../utils/mobile';
+import {
+  isMobileDevice,
+  hideBrowserChrome,
+  startChromeHiding,
+  stopChromeHiding,
+  isStandalone,
+  enterFullscreen as enterMobileFS,
+  exitFullscreen as exitMobileFS,
+  isFullscreen as checkFullscreen
+} from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
   Minimize, Maximize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, X, Users, Bot, Volume2, VolumeX,
@@ -261,9 +270,22 @@ export default function ArenaPage({
     document.body.style.top = '0';
     document.body.style.left = '0';
     document.documentElement.style.overflow = 'hidden';
-    hideBrowserChrome();
-    setTimeout(hideBrowserChrome, 400);
+
+    // Mobile: aggressively hide browser chrome + auto-fullscreen
+    if (isMobile) {
+      startChromeHiding();
+      // Auto-request fullscreen on mount (user gesture from navigation counts)
+      if (!checkFullscreen() && containerRef.current) {
+        enterMobileFS(containerRef.current);
+      }
+      // Fallback: if fullscreen failed, keep trying chrome hiding
+    } else {
+      hideBrowserChrome();
+      setTimeout(hideBrowserChrome, 400);
+    }
+
     return () => {
+      stopChromeHiding();
       document.body.style.removeProperty('overflow');
       document.body.style.removeProperty('position');
       document.body.style.removeProperty('width');
@@ -371,37 +393,17 @@ export default function ArenaPage({
       ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden overscroll-none"
       onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
     >
-      {/* Mobile overlay: rotate first, then tap to play (only in standalone mode) */}
-      {isMobile && (isPortrait || needsTap) && (
+      {/* Mobile overlay: only portrait rotation warning (auto-fullscreen on mount) */}
+      {isMobile && isPortrait && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black gap-4">
-          {isPortrait ? (
-            <>
-              <div className="text-5xl animate-pulse rotate-90">🎱</div>
-              <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'دور الهاتف' : 'ROTATE DEVICE'}</div>
-              <div className="text-xs text-amber-600/80 font-mono text-center px-8">{language === 'ar' ? 'الرجاء تدوير الهاتف إلى الوضع الأفقي للعب' : 'Please rotate your phone to landscape'}</div>
-              <div className="mt-4 w-16 h-16 rounded-2xl border-2 border-amber-500/40 flex items-center justify-center animate-pulse">
-                <svg className="w-10 h-10 text-amber-400 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="w-20 h-20 rounded-3xl border-[3px] border-amber-500/50 flex items-center justify-center shadow-[0_0_40px_rgba(245,158,11,0.15)]">
-                <svg className="w-12 h-12 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                </svg>
-              </div>
-              <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'اضغط للعب' : 'TAP TO PLAY'}</div>
-              <button
-                onClick={async () => {
-                  if (containerRef.current) await enterMobileFS(containerRef.current);
-                  setNeedsTap(false);
-                }}
-                className="mt-4 px-8 py-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-black text-sm font-black tracking-wider active:scale-95 transition-transform"
-              >{language === 'ar' ? 'بدء اللعب' : 'PLAY'}</button>
-            </>
-          )}
+          <div className="text-5xl animate-pulse rotate-90">🎱</div>
+          <div className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'دور الهاتف' : 'ROTATE DEVICE'}</div>
+          <div className="text-xs text-amber-600/80 font-mono text-center px-8">{language === 'ar' ? 'الرجاء تدوير الهاتف إلى الوضع الأفقي للعب' : 'Please rotate your phone to landscape'}</div>
+          <div className="mt-4 w-16 h-16 rounded-2xl border-2 border-amber-500/40 flex items-center justify-center animate-pulse">
+            <svg className="w-10 h-10 text-amber-400 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </div>
         </div>
       )}
 

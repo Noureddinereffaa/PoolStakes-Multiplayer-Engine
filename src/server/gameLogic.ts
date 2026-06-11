@@ -1,3 +1,4 @@
+import { WebSocket } from 'ws';
 import { RoomState, Player, MatchHistory, Ball } from '../types';
 import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog, payingOutRooms, pushEventLog } from './state';
 import { prisma } from './db';
@@ -598,9 +599,19 @@ function findSafetyShot(
 //  MAIN AI SHOT FUNCTION
 // ─────────────────────────────────────────────────────────────
 
-export function triggerAiShot(room: RoomState): void {
-  if (animatingRoomIds.has(room.roomId)) return;
-  animatingRoomIds.add(room.roomId);
+export function triggerAiShot(room: RoomState, opts?: {
+  animSet?: Set<string>;
+  clientsMap?: Map<string, Set<WebSocket>>;
+  broadcastFn?: (roomId: string) => void;
+  logFn?: (room: RoomState, msg: string) => void;
+}): void {
+  const animSet = opts?.animSet ?? animatingRoomIds;
+  const clientsMap = opts?.clientsMap ?? clientsByRoom;
+  const broadcastFn = opts?.broadcastFn ?? broadcastRoom;
+  const logFn = opts?.logFn ?? pushRoomLog;
+
+  if (animSet.has(room.roomId)) return;
+  animSet.add(room.roomId);
 
   room.animVersion = (room.animVersion || 0) + 1;
   const currentAnimVersion = room.animVersion;
@@ -613,7 +624,7 @@ export function triggerAiShot(room: RoomState): void {
     : diff === 'medium' ? 1000 + Math.random() * 1200
     : 1500 + Math.random() * 2000;
 
-  pushRoomLog(room, `AI (${diff}) is reading the table...`);
+  logFn(room, `AI (${diff}) is reading the table...`);
 
   setTimeout(() => {
     if ((room.animVersion || 0) !== currentAnimVersion) return;
@@ -636,7 +647,7 @@ export function triggerAiShot(room: RoomState): void {
       targets = room.balls.filter(b => b.id !== 0 && !b.isPocketed);
     }
     if (targets.length === 0) {
-      animatingRoomIds.delete(room.roomId);
+      animSet.delete(room.roomId);
       return;
     }
 
@@ -724,7 +735,7 @@ export function triggerAiShot(room: RoomState): void {
         bestTarget = safety.target;
         bestPocket = safety.pocket;
         usedSafety = true;
-        pushRoomLog(room, `AI plays SAFETY — hiding cue ball behind Ball #${safety.target.id}`);
+        logFn(room, `AI plays SAFETY — hiding cue ball behind Ball #${safety.target.id}`);
       } else {
         // لا يوجد أي أمل — ارتطام عشوائي
         bestTarget = targets[0];
@@ -768,16 +779,16 @@ export function triggerAiShot(room: RoomState): void {
     const finalAngle = bestAngle;
 
     if (!usedSafety) {
-      pushRoomLog(room,
+      logFn(room,
         `AI targets Ball #${bestTarget.id} → ${bestPocket ? `(${Math.round(bestPocket.x)},${Math.round(bestPocket.y)})` : 'unknown'} ` +
         `| Power: ${bestPower}% | ${diff}`
       );
     }
 
     // ── 3. إرسال معاينة التصويب ──────────────────────────────
-    const wssList = clientsByRoom.get(room.roomId) || [];
+    const wssList = clientsMap.get(room.roomId) || [];
     for (const client of wssList) {
-      if (client.readyState === client.OPEN) {
+      if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ type: 'preview_aim', angle: finalAngle, power: bestPower }));
       }
     }
@@ -820,7 +831,7 @@ export function triggerAiShot(room: RoomState): void {
 
     const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
     for (const client of wssList) {
-      if (client.readyState === client.OPEN) {
+      if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify({ type: 'physics_frames', frames: compactFrames }));
       }
     }
@@ -832,7 +843,7 @@ export function triggerAiShot(room: RoomState): void {
       if ((room.animVersion || 0) !== currentAnimVersion) return;
       if (room.status !== 'playing') return;
 
-      animatingRoomIds.delete(room.roomId);
+      animSet.delete(room.roomId);
       room.turnTimer = 60;
       evaluateShotRules(
         room, ballsPocketed, cueBallPocketed,
@@ -840,10 +851,10 @@ export function triggerAiShot(room: RoomState): void {
         'Authoritative_AI_Bot', 'ai-bot',
         isBreakShot, contactTracker.cushionContactOccurred
       );
-      broadcastRoom(room.roomId);
+      broadcastFn(room.roomId);
 
       if (room.status === 'playing' && room.currentTurn === 'ai-bot') {
-        triggerAiShot(room);
+        triggerAiShot(room, opts);
       }
     }, animationDurationMs);
   }, thinkTime);

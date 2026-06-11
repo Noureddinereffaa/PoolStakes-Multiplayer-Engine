@@ -48,15 +48,42 @@ export async function releaseWakeLock(): Promise<void> {
   } catch (_) {}
 }
 
+let chromeHidden = false;
+let chromeTimer: ReturnType<typeof setInterval> | null = null;
+
 export function hideBrowserChrome(): void {
+  chromeHidden = true;
+  // Immediate scroll
   window.scrollTo(0, 0);
-  setTimeout(() => window.scrollTo(0, 1), 100);
+  // Retry sequence to fight browser stubbornness
+  [50, 100, 200, 400].forEach((t) => setTimeout(() => window.scrollTo(0, 0), t));
+}
+
+export function startChromeHiding(): void {
+  stopChromeHiding();
+  hideBrowserChrome();
+  // Re-hide periodically (resistant to browser showing chrome)
+  chromeTimer = setInterval(() => {
+    if (chromeHidden && document.body) {
+      window.scrollTo(0, 0);
+      document.body.style.transform = 'translateY(0)';
+    }
+  }, 2000);
+}
+
+export function stopChromeHiding(): void {
+  chromeHidden = false;
+  if (chromeTimer) { clearInterval(chromeTimer); chromeTimer = null; }
 }
 
 export async function enterFullscreen(element: HTMLElement): Promise<boolean> {
-  hideBrowserChrome();
+  startChromeHiding();
   try {
-    if (document.fullscreenElement) return true;
+    if (document.fullscreenElement) {
+      document.documentElement.classList.add('is-fullscreen');
+      return true;
+    }
+    // Support iOS Safari's webkitEnterFullscreen on video elements, but for divs use standard API
     await element.requestFullscreen({ navigationUI: 'hide' } as any);
     if (isMobileDevice()) {
       try { await (screen.orientation as any)?.lock?.('landscape-primary'); } catch (_) {}
@@ -64,11 +91,13 @@ export async function enterFullscreen(element: HTMLElement): Promise<boolean> {
     document.documentElement.classList.add('is-fullscreen');
     return true;
   } catch (_) {
+    // Fullscreen API not supported — still try hiding chrome
     return false;
   }
 }
 
 export async function exitFullscreen(): Promise<void> {
+  stopChromeHiding();
   try {
     if (document.fullscreenElement) {
       await document.exitFullscreen();
@@ -76,6 +105,8 @@ export async function exitFullscreen(): Promise<void> {
     }
   } catch (_) {}
   try { (screen.orientation as any)?.unlock?.(); } catch (_) {}
+  // After exiting fullscreen, unbind body
+  document.body.style.transform = '';
 }
 
 export function isFullscreen(): boolean {

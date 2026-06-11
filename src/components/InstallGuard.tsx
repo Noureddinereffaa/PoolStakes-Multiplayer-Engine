@@ -5,6 +5,8 @@ import PwaInstallScreen from './PwaInstallScreen';
 
 const ALLOWED_MOBILE_PATHS = ['/'];
 
+const isDev = import.meta.env.DEV;
+
 interface InstallGuardProps {
   children: ReactNode;
   language: 'en' | 'ar';
@@ -96,6 +98,9 @@ export default function InstallGuard({ children, language, onInstallComplete }: 
   if (isMobile.current && installState === 'blocked' && isOnHomePage) {
     return <>{children}</>;
   }
+
+  // Dev mode: bypass install guard so mobile browser testing works
+  if (isDev) return <>{children}</>;
 
   if (installState === 'loading') {
     return (
