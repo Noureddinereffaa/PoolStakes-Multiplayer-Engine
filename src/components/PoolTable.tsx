@@ -175,12 +175,12 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const lastBallsRef = useRef<string>(JSON.stringify(roomState.balls));
   const pullStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftHeldRef = useRef(false);
-  const DEAD_ZONE_PX = 5; // minimum drag distance before power registers
-  const AIM_SENSITIVITY = 0.0015; // radians per pixel of ortho drag (was 0.003)
-  const SHIFT_MODIFIER = 0.3; // precision mode sensitivity multiplier
-  const SMOOTH_FACTOR = 0.35; // lerp factor for angle smoothing (1 = no smoothing)
+  const DEAD_ZONE_PX = 3; // minimum drag distance before power registers
+  const AIM_SENSITIVITY = 0.0010; // radians per pixel of ortho drag — smoother
+  const SHIFT_MODIFIER = 0.25; // precision mode sensitivity multiplier
+  const SMOOTH_FACTOR = 0.45; // lerp factor for angle smoothing (higher = more responsive)
   const targetAimAngleRef = useRef(0);
-  const DRAG_ROTATION_SENSITIVITY = 0.008; // radians per pixel for mobile drag rotation
+  const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
   const dragStartXRef = useRef(0);
   const dragStartAngleRef = useRef(0);
 
@@ -502,33 +502,51 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
         } else {
           // ================= MOBILE SMART ZONES =================
           if (isInitialDown) {
-            dragStartXRef.current = coords.x + cameraOffsetRef.current.x; // track absolute screen X for rotation
-            pullStartPosRef.current = coords; // track world coords for pull/pan
+            dragStartXRef.current = coords.x + cameraOffsetRef.current.x;
+            pullStartPosRef.current = coords;
             aimInertiaVelocityRef.current = 0;
             
             const dx = coords.x - cueBall.x;
             const dy = coords.y - cueBall.y;
             const dist = Math.hypot(dx, dy);
             
-            // Touching within 120px radius = Rotate Aim
-            if (dist < 120) {
+            // Three zones:
+            // < 35px from cue ball center = Pull-back (power control like real pool)
+            // < 130px = Rotate Aim
+            // Anywhere else = Camera Pan
+            if (dist < 35) {
+              setDragMode('pull');
+              dragModeRef.current = 'pull';
+              pullStartPosRef.current = coords;
+              setIsPulling(true);
+              isPullingRef.current = true;
+            } else if (dist < 130) {
               setDragMode('rotate');
               dragModeRef.current = 'rotate';
-            } 
-            // Touching far away = Camera Pan
-            else {
+            } else {
               setDragMode('pan');
               dragModeRef.current = 'pan';
             }
           } else {
             // pointer move logic
-            if (dragModeRef.current === 'pan' && pullStartPosRef.current) {
-              // Pan camera based on world drag delta
+            if (dragModeRef.current === 'pull' && pullStartPosRef.current) {
+              // Pull-back power: drag away from cue ball direction
+              const pullDx = coords.x - pullStartPosRef.current.x;
+              const pullDy = coords.y - pullStartPosRef.current.y;
+              const dragDist = Math.hypot(pullDx, pullDy);
+              // 180px for full power — better for medium phones
+              const rawPower = Math.min(100, Math.round((dragDist / 180) * 100));
+              const curvedPower = Math.floor(Math.pow(rawPower / 100, 0.85) * 100);
+              const power = Math.min(100, Math.max(5, curvedPower));
+              setShotPower(power);
+              shotPowerRef.current = power;
+            } else if (dragModeRef.current === 'pan' && pullStartPosRef.current) {
+              // Pan camera - tighter limits for better gameplay
               const dx = coords.x - pullStartPosRef.current.x;
               const dy = coords.y - pullStartPosRef.current.y;
               setCameraOffset(prev => {
-                const newX = Math.max(-80, Math.min(80, prev.x + dx));
-                const newY = Math.max(-80, Math.min(80, prev.y + dy));
+                const newX = Math.max(-100, Math.min(100, prev.x + dx * 0.7));
+                const newY = Math.max(-60, Math.min(60, prev.y + dy * 0.7));
                 return { x: newX, y: newY };
               });
               // Update pull start pos to new coords so delta is continuous
@@ -634,8 +652,25 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const handlePointerUp = () => {
     setIsPointerActive(false);
     
+    // Mobile pull-back shoot: release after dragging from cue ball zone
+    if (isMobile.current && dragModeRef.current === 'pull' && isPullingRef.current) {
+      const p = shotPowerRef.current;
+      setIsPulling(false);
+      isPullingRef.current = false;
+      setDragMode(null);
+      dragModeRef.current = null;
+      pullStartPosRef.current = null;
+      if (p >= 5 && isMyTurnRef.current && !isAnimatingRef.current) {
+        executeAuthorizedShot(aimAngleRef.current, p, spinXRef.current, spinYRef.current);
+      } else {
+        setShotPower(0);
+        shotPowerRef.current = 0;
+      }
+      return;
+    }
+
     if (isMobile.current && dragModeRef.current !== 'pan') {
-      // Mobile relies on external shoot button. We just clear the drag state.
+      // Mobile rotate/other: just clear drag state (shoot is via button)
       setDragMode(null);
       dragModeRef.current = null;
       pullStartPosRef.current = null;

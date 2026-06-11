@@ -735,7 +735,8 @@ function MobilePowerButton({ side, shotPower, disabled, onPowerChange, onShoot }
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging) return;
     const dx = Math.abs(e.clientX - startXRef.current);
-    const rawPower = Math.min(100, Math.round((dx / 120) * 100));
+    // 180px drag = 100% power (matches in-canvas pull-back zone)
+    const rawPower = Math.min(100, Math.round((dx / 180) * 100));
     const curvedPower = Math.floor(Math.pow(rawPower / 100, 0.85) * 100);
     onPowerChange(Math.max(5, curvedPower));
   };

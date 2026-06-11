@@ -131,35 +131,19 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
 
     const spd = Math.sqrt(spdSq);
 
-    // Dead-ball stop (lowered threshold since we now use constant deceleration)
-    if (spd < 0.02) {
+    // Dead-ball stop
+    if (spd < 0.005) {
       b.vx = 0;
       b.vy = 0;
       continue;
     }
 
-    // Gradual slide→roll friction (exponential)
+    // Gradual slide→roll friction (exponential — physically correct)
     const t = Math.min(1, spd / V_S);
     const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
     const f = Math.pow(mu, dt);
-    
-    let nvx = vx * f;
-    let nvy = vy * f;
-
-    // Constant rolling resistance (linear deceleration) for realistic final stop
-    const rollingDecel = 1.2 * dt;
-    const newSpd = Math.sqrt(nvx * nvx + nvy * nvy);
-    
-    if (newSpd > rollingDecel) {
-      nvx -= (nvx / newSpd) * rollingDecel;
-      nvy -= (nvy / newSpd) * rollingDecel;
-    } else {
-      nvx = 0;
-      nvy = 0;
-    }
-
-    b.vx = nvx;
-    b.vy = nvy;
+    b.vx = vx * f;
+    b.vy = vy * f;
 
     // Cue ball spin
     if (b.id === 0) {
