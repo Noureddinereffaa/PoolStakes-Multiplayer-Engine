@@ -344,6 +344,7 @@ export function useBilliardsSocket({
             }
             break;
           case 'error':
+            if (mountedRef.current) setIsSearching(false);
             if (isReconnect) {
               if (mountedRef.current) {
                 setIsReconnecting(false);
@@ -538,7 +539,7 @@ export function useBilliardsSocket({
             if (mountedRef.current) { setIsSearching(false); setRoomState(null); setRoomCreationCode(null); }
             break;
           case 'error':
-            if (mountedRef.current) setErrorRef.current(msg.message);
+            if (mountedRef.current) { setIsSearching(false); setErrorRef.current(msg.message); }
             setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
             break;
         }
@@ -674,6 +675,8 @@ export function useBilliardsSocket({
   }, []);
 
   const handleCancelWaiting = useCallback(() => {
+    setIsSearching(false);
+    setRoomState(null);
     sendOrQueue({ type: 'cancel_waiting' });
   }, []);
 

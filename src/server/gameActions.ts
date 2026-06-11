@@ -47,7 +47,7 @@ export function handleAuthenticate(ws: WebSocket, msg: { token?: string }): void
   if (!msg.token) { ws.send(JSON.stringify({ type: 'error', message: 'Token required.' })); return; }
   const decoded = decodeToken(msg.token);
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
-  enforceSingleSocket(decoded.id, ws);
+  if (!enforceSingleSocket(decoded.id, ws)) return;
   activeSockets.add(ws);
   ws.send(JSON.stringify({ type: 'authenticated' }));
 }
@@ -58,7 +58,7 @@ export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { ty
   if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Token required.' })); return; }
   const decoded = decodeToken(token);
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
-  enforceSingleSocket(decoded.id, ws);
+  if (!enforceSingleSocket(decoded.id, ws)) return;
   activeSockets.add(ws);
 
   const result = await joinRoom(ws, roomId, decoded.id, username, stake);
@@ -75,7 +75,7 @@ export async function handleCreateRoom(ws: WebSocket, msg: Extract<SocketMessage
   if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
   const decoded = decodeToken(token);
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
-  enforceSingleSocket(decoded.id, ws);
+  if (!enforceSingleSocket(decoded.id, ws)) return;
 
   const { room, code } = createRoom(ws, decoded.id, decoded.username, stake, isPublic !== false);
 
@@ -92,7 +92,7 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
   if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
   const decoded = decodeToken(token);
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
-  enforceSingleSocket(decoded.id, ws);
+  if (!enforceSingleSocket(decoded.id, ws)) return;
 
   // Check if already in queue
   if (isInQueue(ws, decoded.id)) {
@@ -155,7 +155,7 @@ export async function handleJoinByCode(ws: WebSocket, msg: Extract<SocketMessage
   if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
   const decoded = decodeToken(token);
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
-  enforceSingleSocket(decoded.id, ws);
+  if (!enforceSingleSocket(decoded.id, ws)) return;
 
   const result = await joinRoomByCode(ws, code, decoded.id, username);
   if (!result.success) {
@@ -242,6 +242,7 @@ export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { ty
   const { roomId, playerId } = mapping;
   const room = activeRooms.get(roomId);
   if (!room || room.status !== 'playing') return;
+  if (animatingRoomIds.has(roomId)) return;
   // Only relay current turn holder's aim to prevent cue leak
   if (room.currentTurn !== playerId) return;
   for (const client of clientsByRoom.get(roomId) || []) {
@@ -261,6 +262,7 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   if (room.currentTurn !== playerId) { ws.send(JSON.stringify({ type: 'error', message: 'Cheat safeguard: Not your active turn!' })); return; }
   if (animatingRoomIds.has(roomId)) { ws.send(JSON.stringify({ type: 'error', message: 'Shot ignored — room is still animating.' })); return; }
   if (room.disconnectedPlayerIds?.includes(playerId)) { ws.send(JSON.stringify({ type: 'error', message: 'Cannot shoot while disconnected.' })); return; }
+  if (room.scratchOccurred) { ws.send(JSON.stringify({ type: 'error', message: 'Must reset cue ball before shooting (ball-in-hand).' })); return; }
 
   const objectBallsLeft = room.balls.filter(b => b.id !== 0 && !b.isPocketed).length;
   const isBreakShot = objectBallsLeft === 15;
@@ -411,52 +413,59 @@ export function handleRematch(ws: WebSocket): void {
 
   // Use withRoomLock for atomic rematch
   withRoomLock(roomId, async () => {
-    const room = activeRooms.get(roomId);
-    if (!room || room.status !== 'gameover') return;
-    if (rematchingRooms.has(roomId)) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Rematch already in progress.' }));
-      return;
+    try {
+      const room = activeRooms.get(roomId);
+      if (!room || room.status !== 'gameover') return;
+      if (rematchingRooms.has(roomId)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Rematch already in progress.' }));
+        return;
+      }
+
+      const requester = room.players.find(p => p.id === playerId);
+      if (!requester) return;
+
+      rematchingRooms.add(roomId);
+
+      room.balls = getInitialBalls();
+      room.players.forEach(p => { p.side = undefined; });
+      room.assignedSides = false;
+      room.scratchOccurred = false;
+      room.pocketedThisTurn = false;
+      room.ballInHandRestriction = undefined;
+      room.winnerId = undefined;
+      room.turnTimer = 60;
+      room.animVersion = (room.animVersion || 0) + 1;
+      room.serverSeed = undefined;
+      room.escrowHash = undefined;
+      room.disconnectedPlayerIds = [];
+      room.reconnectDeadlines = {};
+      room.forfeitedPlayerId = undefined;
+
+      if (!validateTransition(room, 'gameover', 'ready')) { rematchingRooms.delete(roomId); return; }
+      room.status = 'ready';
+      room.log = [`🔄 Rematch initiated by ${requester.username}!`];
+      pushRoomLog(room, 'Match reset. Re-locking stakes in escrow...');
+      broadcastRoom(roomId);
+
+      const escrowResult = await lockRoomEscrow(room, 'AUTO escrow lock (rematch)', {
+        roomName: room.name, player1Id: room.players[0]?.id, player2Id: room.players[1]?.id, stake: room.stake
+      });
+
+      if (escrowResult.success) {
+        pushRoomLog(room, 'New break shot incoming!');
+      } else {
+        validateTransition(room, 'ready', 'gameover');
+        room.status = 'gameover';
+        pushRoomLog(room, `Rematch escrow failed: ${escrowResult.message}. Match cancelled.`);
+      }
+      rematchingRooms.delete(roomId);
+      broadcastRoom(roomId);
+    } catch (err) {
+      console.error('Rematch error:', err);
+      rematchingRooms.delete(roomId);
     }
-
-    const requester = room.players.find(p => p.id === playerId);
-    if (!requester) return;
-
-    rematchingRooms.add(roomId);
-
-    room.balls = getInitialBalls();
-    room.players.forEach(p => { p.side = undefined; });
-    room.assignedSides = false;
-    room.scratchOccurred = false;
-    room.pocketedThisTurn = false;
-    room.ballInHandRestriction = undefined;
-    room.winnerId = undefined;
-    room.turnTimer = 60;
-    room.animVersion = (room.animVersion || 0) + 1;
-    room.serverSeed = undefined;
-    room.escrowHash = undefined;
-    room.disconnectedPlayerIds = [];
-    room.reconnectDeadlines = {};
-    room.forfeitedPlayerId = undefined;
-
-    if (!validateTransition(room, 'gameover', 'ready')) { rematchingRooms.delete(roomId); return; }
-    room.status = 'ready';
-    room.log = [`🔄 Rematch initiated by ${requester.username}!`];
-    pushRoomLog(room, 'Match reset. Re-locking stakes in escrow...');
-    broadcastRoom(roomId);
-
-    const escrowResult = await lockRoomEscrow(room, 'AUTO escrow lock (rematch)', {
-      roomName: room.name, player1Id: room.players[0]?.id, player2Id: room.players[1]?.id, stake: room.stake
-    });
-
-    if (escrowResult.success) {
-      pushRoomLog(room, 'New break shot incoming!');
-    } else {
-      validateTransition(room, 'ready', 'gameover');
-      room.status = 'gameover';
-      pushRoomLog(room, `Rematch escrow failed: ${escrowResult.message}. Match cancelled.`);
-    }
-    rematchingRooms.delete(roomId);
-    broadcastRoom(roomId);
+  }).catch((err) => {
+    console.error('Rematch lock error:', err);
   });
 }
 
@@ -464,7 +473,7 @@ export function handleRematch(ws: WebSocket): void {
 export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage, { type: 'reconnect' }>): Promise<void> {
   const decoded = decodeToken(msg.token);
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token for reconnection.' })); return; }
-  enforceSingleSocket(decoded.id, ws);
+  if (!enforceSingleSocket(decoded.id, ws, false)) return;
 
   for (const [roomId, room] of activeRooms) {
     if (room.status !== 'playing' && room.status !== 'ready') continue;
@@ -475,15 +484,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     const player = room.players.find(p => p.id === decoded.id);
     if (!player) { ws.send(JSON.stringify({ type: 'error', message: 'Player record not found.' })); return; }
 
-    const oldSocket = userSockets.get(decoded.id);
-    if (oldSocket && oldSocket !== ws) {
-      const oldMapping = playerRoomMap.get(oldSocket);
-      if (oldMapping?.roomId === roomId) {
-        const oldSet = clientsByRoom.get(roomId);
-        if (oldSet) oldSet.delete(oldSocket);
-        playerRoomMap.delete(oldSocket);
-      }
-    }
+    // enforceSingleSocket already cleaned up old socket if needed
 
     if (!clientsByRoom.has(roomId)) clientsByRoom.set(roomId, new Set());
     clientsByRoom.get(roomId)!.add(ws);

@@ -8,7 +8,8 @@ import {
   stopChromeHiding,
   enterFullscreen as enterMobileFS,
   exitFullscreen as exitMobileFS,
-  isFullscreen as checkFullscreen
+  isFullscreen as checkFullscreen,
+  vibrate
 } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
 import {
@@ -36,6 +37,8 @@ interface ArenaPageProps {
   chatMessage: string;
   setChatMessage: (msg: string) => void;
   handleSendChat: (msg: string) => void;
+  connectionGrade?: string;
+  isOffline?: boolean;
 }
 
 const BALLS_META = [
@@ -218,7 +221,8 @@ function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage
 export default function ArenaPage({
   roomState, userSession, language, onQuitRoom, myPlayerObj, isMyTurn,
   physicsFrames, setPhysicsFrames, handleShoot, handleResetCueBall, opponentAim,
-  handlePreviewAim, handleJoinAI, handleRematch, chatMessage, setChatMessage, handleSendChat
+  handlePreviewAim, handleJoinAI, handleRematch, chatMessage, setChatMessage, handleSendChat,
+  connectionGrade, isOffline
 }: ArenaPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<PoolTableHandle>(null);
@@ -591,6 +595,19 @@ export default function ArenaPage({
                   onPowerChange={(p) => tableRef.current?.setShotPower(p)}
                   onShoot={handleShootClick} />
               </div>
+              {/* Mobile: connection quality dot (bottom center) */}
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 pointer-events-none">
+                <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_4px_rgba(0,0,0,0.5)] ${
+                  isOffline ? 'bg-red-500 animate-pulse' :
+                  connectionGrade === 'dead' ? 'bg-red-500 animate-pulse' :
+                  connectionGrade === 'poor' ? 'bg-orange-500' :
+                  connectionGrade === 'good' ? 'bg-amber-400' :
+                  'bg-emerald-500'
+                }`} />
+                <button onClick={onQuitRoom}
+                  className="px-2 py-0.5 rounded bg-red-500/20 border border-red-500/30 text-red-400 text-[6px] font-bold pointer-events-auto"
+                >{language === 'ar' ? 'خروج' : 'QUIT'}</button>
+              </div>
               {/* Mute toggle for mobile - compact, top-right */}
               <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
                 className="absolute top-1 right-1 z-20 w-6 h-6 rounded-lg flex items-center justify-center bg-black/40 text-amber-500/70"
@@ -690,6 +707,7 @@ function MobilePowerButton({ side, shotPower, disabled, onPowerChange, onShoot }
     if (!dragging) return;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     setDragging(false);
+    vibrate(20);
     if (!disabled) onShoot();
   };
 

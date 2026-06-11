@@ -316,17 +316,22 @@ export default function MemberDashboard({
                       </div>
 
                       <div className="flex flex-col sm:flex-row gap-2">
-                        <button
-                          onClick={() => onJoinRandom(stake)}
-                          disabled={isSearching}
-                          className={`w-full sm:flex-1 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black transition shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]`}
-                        >
-                          {isSearching ? (
-                            <><span className="w-4 h-4 rounded-full border-2 border-slate-950/30 border-t-slate-950 animate-spin" /> {isAr ? 'جارٍ البحث…' : 'Searching…'}</>
-                          ) : (
-                            <><Play className="w-4 h-4" /> {isAr ? 'دخول سريع' : 'Quick Join'}</>
-                          )}
-                        </button>
+                        {isSearching ? (
+                          <button
+                            onClick={() => onCancelWaiting()}
+                            className="w-full sm:flex-1 py-3.5 rounded-xl bg-rose-500/20 border border-rose-500/40 hover:bg-rose-500/30 text-rose-400 font-black transition flex items-center justify-center gap-2 text-sm sm:text-base min-h-[48px]"
+                          >
+                            <span className="w-4 h-4 rounded-full border-2 border-rose-400/30 border-t-rose-400 animate-spin" />
+                            {isAr ? 'إلغاء البحث…' : 'Cancel Search…'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => onJoinRandom(stake)}
+                            className="w-full sm:flex-1 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-black transition shadow-lg shadow-emerald-500/15 flex items-center justify-center gap-2 text-sm sm:text-base min-h-[48px]"
+                          >
+                            <Play className="w-4 h-4" /> {isAr ? 'دخول سريع' : 'Quick Join'}
+                          </button>
+                        )}
                         <button
                           onClick={() => onCreateRoom(stake, true)}
                           className="w-full sm:flex-1 py-3.5 rounded-xl border border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-400 font-bold transition flex items-center justify-center gap-2 text-sm sm:text-base min-h-[48px]"

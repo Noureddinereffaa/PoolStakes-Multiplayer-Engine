@@ -4,22 +4,47 @@ import { routeWsMessage } from './messageRouter';
 import { activeSockets, startIdleRoomCleanup } from './state';
 import { startAiCleanup, startAiMatchTimer } from './aiMatchManager';
 
-// Simple rate limiter: max N messages per second per connection
-const rateLimitMap = new WeakMap<WebSocket, { count: number; resetAt: number }>();
-const WS_RATE_LIMIT_MAX = 30;
-const WS_RATE_LIMIT_WINDOW_MS = 1000;
+// Per-message-type rate limits
+interface TypeLimit {
+  max: number;
+  windowMs: number;
+}
 
-function wsRateLimiter(ws: WebSocket): boolean {
+const MESSAGE_TYPE_LIMITS: Record<string, TypeLimit> = {
+  preview_aim:     { max: 30, windowMs: 1000 },
+  shoot:           { max: 3,  windowMs: 1000 },
+  reset_cue_ball:  { max: 5,  windowMs: 1000 },
+};
+
+const DEFAULT_LIMIT: TypeLimit = { max: 30, windowMs: 1000 };
+
+interface TypeCounter {
+  count: number;
+  resetAt: number;
+}
+
+// Per-socket: message type → { count, resetAt }
+const rateLimitMap = new WeakMap<WebSocket, Map<string, TypeCounter>>();
+
+function wsRateLimiter(ws: WebSocket, type: string): boolean {
   const now = Date.now();
-  let entry = rateLimitMap.get(ws);
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ws, { count: 1, resetAt: now + WS_RATE_LIMIT_WINDOW_MS });
+  let typeMap = rateLimitMap.get(ws);
+  if (!typeMap) {
+    typeMap = new Map();
+    rateLimitMap.set(ws, typeMap);
+  }
+
+  const limit = MESSAGE_TYPE_LIMITS[type] || DEFAULT_LIMIT;
+  let counter = typeMap.get(type);
+  if (!counter || now > counter.resetAt) {
+    typeMap.set(type, { count: 1, resetAt: now + limit.windowMs });
     return true;
   }
-  entry.count++;
-  if (entry.count > WS_RATE_LIMIT_MAX) {
+
+  counter.count++;
+  if (counter.count > limit.max) {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Rate limited: too many messages. Slow down.' }));
+      ws.send(JSON.stringify({ type: 'error', message: `Rate limited: ${type} (${limit.max}/${limit.windowMs}ms). Slow down.` }));
     }
     return false;
   }
@@ -58,10 +83,10 @@ export function attachWebSocketHandlers(wss: WebSocketServer) {
     ws.on('pong', heartbeat);
 
     ws.on('message', async (data) => {
-      if (!wsRateLimiter(ws)) return;
-
       try {
         const msg = JSON.parse(data.toString());
+        const type = (msg && msg.type) || 'unknown';
+        if (!wsRateLimiter(ws, type)) return;
         await routeWsMessage(ws, msg);
       } catch (e: any) {
         if (ws.readyState === WebSocket.OPEN) {

@@ -124,6 +124,10 @@ export async function tryMatch(stake: number): Promise<{ first: WaitingEntry; se
   }
 }
 
+export function getAllQueueSizes(): Array<{ stake: number; size: number }> {
+  return Array.from(queues.entries()).map(([stake, entries]) => ({ stake, size: entries.length }));
+}
+
 export function getQueueSize(stake: number): number {
   return queues.get(stake)?.length || 0;
 }

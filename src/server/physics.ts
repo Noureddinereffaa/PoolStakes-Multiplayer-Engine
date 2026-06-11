@@ -45,8 +45,8 @@ const COR_TERM  = -(1 + COR) * 0.5;
 //  POCKETS
 // ═══════════════════════════════════════════════════════
 // Corner pockets are tighter (18) than middle pockets (22)
-const POCKET_RADII        = [18, 22, 18, 18, 22, 18];
-const POCKET_INNER_FACTOR = 0.85;
+const POCKET_RADII        = [22, 26, 22, 22, 26, 22];
+const POCKET_INNER_FACTOR = 0.92;
 const POCKET_ACCEPT_DEG   = 75; // acceptance angle in degrees
 
 const POCKET_POS = [

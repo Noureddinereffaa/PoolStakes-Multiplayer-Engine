@@ -33,6 +33,10 @@ const aiTimeouts = new Map<string, Set<NodeJS.Timeout>>();
 const MAX_LOG = 50;
 
 // ── Public helpers ─────────────────────────────────────
+export function getAiMatchCount(): number {
+  return aiMatches.size;
+}
+
 export function isAiPlayer(ws: WebSocket): boolean {
   return aiPlayerRoomMap.has(ws);
 }
@@ -133,6 +137,7 @@ export function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number
   if (!match || match.status !== 'playing') { ws.send(JSON.stringify({ type: 'error', message: 'Match not in play.' })); return; }
   if (match.currentTurn !== mapping.playerId) { ws.send(JSON.stringify({ type: 'error', message: 'Not your turn.' })); return; }
   if (aiAnimatingIds.has(mapping.roomId)) { ws.send(JSON.stringify({ type: 'error', message: 'Still animating.' })); return; }
+  if (match.scratchOccurred) { ws.send(JSON.stringify({ type: 'error', message: 'Must reset cue ball before shooting (ball-in-hand).' })); return; }
 
   aiAnimatingIds.add(mapping.roomId);
   match.animVersion++;
@@ -259,6 +264,7 @@ export function handleAiPreviewAim(ws: WebSocket, msg: { angle: number; power: n
   if (!mapping) return;
   const match = aiMatches.get(mapping.roomId);
   if (!match || match.status !== 'playing') return;
+  if (aiAnimatingIds.has(mapping.roomId)) return;
   // Only relay current turn holder's aim
   if (match.currentTurn !== mapping.playerId) return;
   for (const client of aiClientsByRoom.get(mapping.roomId) || []) {

@@ -4,6 +4,7 @@ import { RoomState, Difficulty, MatchHistory as MatchType } from './types';
 import HomePage from './components/HomePage';
 import ConnectionStatus from './components/ConnectionStatus';
 import InstallGuard from './components/InstallGuard';
+import ProtectedRoute from './components/ProtectedRoute';
 import { ShieldAlert, LogOut, User, X } from 'lucide-react';
 import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
@@ -219,8 +220,8 @@ export default function App() {
               if (mountedRef.current) navigate('/');
             }
           }).catch(() => {
-            // Network error - still allow access (maybe offline)
-            if (mountedRef.current) setUserSession(Parsed);
+            // Network error — session may still be valid, allow access
+            if (mountedRef.current) { setUserSession(Parsed); }
             navigate('/dashboard');
           });
         }
@@ -532,7 +533,7 @@ export default function App() {
           </Suspense>
         } />
         <Route path="/dashboard" element={
-          userSession ? (
+          <ProtectedRoute userSession={userSession}>
             <Suspense fallback={<PageLoader />}>
               <MemberDashboard
               userSession={userSession}
@@ -579,12 +580,10 @@ export default function App() {
               onSignOut={handleSignout}
             />
             </Suspense>
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         } />
         <Route path="/arena" element={
-          userSession ? (
+          <ProtectedRoute userSession={userSession}>
             <Suspense fallback={<PageLoader />}>
             <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
 
@@ -697,6 +696,8 @@ export default function App() {
                   chatMessage={chatMessage}
                   setChatMessage={setChatMessage}
                   handleSendChat={handleSendChat}
+                  connectionGrade={connectionGrade}
+                  isOffline={isOffline}
                 />
                 {isReconnecting && roomState?.status === 'playing' && (
                   <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -723,10 +724,9 @@ export default function App() {
               </footer>
             </div>
             </Suspense>
-          ) : (
-            <Navigate to="/" replace />
-          )
+          </ProtectedRoute>
         } />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </InstallGuard>
   );

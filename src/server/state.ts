@@ -83,25 +83,51 @@ export function pushEventLog(event: string, data?: any): void {
   logger.debug(`[EVENT] ${event}`, data);
 }
 
-export function enforceSingleSocket(userId: string, ws: WebSocket): void {
+/**
+ * Hybrid single-session enforcement:
+ * - If existing socket is in a PvP match (room.status === 'playing'), REJECT new connection
+ * - Otherwise, replace old socket (dashboard / AI / waiting)
+ */
+export function enforceSingleSocket(userId: string, ws: WebSocket, rejectOnMatch: boolean = true): boolean {
   const existing = userSockets.get(userId);
-  if (existing && existing !== ws) {
-    pushEventLog('single_socket_close_old', { userId });
-    try {
-      existing.send(JSON.stringify({ type: 'error', message: 'New connection established. This session is closed.' }));
-    } catch { /* ignore */ }
-    playerRoomMap.delete(existing);
-    for (const [roomId, clients] of clientsByRoom) {
-      if (clients.has(existing)) {
-        clients.delete(existing);
-        if (clients.size === 0) {
-          clientsByRoom.delete(roomId);
+  if (!existing || existing === ws) {
+    userSockets.set(userId, ws);
+    return true;
+  }
+
+  // Check if existing socket is in a live PvP match
+  if (rejectOnMatch) {
+    const mapping = playerRoomMap.get(existing);
+    if (mapping) {
+      const room = activeRooms.get(mapping.roomId);
+      if (room && room.status === 'playing') {
+        pushEventLog('single_socket_rejected', { userId, roomId: mapping.roomId });
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Account already in a match. Complete or forfeit the current game first.' }));
         }
+        return false;
       }
     }
-    try { existing.close(); } catch { /* ignore */ }
   }
+
+  // Safe to replace: close old socket after removing from tracking
+  pushEventLog('single_socket_replace', { userId });
+  try {
+    existing.send(JSON.stringify({ type: 'error', message: 'New connection established. This session is closed.' }));
+  } catch { /* ignore */ }
+  playerRoomMap.delete(existing);
+  for (const [roomId, clients] of clientsByRoom) {
+    if (clients.has(existing)) {
+      clients.delete(existing);
+      if (clients.size === 0) {
+        clientsByRoom.delete(roomId);
+      }
+    }
+  }
+  try { existing.close(); } catch { /* ignore */ }
+
   userSockets.set(userId, ws);
+  return true;
 }
 
 export function removeUserSocket(userId: string, ws: WebSocket): void {

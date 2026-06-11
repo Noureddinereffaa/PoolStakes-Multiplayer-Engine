@@ -10,14 +10,15 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
 import { registerLaravelRoutes } from './src/server/laravel';
-import { broadcastToAllWebSockets } from './src/server/state';
+import { broadcastToAllWebSockets, activeRooms, clientsByRoom, eventLogs } from './src/server/state';
 import { attachWebSocketHandlers } from './src/server/websocket';
 import { startTurnTimer } from './src/server/turnTimer';
 import { logger } from './src/server/logger';
 import { xssSanitize } from './src/server/sanitize';
 import { requestLogger } from './src/server/logger';
 import { restoreRoomSnapshots, saveRoomSnapshot, startSnapshotInterval, stopSnapshotInterval } from './src/server/persist';
-import { activeRooms } from './src/server/state';
+import { getAiMatchCount } from './src/server/aiMatchManager';
+import { getAllQueueSizes } from './src/server/services/matchingQueue';
 
 if (process.env.SENTRY_DSN) {
   import('@sentry/node').then((Sentry) => {
@@ -73,6 +74,64 @@ registerLaravelRoutes(app, broadcastToAllWebSockets);
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error('Unhandled error', { error: String(err) });
   res.status(500).json({ success: false, error: 'Internal server error' });
+});
+
+// ── Metrics & Monitoring ──────────────────────────────────
+app.get('/api/metrics', (_req, res) => {
+  const roomCount = activeRooms.size;
+  const aiMatchCount = getAiMatchCount();
+  let clientCount = 0;
+  for (const clients of clientsByRoom.values()) {
+    clientCount += clients.size;
+  }
+  res.json({
+    activeRooms: roomCount,
+    aiMatches: aiMatchCount,
+    connectedClients: clientCount,
+    queueSizes: getAllQueueSizes(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+  });
+});
+
+// Prometheus-format metrics
+app.get('/metrics', (_req, res) => {
+  const roomCount = activeRooms.size;
+  const aiMatchCount = getAiMatchCount();
+  let clientCount = 0;
+  for (const clients of clientsByRoom.values()) {
+    clientCount += clients.size;
+  }
+  const mem = process.memoryUsage();
+  const lines = [
+    '# HELP pool_active_rooms Current number of active PvP rooms',
+    '# TYPE pool_active_rooms gauge',
+    `pool_active_rooms ${roomCount}`,
+    '# HELP pool_ai_matches Current number of AI matches',
+    '# TYPE pool_ai_matches gauge',
+    `pool_ai_matches ${aiMatchCount}`,
+    '# HELP pool_connected_clients Current number of connected WebSocket clients',
+    '# TYPE pool_connected_clients gauge',
+    `pool_connected_clients ${clientCount}`,
+    '# HELP pool_queue_size Current queue size per stake',
+    '# TYPE pool_queue_size gauge',
+    ...getAllQueueSizes().map(q => `pool_queue_size{stake="${q.stake}"} ${q.size}`),
+    '# HELP pool_uptime_seconds Server uptime in seconds',
+    '# TYPE pool_uptime_seconds counter',
+    `pool_uptime_seconds ${process.uptime()}`,
+    '# HELP pool_memory_heap_bytes Heap memory usage in bytes',
+    '# TYPE pool_memory_heap_bytes gauge',
+    `pool_memory_heap_bytes ${mem.heapUsed}`,
+    '# HELP pool_memory_rss_bytes RSS memory in bytes',
+    '# TYPE pool_memory_rss_bytes gauge',
+    `pool_memory_rss_bytes ${mem.rss}`,
+  ];
+  res.set('Content-Type', 'text/plain; charset=utf-8');
+  res.send(lines.join('\n') + '\n');
+});
+
+app.get('/api/events', (_req, res) => {
+  res.json(eventLogs);
 });
 
 // WebSocket Server
