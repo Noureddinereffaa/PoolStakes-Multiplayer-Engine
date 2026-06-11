@@ -179,6 +179,7 @@ export function evaluateShotRules(
   const otherPlayer = room.players.find(p => p.id !== shooterId);
   if (!currentActivePlayer || !otherPlayer) return;
 
+  room.turnTimer = 60;
   room.pocketedThisTurn = false;
   room.scratchOccurred = false;
   room.ballInHandRestriction = undefined;

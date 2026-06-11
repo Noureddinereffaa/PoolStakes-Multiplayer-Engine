@@ -698,6 +698,17 @@ export default function App() {
                   setChatMessage={setChatMessage}
                   handleSendChat={handleSendChat}
                 />
+                {isReconnecting && roomState?.status === 'playing' && (
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="p-6 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_60px_rgba(245,158,11,0.15)] text-center">
+                      <div className="flex items-center justify-center gap-3 mb-2">
+                        <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping shadow-[0_0_10px_#f59e0b]" />
+                        <span className="text-lg font-black font-mono text-amber-400">{language === 'ar' ? 'جاري إعادة الاتصال...' : 'RECONNECTING...'}</span>
+                      </div>
+                      <p className="text-xs font-mono text-amber-600/70">{language === 'ar' ? 'يرجى الانتظار، نحاول استعادة الاتصال بالمباراة' : 'Please wait while we restore your connection to the match'}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Styled sports footers */}

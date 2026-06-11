@@ -235,9 +235,11 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
 export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { type: 'preview_aim' }>): void {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
-  const { roomId } = mapping;
+  const { roomId, playerId } = mapping;
   const room = activeRooms.get(roomId);
   if (!room || room.status !== 'playing') return;
+  // Only relay current turn holder's aim to prevent cue leak
+  if (room.currentTurn !== playerId) return;
   for (const client of clientsByRoom.get(roomId) || []) {
     if (client !== ws && client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ type: 'preview_aim', angle: msg.angle, power: msg.power }));
@@ -553,7 +555,10 @@ export async function handleDisconnect(ws: WebSocket): Promise<void> {
         freshRoom.reconnectDeadlines = {};
         const forfeitedPlayer = freshRoom.players.find(p => p.id === playerId);
         const winner = freshRoom.players.find(p => p.id !== playerId && p.isConnected);
-        if (winner && forfeitedPlayer) concludeMatch(freshRoom, winner, forfeitedPlayer, `${winner.username} wins by forfeit! (Opponent failed to reconnect)`);
+        if (winner && forfeitedPlayer) {
+          freshRoom.forfeitedPlayerId = forfeitedPlayer.id;
+          concludeMatch(freshRoom, winner, forfeitedPlayer, `${winner.username} wins by forfeit! (Opponent failed to reconnect)`);
+        }
       }
       broadcastRoom(roomId);
     };

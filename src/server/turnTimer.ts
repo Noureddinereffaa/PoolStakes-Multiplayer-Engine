@@ -62,6 +62,9 @@ export function startTurnTimer(): void {
       if (room.status !== 'playing') return;
       if (animatingRoomIds.has(roomId)) return;
 
+      // Pause timer if current turn player is disconnected
+      if (room.disconnectedPlayerIds?.includes(room.currentTurn)) return;
+
       if (room.turnTimer === undefined) room.turnTimer = 60;
 
       if (room.turnTimer > 0) {

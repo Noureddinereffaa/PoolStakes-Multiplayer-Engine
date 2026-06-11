@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import { Ball, Player, Difficulty } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
-import { evaluateShotRules, triggerAiShot } from './gameLogic';
+import { evaluateShotRules, triggerAiShot, findValidCueBallPosition } from './gameLogic';
 import { pushEventLog } from './state';
 
 // ── Types ──────────────────────────────────────────────
@@ -18,6 +18,7 @@ export interface AiMatch {
   ballInHandRestriction?: 'anywhere' | 'behind_head_string';
   log: string[];
   animVersion: number;
+  turnTimer: number;
   winnerId?: string;
   createdAt: number;
 }
@@ -67,6 +68,7 @@ export function createAiMatch(
     pocketedThisTurn: false,
     log: ['AI Practice Match started.'],
     animVersion: 0,
+    turnTimer: 60,
     createdAt: Date.now(),
   };
 
@@ -226,6 +228,7 @@ export function handleAiRematch(ws: WebSocket): void {
   match.log = ['🔄 AI Rematch started!'];
   match.status = 'playing';
   match.currentTurn = match.players[0].id;
+  match.turnTimer = 60;
   broadcastAiRoom(mapping.roomId);
 }
 
@@ -254,6 +257,10 @@ export function handleAiDisconnect(ws: WebSocket): void {
 export function handleAiPreviewAim(ws: WebSocket, msg: { angle: number; power: number; spinX?: number; spinY?: number }): void {
   const mapping = aiPlayerRoomMap.get(ws);
   if (!mapping) return;
+  const match = aiMatches.get(mapping.roomId);
+  if (!match || match.status !== 'playing') return;
+  // Only relay current turn holder's aim
+  if (match.currentTurn !== mapping.playerId) return;
   for (const client of aiClientsByRoom.get(mapping.roomId) || []) {
     if (client !== ws && client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ type: 'preview_aim', angle: msg.angle, power: msg.power }));
@@ -286,6 +293,7 @@ export function handleAiResetCueBall(ws: WebSocket, msg: { x: number; y: number 
   cb.x = tx; cb.y = ty; cb.isPocketed = false; cb.vx = 0; cb.vy = 0;
   match.scratchOccurred = false;
   match.ballInHandRestriction = undefined;
+  match.turnTimer = 60;
   broadcastAiRoom(mapping.roomId);
 }
 
@@ -325,6 +333,55 @@ export function sendAiFullState(ws: WebSocket, roomId: string): void {
     serverSeed: undefined,
   };
   ws.send(JSON.stringify({ type: 'sync_state', state: stateForSync }));
+}
+
+// ── AI match turn timer countdown ──────────────────────
+export function startAiMatchTimer(): void {
+  setInterval(() => {
+    for (const [roomId, match] of aiMatches) {
+      if (match.status !== 'playing') continue;
+      if (aiAnimatingIds.has(roomId)) continue;
+
+      // Pause timer if human player is disconnected
+      const hasConnectedHuman = [...(aiClientsByRoom.get(roomId) || [])].some(c => c.readyState === WebSocket.OPEN);
+      if (!hasConnectedHuman) continue;
+
+      if (match.turnTimer > 0) {
+        match.turnTimer -= 1;
+        if (match.turnTimer <= 10 || match.turnTimer % 5 === 0) {
+          broadcastAiRoom(roomId);
+        }
+      } else {
+        match.turnTimer = 60;
+        const current = match.players.find(p => p.id === match.currentTurn);
+        const other = match.players.find(p => p.id !== match.currentTurn);
+        if (current && other) {
+          match.log.push(`⏰ SHOT CLOCK VIOLATION: ${current.username} exceeded the 60-second shot clock!`);
+          match.log.push(`⚠️ ${other.username} receives Ball-In-Hand.`);
+          match.currentTurn = other.id;
+          match.scratchOccurred = true;
+          match.ballInHandRestriction = 'anywhere';
+
+          const cueBall = match.balls.find(b => b.id === 0);
+          if (cueBall && cueBall.isPocketed) {
+            const validPos = findValidCueBallPosition(match.balls as any);
+            cueBall.isPocketed = false;
+            cueBall.x = validPos.x;
+            cueBall.y = validPos.y;
+            cueBall.vx = 0;
+            cueBall.vy = 0;
+          }
+
+          broadcastAiRoom(roomId);
+          if (match.currentTurn === 'ai-bot') triggerAiShot(match as any, {
+            animSet: aiAnimatingIds,
+            clientsMap: aiClientsByRoom,
+            broadcastFn: broadcastAiRoom,
+          });
+        }
+      }
+    }
+  }, 1000).unref();
 }
 
 // ── Periodic cleanup for idle AI matches ───────────────

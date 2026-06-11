@@ -46,8 +46,8 @@ const COR_TERM  = -(1 + COR) * 0.5;
 // ═══════════════════════════════════════════════════════
 // Corner pockets are tighter (18) than middle pockets (22)
 const POCKET_RADII        = [18, 22, 18, 18, 22, 18];
-const POCKET_INNER_FACTOR = 0.6;
-const POCKET_ACCEPT_DEG   = 55; // acceptance angle in degrees (was 65)
+const POCKET_INNER_FACTOR = 0.85;
+const POCKET_ACCEPT_DEG   = 75; // acceptance angle in degrees
 
 const POCKET_POS = [
   { x: CUSHION + 3,           y: CUSHION + 3           },
@@ -274,7 +274,7 @@ function detectPockets(balls: Ball[]): void {
 
       if (d2 >= inner2) {
         const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-        if (spd > 0.3) {
+        if (spd > 0.05) {
           const dot = -(b.vx * dx + b.vy * dy) / (spd * Math.sqrt(d2));
           if (dot < MAX_COS) continue;
         }

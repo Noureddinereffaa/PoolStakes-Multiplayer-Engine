@@ -251,8 +251,14 @@ export function useBilliardsSocket({
               setIsSearching(false);
             }
             wasInActiveGameRef.current = msg.state.status === 'playing' || msg.state.status === 'ready';
+            // Clear reconnect state when game ends
+            if (msg.state.status === 'gameover') {
+              reconnectRef.current = null;
+              reconnectAttemptRef.current = 0;
+            }
             if (mountedRef.current) {
               setRoomState(msg.state);
+              setOpponentAim(null);
             }
             // Persist room info for reconnection after page refresh
             try {
@@ -262,6 +268,7 @@ export function useBilliardsSocket({
             break;
           case 'physics_frames':
             if (mountedRef.current) {
+              setOpponentAim(null);
               setPhysicsFrames(
                 (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
                   frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
@@ -285,7 +292,10 @@ export function useBilliardsSocket({
                 if (!prev) return prev;
                 const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
                 const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
+                const players = prev.players.map((p: any) =>
+                  p.id === msg.playerId ? { ...p, isConnected: false } : p
+                );
+                return { ...prev, disconnectedPlayerIds, reconnectDeadlines, players };
               });
             }
             if (mountedRef.current) setErrorRef.current('Opponent disconnected. Waiting for reconnection...');
@@ -298,7 +308,10 @@ export function useBilliardsSocket({
                 const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
                 const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
                 delete reconnectDeadlines[msg.playerId];
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
+                const players = prev.players.map((p: any) =>
+                  p.id === msg.playerId ? { ...p, isConnected: true } : p
+                );
+                return { ...prev, disconnectedPlayerIds, reconnectDeadlines, players };
               });
             }
             if (mountedRef.current) setErrorRef.current(null);
@@ -332,17 +345,12 @@ export function useBilliardsSocket({
             break;
           case 'error':
             if (isReconnect) {
-              if (mountedRef.current) setIsReconnecting(false);
-              if (reconnectRef.current) {
-                const token2 = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
-                ws.send(JSON.stringify({
-                  type: 'join',
-                  roomId: reconnectRef.current.targetRoomId,
-                  username: usernameRef.current ?? '',
-                  stake: reconnectRef.current.customStake,
-                  token: token2
-                }));
+              if (mountedRef.current) {
+                setIsReconnecting(false);
+                setErrorRef.current(msg.message || 'Reconnection failed. The match may have ended.');
               }
+              reconnectRef.current = null;
+              reconnectAttemptRef.current = 0;
             } else {
               if (mountedRef.current) setErrorRef.current(msg.message);
               setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
@@ -463,11 +471,13 @@ export function useBilliardsSocket({
               setConnectionGrade('excellent');
               setIsSearching(false);
               setRoomState(msg.state);
+              setOpponentAim(null);
             }
             try { sessionStorage.setItem('arena_room_id', msg.state.roomId || ''); sessionStorage.setItem('arena_stake', String(msg.state.stake || 0)); } catch {}
             break;
           case 'physics_frames':
             if (mountedRef.current) {
+              setOpponentAim(null);
               setPhysicsFrames(
                 (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
                   frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))

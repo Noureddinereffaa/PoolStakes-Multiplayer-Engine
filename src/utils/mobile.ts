@@ -50,6 +50,8 @@ export async function releaseWakeLock(): Promise<void> {
 
 let chromeHidden = false;
 let chromeTimer: ReturnType<typeof setInterval> | null = null;
+let chromeResizeHandler: (() => void) | null = null;
+let chromeOrientationHandler: (() => void) | null = null;
 
 export function hideBrowserChrome(): void {
   chromeHidden = true;
@@ -69,11 +71,18 @@ export function startChromeHiding(): void {
       document.body.style.transform = 'translateY(0)';
     }
   }, 2000);
+  // Re-hide on resize/orientation change (browsers often re-show chrome)
+  chromeResizeHandler = () => hideBrowserChrome();
+  chromeOrientationHandler = () => hideBrowserChrome();
+  window.addEventListener('resize', chromeResizeHandler);
+  window.addEventListener('orientationchange', chromeOrientationHandler);
 }
 
 export function stopChromeHiding(): void {
   chromeHidden = false;
   if (chromeTimer) { clearInterval(chromeTimer); chromeTimer = null; }
+  if (chromeResizeHandler) { window.removeEventListener('resize', chromeResizeHandler); chromeResizeHandler = null; }
+  if (chromeOrientationHandler) { window.removeEventListener('orientationchange', chromeOrientationHandler); chromeOrientationHandler = null; }
 }
 
 export async function enterFullscreen(element: HTMLElement): Promise<boolean> {

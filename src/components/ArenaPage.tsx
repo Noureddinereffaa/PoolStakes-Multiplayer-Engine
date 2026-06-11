@@ -6,7 +6,6 @@ import {
   hideBrowserChrome,
   startChromeHiding,
   stopChromeHiding,
-  isStandalone,
   enterFullscreen as enterMobileFS,
   exitFullscreen as exitMobileFS,
   isFullscreen as checkFullscreen
@@ -299,6 +298,22 @@ export default function ArenaPage({
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
 
+  // One-shot fullscreen on first user interaction (captures navigation gesture)
+  useEffect(() => {
+    if (!isMobile || checkFullscreen()) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = () => {
+      if (!checkFullscreen()) enterMobileFS(el);
+    };
+    el.addEventListener('pointerdown', handler, { once: true });
+    el.addEventListener('touchstart', handler, { once: true });
+    return () => {
+      el.removeEventListener('pointerdown', handler);
+      el.removeEventListener('touchstart', handler);
+    };
+  }, [isMobile]);
+
   const toggleFullscreen = () => {
     if (isFullscreen) {
       exitMobileFS();
@@ -306,8 +321,6 @@ export default function ArenaPage({
       if (containerRef.current) enterMobileFS(containerRef.current);
     }
   };
-
-  const [needsTap, setNeedsTap] = useState(() => isMobile && !document.fullscreenElement && !isStandalone());
 
   const resetOverlayTimer = useCallback(() => {
     setShowOverlay(true);
@@ -733,8 +746,8 @@ function MobilePowerButton({ side, shotPower, disabled, onPowerChange, onShoot }
         <div className="relative z-10 flex flex-col items-center">
           <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             {isRight
-              ? <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              : <path strokeLinecap="round" strokeLinejoin="round" d="M11 7l-5 5m0 0l5 5m-5-5h12" />
+              ? <path strokeLinecap="round" strokeLinejoin="round" d="M11 7l-5 5m0 0l5 5m-5-5h12" />
+              : <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
             }
           </svg>
           {dragging && (
