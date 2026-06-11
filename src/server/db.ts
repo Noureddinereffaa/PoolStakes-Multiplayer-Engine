@@ -2,7 +2,17 @@ import { PrismaClient, Prisma } from '@prisma/client';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
-const prisma = new PrismaClient();
+function buildDatasourceUrl(): string | undefined {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+  if (url.includes('connection_limit=')) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}connection_limit=5&pool_timeout=10`;
+}
+
+const prisma = new PrismaClient({
+  datasourceUrl: buildDatasourceUrl(),
+});
 
 prisma.$use(async (params, next) => {
   const result = await next(params);

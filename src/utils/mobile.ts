@@ -49,11 +49,8 @@ export async function releaseWakeLock(): Promise<void> {
 }
 
 export function hideBrowserChrome(): void {
-  const d = document.documentElement;
-  d.style.height = 'calc(100% + 1px)';
-  window.scrollTo(0, 1);
-  requestAnimationFrame(() => { d.style.height = ''; });
-  setTimeout(() => { window.scrollTo(0, 1); }, 300);
+  window.scrollTo(0, 0);
+  setTimeout(() => window.scrollTo(0, 1), 100);
 }
 
 export async function enterFullscreen(element: HTMLElement): Promise<boolean> {

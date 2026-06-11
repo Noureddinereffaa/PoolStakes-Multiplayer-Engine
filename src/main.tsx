@@ -82,9 +82,6 @@ if ('connection' in navigator) {
 
 if (isMobileDevice()) {
   document.addEventListener('gesturestart', (e) => e.preventDefault());
-  document.addEventListener('touchmove', (e) => {
-    if (document.fullscreenElement) e.preventDefault();
-  }, { passive: false });
 }
 
 createRoot(document.getElementById('root')!).render(

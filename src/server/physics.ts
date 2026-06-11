@@ -13,7 +13,7 @@ export const RACK_APEX_Y      = 200;
 export const RACK_COL_SPACING = BALL_R * 1.732050808;
 export const FOOT_SPOT_X      = RACK_APEX_X + 2 * RACK_COL_SPACING;
 export const FOOT_SPOT_Y      = RACK_APEX_Y;
-export const POCKET_RADIUS    = 20;
+export const POCKET_RADIUS    = 20; // default, unused; see per-pocket below
 
 // Bounds (ball center must stay within)
 export const MIN_X = CUSHION + BALL_R;
@@ -24,18 +24,18 @@ export const MAX_Y = TABLE_H - CUSHION - BALL_R;
 // ═══════════════════════════════════════════════════════
 //  PHYSICS CONSTANTS (Aramith Pro Cup calibrated)
 // ═══════════════════════════════════════════════════════
-const COR       = 0.93;   // ball-ball COR
-const COR_R     = 0.79;   // ball-rail COR
+const COR       = 0.88;   // ball-ball COR (was 0.93)
+const COR_R     = 0.72;   // ball-rail COR (was 0.79)
 const MU_B      = 0.20;   // ball-ball friction
 const MU_RR     = 0.9968; // rolling friction/frame
 const MU_RS     = 0.9910; // sliding friction/frame
-const V_S       = 0.40;   // slide→roll transition
+const V_S       = 0.60;   // slide→roll transition (was 0.40)
 const MU_RT     = 0.15;   // rail tangential friction
 const SUB       = 48;     // sub-steps
 const S_IT      = 8;      // solver iterations
 
-const K_CURVE   = 0.028;  // English curve
-const K_LONG    = 0.035;  // Draw/Follow
+const K_CURVE   = 0.035;  // English curve (was 0.028)
+const K_LONG    = 0.028;  // Draw/Follow (was 0.035)
 const SPIN_DEC  = 0.997;  // spin decay/frame
 
 // Ball-ball Coulomb impulse multiplier
@@ -44,6 +44,11 @@ const COR_TERM  = -(1 + COR) * 0.5;
 // ═══════════════════════════════════════════════════════
 //  POCKETS
 // ═══════════════════════════════════════════════════════
+// Corner pockets are tighter (18) than middle pockets (22)
+const POCKET_RADII        = [18, 22, 18, 18, 22, 18];
+const POCKET_INNER_FACTOR = 0.6;
+const POCKET_ACCEPT_DEG   = 55; // acceptance angle in degrees (was 65)
+
 const POCKET_POS = [
   { x: CUSHION + 3,           y: CUSHION + 3           },
   { x: TABLE_W / 2,           y: CUSHION               },
@@ -52,10 +57,6 @@ const POCKET_POS = [
   { x: TABLE_W / 2,           y: TABLE_H - CUSHION     },
   { x: TABLE_W - CUSHION - 3, y: TABLE_H - CUSHION - 3 },
 ];
-
-const R2      = POCKET_RADIUS ** 2;
-const INNER2  = (POCKET_RADIUS * 0.6) ** 2;
-const MAX_COS = Math.cos(65 * Math.PI / 180);
 
 // ═══════════════════════════════════════════════════════
 //  BALL COLORS
@@ -217,7 +218,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vy;
       const dt_t = MU_RT * Math.abs(vn);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      if (b.id === 0) { b.vy -= sx * 1.1; b.spinX = -sx * 0.30; }
+      b.vy -= sx * 0.9; b.spinX = -sx * 0.30;
       hit = true;
     } else if (rail === 'right') {
       b.x = MAX_X;
@@ -226,7 +227,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vy;
       const dt_t = MU_RT * Math.abs(vn);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      if (b.id === 0) { b.vy += sx * 1.1; b.spinX = -sx * 0.30; }
+      b.vy += sx * 0.9; b.spinX = -sx * 0.30;
       hit = true;
     } else if (rail === 'top') {
       b.y = MIN_Y;
@@ -235,7 +236,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vx;
       const dt_t = MU_RT * Math.abs(vn);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      if (b.id === 0) { b.vx += sx * 1.1; b.spinX = -sx * 0.30; }
+      b.vx += sx * 0.9; b.spinX = -sx * 0.30;
       hit = true;
     } else if (rail === 'bottom') {
       b.y = MAX_Y;
@@ -244,7 +245,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vx;
       const dt_t = MU_RT * Math.abs(vn);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      if (b.id === 0) { b.vx -= sx * 1.1; b.spinX = -sx * 0.30; }
+      b.vx -= sx * 0.9; b.spinX = -sx * 0.30;
       hit = true;
     }
 
@@ -255,19 +256,23 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
 }
 
 function detectPockets(balls: Ball[]): void {
+  const MAX_COS = Math.cos(POCKET_ACCEPT_DEG * Math.PI / 180);
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
     if (b.isPocketed) continue;
 
     for (let pi = 0; pi < POCKET_POS.length; pi++) {
       const p = POCKET_POS[pi];
+      const r = POCKET_RADII[pi];
+      const r2 = r * r;
+      const inner2 = (r * POCKET_INNER_FACTOR) ** 2;
       const dx = b.x - p.x;
       const dy = b.y - p.y;
       const d2 = dx * dx + dy * dy;
 
-      if (d2 >= R2) continue;
+      if (d2 >= r2) continue;
 
-      if (d2 >= INNER2) {
+      if (d2 >= inner2) {
         const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
         if (spd > 0.3) {
           const dot = -(b.vx * dx + b.vy * dy) / (spd * Math.sqrt(d2));

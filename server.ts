@@ -1,9 +1,9 @@
+import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
-import net from 'net';
 import { registerLaravelRoutes } from './src/server/laravel';
 import { broadcastToAllWebSockets } from './src/server/state';
 import { attachWebSocketHandlers } from './src/server/websocket';
@@ -35,8 +35,6 @@ function validateEnv(): void {
 }
 validateEnv();
 
-const PORT = Number(process.env.PORT ?? 3000);
-const HOST = process.env.HOST ?? '0.0.0.0';
 const app = express();
 
 // Enable JSON parser with 10kb body limit to prevent large-payload DoS
@@ -64,13 +62,13 @@ app.use(helmet({
 app.use(xssSanitize);
 app.use(requestLogger);
 
-// ── Global Express error handler ───────────────────────────────
+registerLaravelRoutes(app, broadcastToAllWebSockets);
+
+// ── Global Express error handler (AFTER routes) ────────────────
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error('Unhandled error', { error: String(err) });
   res.status(500).json({ success: false, error: 'Internal server error' });
 });
-
-registerLaravelRoutes(app, broadcastToAllWebSockets);
 
 // WebSocket Server
 const wss = new WebSocketServer({ noServer: true });

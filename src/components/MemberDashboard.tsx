@@ -32,7 +32,6 @@ interface Props {
   onJoinByCode: (code: string) => void;
   onJoinRandom: (stake: number) => void;
   onCancelWaiting: () => void;
-  onConnectLobby: () => void;
 }
 
 const STAKES = [5, 10, 25, 50, 100, 250, 500];
@@ -42,7 +41,7 @@ export default function MemberDashboard({
   laravelUsers, matchHistory, language, setLanguage,
   onSetStake, onSetRoomId, onSetJoinDifficulty, onJoinRoom, onNavigateRules,
   onDeposit, onWithdraw, onSignOut,
-  publicRooms, roomCreationCode, isSearching, onCreateRoom, onListRooms, onJoinByCode, onJoinRandom, onCancelWaiting, onConnectLobby,
+  publicRooms, roomCreationCode, isSearching, onCreateRoom, onListRooms, onJoinByCode, onJoinRandom, onCancelWaiting,
 }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -60,11 +59,6 @@ export default function MemberDashboard({
   const [wdAddr, setWdAddr] = useState('');
   const [wdMethod, setWdMethod] = useState<'crypto' | 'bank'>('crypto');
   const isAr = language === 'ar';
-
-  // Establish lobby WebSocket connection on mount
-  useEffect(() => {
-    onConnectLobby();
-  }, [onConnectLobby]);
 
   // Refresh public rooms periodically
   const [roomListStake, setRoomListStake] = useState<number | undefined>(undefined);
@@ -105,7 +99,7 @@ export default function MemberDashboard({
   ];
 
   return (
-    <div dir={isAr ? 'rtl' : 'ltr'} className="min-h-screen bg-[#07070a] text-slate-100 flex overscroll-none">
+    <div dir={isAr ? 'rtl' : 'ltr'} className="h-screen bg-[#07070a] text-slate-100 flex overscroll-none">
       {/* ── SIDEBAR ── */}
       <aside className="hidden lg:flex flex-col w-64 border-r border-white/5 bg-[#0a0a0f] shrink-0">
         <div className="p-5 border-b border-white/5">
@@ -375,7 +369,7 @@ export default function MemberDashboard({
                                 </div>
                               </div>
                               <button
-                                onClick={() => onJoinRandom(r.stake)}
+                                onClick={() => onJoinByCode(r.roomCode)}
                                 className="px-4 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold hover:bg-emerald-500/20 transition opacity-0 group-hover:opacity-100"
                               >
                                 {isAr ? 'انضمام' : 'Join'}

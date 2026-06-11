@@ -254,8 +254,6 @@ export default function ArenaPage({
   }, []);
 
   useEffect(() => {
-    const prevBodyStyle = { overflow: document.body.style.overflow, position: document.body.style.position };
-    const prevHtmlStyle = { overflow: document.documentElement.style.overflow };
     document.body.style.overflow = 'hidden';
     document.body.style.position = 'fixed';
     document.body.style.width = '100%';
@@ -266,18 +264,13 @@ export default function ArenaPage({
     hideBrowserChrome();
     setTimeout(hideBrowserChrome, 400);
     return () => {
-      document.body.style.overflow = prevBodyStyle.overflow;
-      document.body.style.position = prevBodyStyle.position;
-      document.body.style.width = '';
-      document.body.style.height = '';
-      document.body.style.top = '';
-      document.body.style.left = '';
-      if (prevHtmlStyle.overflow) {
-        document.documentElement.style.overflow = prevHtmlStyle.overflow;
-      } else {
-        document.documentElement.style.removeProperty('overflow');
-      }
-      // إزالة أي أنماط متبقية قد تمنع التمرير
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('position');
+      document.body.style.removeProperty('width');
+      document.body.style.removeProperty('height');
+      document.body.style.removeProperty('top');
+      document.body.style.removeProperty('left');
+      document.documentElement.style.removeProperty('overflow');
       document.body.style.removeProperty('overscroll-behavior');
     };
   }, []);
@@ -375,7 +368,7 @@ export default function ArenaPage({
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden"
+      ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden overscroll-none"
       onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
     >
       {/* Mobile overlay: rotate first, then tap to play (only in standalone mode) */}
@@ -550,7 +543,7 @@ export default function ArenaPage({
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
 
             {/* Desktop: lock + power bar + shoot */}
-            {!isMobile && (
+            {(!isMobile || (isMobile && !isFullscreen)) && (
               <>
                 <button onClick={() => setIsAimLocked(!isAimLocked)}
                   className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
@@ -568,8 +561,8 @@ export default function ArenaPage({
               </>
             )}
 
-            {/* Mobile: swipe to shoot */}
-            {isMobile && (
+            {/* Mobile: swipe to shoot (only in fullscreen) */}
+            {isMobile && isFullscreen && (
               <MobileSwipeShooter
                 aimAngle={aimAngle}
                 onAim={(angle) => { tableRef.current?.setAimAngle(angle); }}
@@ -656,12 +649,14 @@ function MobileSwipeShooter({ shotPower, aimAngle, onAim, onPowerChange, onShoot
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
   const startAngleRef = useRef(0);
   const elRef = useRef<HTMLDivElement>(null);
+  const totalDxRef = useRef(0);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
     startAngleRef.current = aimAngle;
+    totalDxRef.current = 0;
     setDragPos({ x: e.clientX, y: e.clientY });
   };
 
@@ -670,12 +665,18 @@ function MobileSwipeShooter({ shotPower, aimAngle, onAim, onPowerChange, onShoot
     if (!elRef.current) return;
     const rect = elRef.current.getBoundingClientRect();
     const dx = e.clientX - dragPos.x;
-    // Horizontal drag → aim angle (left/right fine-tune)
-    const angleDelta = dx * 0.006;
+    // Dead zone: ignore tiny horizontal movements
+    const DEAD_ZONE = 4;
+    const effectiveDx = Math.abs(dx) > DEAD_ZONE ? dx - Math.sign(dx) * DEAD_ZONE : 0;
+    totalDxRef.current += effectiveDx;
+    // Horizontal drag → aim angle (left/right fine-tune), half the sensitivity
+    const angleDelta = totalDxRef.current * 0.003;
     onAim(startAngleRef.current + angleDelta);
-    // Vertical from bottom edge → power
+    // Vertical from bottom edge → power with curve
     const relY = (rect.bottom - e.clientY) / rect.height;
-    onPowerChange(Math.max(5, Math.min(100, Math.round(relY * 100))));
+    const rawPower = Math.max(5, Math.min(100, Math.round(relY * 100)));
+    const curvedPower = Math.floor(Math.pow(rawPower / 100, 0.85) * 100);
+    onPowerChange(curvedPower);
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -683,6 +684,7 @@ function MobileSwipeShooter({ shotPower, aimAngle, onAim, onPowerChange, onShoot
     const el = e.currentTarget;
     try { el.releasePointerCapture(e.pointerId); } catch {}
     setDragPos(null);
+    totalDxRef.current = 0;
     if (!disabled) onShoot();
   };
 

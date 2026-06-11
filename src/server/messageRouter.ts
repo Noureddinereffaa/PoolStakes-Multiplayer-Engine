@@ -1,7 +1,6 @@
 import { WebSocket } from 'ws';
 import { SocketMessage } from '../types';
 import {
-  handleJoin,
   handleReconnect,
   handleSetAiOpponent,
   handlePreviewAim,
@@ -12,6 +11,7 @@ import {
   handleDisconnect,
   handleCreateRoom,
   handleListRooms,
+  handleJoin,
   handleJoinByCode,
   handleJoinRandom,
   handleCancelWaiting,
@@ -23,9 +23,6 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
   pushEventLog('ws_message_in', { type: msg.type, sensitive: msg.type === 'reconnect' });
 
   switch (msg.type) {
-    case 'join':
-      await handleJoin(ws, msg);
-      break;
     case 'reconnect':
       await handleReconnect(ws, msg);
       break;
@@ -48,7 +45,7 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       handleRematch(ws);
       break;
     case 'leave':
-      handleDisconnect(ws);
+      await handleDisconnect(ws);
       break;
     case 'create_room':
       await handleCreateRoom(ws, msg);
@@ -63,10 +60,18 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       await handleJoinRandom(ws, msg);
       break;
     case 'cancel_waiting':
-      handleCancelWaiting(ws);
+      await handleCancelWaiting(ws);
+      break;
+    case 'join':
+      await handleJoin(ws, msg);
       break;
     case 'authenticate':
       handleAuthenticate(ws, msg);
+      break;
+    case 'ping':
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'pong' }));
+      }
       break;
     default:
       if (ws.readyState === WebSocket.OPEN) {

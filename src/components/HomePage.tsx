@@ -58,7 +58,7 @@ export default function HomePage({
   const isAr = language === 'ar';
 
   return (
-    <div dir={isAr ? 'rtl' : 'ltr'} className="min-h-screen bg-[#0a0a0f] text-slate-100">
+    <div dir={isAr ? 'rtl' : 'ltr'} className="h-screen overflow-y-auto bg-[#0a0a0f] text-slate-100">
 
       {/* ── NAV ─────────────────────────────── */}
       <nav className="sticky top-0 z-50 border-b border-white/5 bg-[#0a0a0f]/90 backdrop-blur-xl">

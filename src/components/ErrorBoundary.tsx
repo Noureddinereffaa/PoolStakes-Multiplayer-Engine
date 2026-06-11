@@ -26,21 +26,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          height: '100vh', background: '#0a0f1a', color: '#e2e8f0', padding: 24, textAlign: 'center'
-        }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-          <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>Something went wrong</h1>
-          <p style={{ color: '#94a3b8', marginBottom: 24, maxWidth: 480 }}>
+        <div className="h-screen flex flex-col items-center justify-center bg-[#0a0a0f] text-slate-100 p-6 text-center gap-4">
+          <div className="text-5xl">⚠️</div>
+          <h1 className="text-xl font-black text-white">Something went wrong</h1>
+          <p className="text-sm text-slate-500 max-w-md">
             {this.state.error?.message || 'An unexpected error occurred.'}
           </p>
           <button
             onClick={() => window.location.reload()}
-            style={{
-              padding: '10px 28px', background: '#2563eb', color: '#fff', border: 'none',
-              borderRadius: 8, fontSize: 15, cursor: 'pointer'
-            }}
+            className="px-7 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm transition"
           >
             Reload App
           </button>

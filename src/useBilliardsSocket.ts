@@ -48,7 +48,6 @@ export function useBilliardsSocket({
   const [isSearching, setIsSearching] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const lobbyWsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | Difficulty } | null>(null);
@@ -250,6 +249,11 @@ export function useBilliardsSocket({
             if (mountedRef.current) {
               setRoomState(msg.state);
             }
+            // Persist room info for reconnection after page refresh
+            try {
+              sessionStorage.setItem('arena_room_id', msg.state.roomId || '');
+              sessionStorage.setItem('arena_stake', String(msg.state.stake || 0));
+            } catch {}
             fetchRef.current();
             if (aiScheduled && msg.state.players.length === 1 && msg.state.status === 'waiting') {
               const difficulty = typeof aiScheduled === 'string' ? aiScheduled : 'medium';
@@ -318,6 +322,14 @@ export function useBilliardsSocket({
           case 'room_not_found':
             if (mountedRef.current) setErrorRef.current(msg.message);
             setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
+            break;
+          case 'cancel_waiting_confirmed':
+            try { sessionStorage.removeItem('arena_room_id'); sessionStorage.removeItem('arena_stake'); } catch {}
+            if (mountedRef.current) {
+              setIsSearching(false);
+              setRoomState(null);
+              setRoomCreationCode(null);
+            }
             break;
           case 'error':
             if (isReconnect) {
@@ -391,21 +403,40 @@ export function useBilliardsSocket({
       onGradeRef.current?.('poor');
     };
   }, []);
-  
-  const connectLobby = useCallback(() => {
-    if (lobbyWsRef.current?.readyState === WebSocket.OPEN) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
+  const ensureWsConnected = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING)) return;
+    // Reuse the full connect function but with targetRoomId as empty string to
+    // establish a lobby-only WS connection (authenticate without joining a room)
     const wsHost = window.location.host;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${wsHost}/ws`;
-
     const ws = new WebSocket(wsUrl);
-    lobbyWsRef.current = ws;
+    wsRef.current = ws;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
     ws.onopen = () => {
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      setIsReconnecting(false);
+      setConnectionGrade('excellent');
       const token = (() => { try { const s = JSON.parse(localStorage.getItem('billiards_session') || '{}'); return s.token || ''; } catch { return ''; } })();
+
+      // Send authenticate (not join) since this is a lobby connection
       ws.send(JSON.stringify({ type: 'authenticate', token }));
+
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+      pingTimerRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          markPingSent();
+          ws.send(JSON.stringify({ type: 'ping' }));
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          pongTimeoutRef.current = setTimeout(() => {
+            setConnectionGrade('poor');
+            onGradeRef.current?.('poor');
+          }, CONNECTION_TIMEOUT);
+        }
+      }, PING_INTERVAL);
 
       while (offlineQueueRef.current.length > 0) {
         const msg = offlineQueueRef.current.shift();
@@ -416,86 +447,54 @@ export function useBilliardsSocket({
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
+        if (msg.type === 'pong') {
+          markPongReceived();
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          const grade = getConnectionGrade();
+          setConnectionGrade(grade);
+          onGradeRef.current?.(grade);
+          return;
+        }
         switch (msg.type) {
-          case 'authenticated':
-            break;
           case 'sync_state':
+            if (fallbackTimer) clearTimeout(fallbackTimer);
             if (mountedRef.current) {
+              setIsReconnecting(false);
+              setConnectionGrade('excellent');
               setIsSearching(false);
               setRoomState(msg.state);
             }
-            break;
-          case 'physics_frames':
-            if (mountedRef.current) {
-              setPhysicsFrames(
-                (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
-                  frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
-                )
-              );
-            }
-            break;
-          case 'preview_aim':
-            if (mountedRef.current) {
-              setOpponentAim({
-                angle: msg.angle,
-                power: msg.power,
-                spinX: msg.spinX || 0,
-                spinY: msg.spinY || 0,
-              });
-            }
-            break;
-          case 'disconnect_notice':
-            if (mountedRef.current) {
-              setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const disconnectedPlayerIds = [...(prev.disconnectedPlayerIds || []), msg.playerId];
-                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}), [msg.playerId]: msg.deadline };
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
-              });
-            }
-            break;
-          case 'reconnect_notice':
-            if (mountedRef.current) {
-              setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const disconnectedPlayerIds = (prev.disconnectedPlayerIds || []).filter((id: string) => id !== msg.playerId);
-                const reconnectDeadlines = { ...(prev.reconnectDeadlines || {}) };
-                delete reconnectDeadlines[msg.playerId];
-                return { ...prev, disconnectedPlayerIds, reconnectDeadlines };
-              });
-            }
-            break;
-          case 'laravel_api_log':
-            if (mountedRef.current) setApiLogsRef.current(prev => [msg, ...prev]);
-            break;
-          case 'rooms_list':
-            if (mountedRef.current) setPublicRooms(msg.rooms);
+            try {
+              sessionStorage.setItem('arena_room_id', msg.state.roomId || '');
+              sessionStorage.setItem('arena_stake', String(msg.state.stake || 0));
+            } catch {}
+            fetchRef.current();
             break;
           case 'room_created':
             if (mountedRef.current) {
-              setIsSearching(false);
               setRoomCreationCode(msg.roomCode);
               setRoomId(msg.roomId);
             }
             break;
-          case 'join_success':
-            if (mountedRef.current) {
-              setIsSearching(false);
-              setRoomId(msg.roomId);
-            }
+          case 'rooms_list':
+            if (mountedRef.current) setPublicRooms(msg.rooms);
             break;
-          case 'room_not_found':
+          case 'searching':
+            if (mountedRef.current) setIsSearching(true);
+            break;
+          case 'join_success':
+            if (mountedRef.current) setRoomId(msg.roomId);
+            break;
+          case 'cancel_waiting_confirmed':
+            try { sessionStorage.removeItem('arena_room_id'); sessionStorage.removeItem('arena_stake'); } catch {}
             if (mountedRef.current) {
               setIsSearching(false);
-              setErrorRef.current(msg.message);
+              setRoomState(null);
+              setRoomCreationCode(null);
             }
-            setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4000);
             break;
           case 'error':
-            if (mountedRef.current) {
-              setIsSearching(false);
-              setErrorRef.current(msg.message);
-            }
+            if (mountedRef.current) setErrorRef.current(msg.message);
             setTimeout(() => { if (mountedRef.current) setErrorRef.current(null); }, 4500);
             break;
         }
@@ -505,10 +504,14 @@ export function useBilliardsSocket({
     };
 
     ws.onclose = () => {
-      lobbyWsRef.current = null;
+      if (pingTimerRef.current) { clearInterval(pingTimerRef.current); pingTimerRef.current = null; }
+      if (pongTimeoutRef.current) { clearTimeout(pongTimeoutRef.current); pongTimeoutRef.current = null; }
+      setConnectionGrade('dead');
     };
 
-    ws.onerror = () => {};
+    ws.onerror = () => {
+      setConnectionGrade('poor');
+    };
   }, []);
 
   const handleJoinRoom = useCallback((targetRoomId: string, customStake: number, autoJoinAI: boolean | Difficulty = false) => {
@@ -523,11 +526,6 @@ export function useBilliardsSocket({
       wsRef.current.send(JSON.stringify(payload));
       return true;
     }
-    if (lobbyWsRef.current && lobbyWsRef.current.readyState === WebSocket.OPEN) {
-      lobbyWsRef.current.send(JSON.stringify(payload));
-      return true;
-    }
-    connectLobby();
     offlineQueueRef.current.push({ type: payload.type, payload, timestamp: Date.now() });
     return false;
   }
@@ -588,14 +586,26 @@ export function useBilliardsSocket({
   }, []);
 
   const handleQuitRoom = useCallback(() => {
+    reconnectRef.current = null;
+    reconnectAttemptRef.current = 0;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+    if (pingTimerRef.current) {
+      clearInterval(pingTimerRef.current);
+      pingTimerRef.current = null;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    try { sessionStorage.removeItem('arena_room_id'); sessionStorage.removeItem('arena_stake'); } catch {}
     if (mountedRef.current) {
       setRoomState(null);
       setPhysicsFrames(null);
       setRoomCreationCode(null);
+      setIsSearching(false);
     }
     fetchRef.current();
   }, []);
@@ -622,18 +632,16 @@ export function useBilliardsSocket({
   }, []);
 
   const handleCancelWaiting = useCallback(() => {
-    setIsSearching(false);
     sendOrQueue({ type: 'cancel_waiting' });
-    if (mountedRef.current) {
-      setRoomState(null);
-      setRoomCreationCode(null);
-    }
   }, []);
 
-  // إغلاق الاتصال تلقائياً عند إزالة المكون (Unmount)
   useEffect(() => {
     return () => {
       if (wsRef.current) wsRef.current.close();
+      if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+      if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
     };
   }, []);
 
@@ -708,6 +716,6 @@ export function useBilliardsSocket({
     handleJoinByCode,
     handleJoinRandom,
     handleCancelWaiting,
-    connectLobby,
+    ensureWsConnected,
   };
 }

@@ -72,8 +72,16 @@ export function enforceSingleSocket(userId: string, ws: WebSocket): void {
     try {
       existing.send(JSON.stringify({ type: 'error', message: 'New connection established. This session is closed.' }));
     } catch { /* ignore */ }
-    try { existing.close(); } catch { /* ignore */ }
     playerRoomMap.delete(existing);
+    for (const [roomId, clients] of clientsByRoom) {
+      if (clients.has(existing)) {
+        clients.delete(existing);
+        if (clients.size === 0) {
+          clientsByRoom.delete(roomId);
+        }
+      }
+    }
+    try { existing.close(); } catch { /* ignore */ }
   }
   userSockets.set(userId, ws);
 }
@@ -101,13 +109,23 @@ export function pushMatchLog(entry: MatchHistory): void {
 }
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const MAX_CODE_RETRIES = 3;
 
 export function generateRoomCode(): string {
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  for (let attempt = 0; attempt < MAX_CODE_RETRIES; attempt++) {
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+    }
+    // Check for collision
+    let collision = false;
+    for (const room of activeRooms.values()) {
+      if (room.roomCode === code) { collision = true; break; }
+    }
+    if (!collision) return code;
   }
-  return code;
+  // Fallback: add timestamp suffix to avoid collision
+  return Date.now().toString(36).slice(-4).toUpperCase() + Math.random().toString(36).slice(2, 4).toUpperCase();
 }
 
 export function getPublicRooms(stakeFilter?: number): Array<{ roomId: string; roomCode: string; stake: number; players: number; status: string }> {
@@ -228,10 +246,12 @@ export function cleanupRoom(roomId: string): void {
   const room = activeRooms.get(roomId);
   if (!room) return;
 
-  // Disconnect all clients in room
+  // Notify connected clients before cleanup
   const clients = clientsByRoom.get(roomId);
   if (clients) {
+    const msg = JSON.stringify({ type: 'room_closed', message: 'This room has been closed.' });
     for (const ws of clients) {
+      try { if (ws.readyState === WebSocket.OPEN) ws.send(msg); } catch { /* ignore */ }
       playerRoomMap.delete(ws);
     }
   }
@@ -248,4 +268,32 @@ export function cleanupRoom(roomId: string): void {
   clientsByRoom.delete(roomId);
   animatingRoomIds.delete(roomId);
   pushEventLog('room_cleaned_up', { roomId });
+}
+
+// ── Idle Room Expiry ──────────────────────────────────────────
+const IDLE_ROOM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+let idleCleanupInterval: NodeJS.Timeout | null = null;
+
+export function startIdleRoomCleanup(): void {
+  if (idleCleanupInterval) return;
+  idleCleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [roomId, room] of activeRooms) {
+      // Only clean waiting rooms with < 2 players that are idle
+      if (room.status === 'waiting' && room.players.length < 2 && room.createdAt) {
+        if (now - room.createdAt > IDLE_ROOM_TIMEOUT_MS) {
+          pushEventLog('idle_room_cleanup', { roomId, code: room.roomCode, age: now - room.createdAt });
+          cleanupRoom(roomId);
+        }
+      }
+    }
+  }, 60_000); // Check every minute
+}
+
+export function stopIdleRoomCleanup(): void {
+  if (idleCleanupInterval) {
+    clearInterval(idleCleanupInterval);
+    idleCleanupInterval = null;
+  }
 }

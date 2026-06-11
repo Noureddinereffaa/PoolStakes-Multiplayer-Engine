@@ -91,6 +91,8 @@ export type SocketMessage =
   | { type: 'join_by_code'; code: string; username: string; token?: string }
   | { type: 'join_random'; stake: number; username: string; token?: string }
   | { type: 'cancel_waiting' }
+  | { type: 'ping' }
+  | { type: 'pong' }
   // Server to client messages:
   | { type: 'sync_state'; state: RoomState }
   | { type: 'authenticated' }

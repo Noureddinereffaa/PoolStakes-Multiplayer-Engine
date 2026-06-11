@@ -9,16 +9,11 @@ import { t } from './i18n';
 import { useBilliardsSocket } from './useBilliardsSocket';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import { isMobileDevice, requestWakeLock, releaseWakeLock } from './utils/mobile';
+import { PageLoader } from './components/ui/Spinner';
 
 const ArenaPage = lazy(() => import('./components/ArenaPage'));
 const MemberDashboard = lazy(() => import('./components/MemberDashboard'));
 const RulesPage = lazy(() => import('./components/RulesPage'));
-
-const PageLoader = () => (
-  <div className="fixed inset-0 z-[9999] bg-[#0a0a0f] flex items-center justify-center">
-    <div className="w-12 h-12 rounded-full border-4 border-emerald-500/30 border-t-emerald-400 animate-spin" />
-  </div>
-);
 
 interface ToastItem {
   id: number;
@@ -61,6 +56,8 @@ export default function App() {
     document.documentElement.style.removeProperty('overflow');
     document.documentElement.style.removeProperty('height');
     document.documentElement.style.removeProperty('position');
+    // Force reflow to ensure browser processes the changes
+    void document.body.offsetHeight;
     window.scrollTo(0, 0);
   }
 
@@ -193,7 +190,7 @@ export default function App() {
     handleJoinRandom,
     handleCancelWaiting,
     isSearching,
-    connectLobby,
+    ensureWsConnected,
   } = useBilliardsSocket({
     username: userSession?.username,
     fetchLaravelUsers,
@@ -237,7 +234,7 @@ export default function App() {
     fetchApiLogs();
   }, []);
 
-  // Auto-navigate to arena when a game is ready (2 players joined) from dashboard
+  // Auto-navigate to arena when a game state arrives from dashboard
   const prevRoomStateRef = useRef<RoomState | null>(null);
   useEffect(() => {
     const prev = prevRoomStateRef.current;
@@ -246,10 +243,28 @@ export default function App() {
     if (!curr || location.pathname !== '/dashboard') return;
     const prevPlayers = prev?.players?.length ?? 0;
     const currPlayers = curr.players?.length ?? 0;
-    if ((prevPlayers < 2 && currPlayers >= 2) || curr.status === 'ready' || curr.status === 'playing') {
+    if (currPlayers >= 1 || curr.status === 'ready' || curr.status === 'playing') {
       navigate('/arena');
     }
   }, [roomState, location.pathname, navigate]);
+
+  // Ensure WebSocket is connected when user is on the dashboard or arena (no active game)
+  useEffect(() => {
+    if (userSession && (location.pathname === '/dashboard' || (location.pathname === '/arena' && !roomState))) {
+      ensureWsConnected();
+    }
+  }, [location.pathname, roomState, userSession, ensureWsConnected]);
+
+  // Reconnect to active game on page refresh
+  useEffect(() => {
+    if (location.pathname === '/arena' && !roomState && userSession) {
+      const savedRoomId = (() => { try { return sessionStorage.getItem('arena_room_id'); } catch { return null; } })();
+      const savedStake = (() => { try { return Number(sessionStorage.getItem('arena_stake')) || 25; } catch { return 25; } })();
+      if (savedRoomId) {
+        handleJoinRoom(savedRoomId, savedStake);
+      }
+    }
+  }, [location.pathname, roomState, userSession, handleJoinRoom]);
 
   // Wake lock for mobile when in game
   useEffect(() => {
@@ -561,7 +576,6 @@ export default function App() {
               onJoinByCode={handleJoinByCode}
               onJoinRandom={handleJoinRandom}
               onCancelWaiting={handleCancelWaiting}
-              onConnectLobby={connectLobby}
               onSignOut={handleSignout}
             />
             </Suspense>
@@ -572,7 +586,7 @@ export default function App() {
         <Route path="/arena" element={
           userSession ? (
             <Suspense fallback={<PageLoader />}>
-            <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
+            <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
 
               {/* Visual background emerald radial glow highlights */}
               <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />

@@ -1,32 +1,42 @@
 @import "tailwindcss";
 
-/* ── Fullscreen & mobile safe-area ── */
-:fullscreen, ::backdrop {
-  background: #000 !important;
+@theme {
+  --color-surface: #0a0a0f;
+  --color-surface-light: #12121a;
+  --color-surface-lighter: #1a1a24;
+  --color-border: rgba(255, 255, 255, 0.05);
+  --color-border-light: rgba(255, 255, 255, 0.1);
+  --color-emerald-primary: #10b981;
+  --color-emerald-dark: #059669;
+  --color-amber-accent: #f59e0b;
+  --color-slate-text: #94a3b8;
+  --color-slate-heading: #f1f5f9;
 }
-canvas {
-  image-rendering: auto;
-}
+
+:fullscreen, ::backdrop { background: #000 !important; }
+canvas { image-rendering: auto; }
+
 body {
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
-  overscroll-behavior: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  background: #0a0a0f;
 }
 
-/* Hide scrollbar everywhere */
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 
-/* Safe area padding for mobile notches */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+.overscroll-none { overscroll-behavior: none; }
+.overscroll-contain { overscroll-behavior: contain; }
 
-/* Prevent overscroll bounce on mobile */
-.overscroll-none {
-  overscroll-behavior: none;
-}
-.overscroll-contain {
-  overscroll-behavior: contain;
-}
+[dir="rtl"] .ml-auto { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .mr-auto { margin-right: 0; margin-left: auto; }
+[dir="rtl"] .text-left { text-align: right; }
+[dir="rtl"] .text-right { text-align: left; }
+[dir="rtl"] .lg\:text-left { text-align: right; }
+[dir="rtl"] .lg\:text-right { text-align: left; }

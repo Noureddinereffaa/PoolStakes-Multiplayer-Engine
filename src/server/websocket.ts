@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { handleDisconnect } from './gameActions';
 import { routeWsMessage } from './messageRouter';
-import { activeSockets } from './state';
+import { activeSockets, startIdleRoomCleanup } from './state';
 
 // Simple rate limiter: max N messages per second per connection
 const rateLimitMap = new WeakMap<WebSocket, { count: number; resetAt: number }>();
@@ -73,9 +73,10 @@ export function attachWebSocketHandlers(wss: WebSocketServer) {
       activeSockets.delete(ws);
       rateLimitMap.delete(ws);
       lastPong.delete(ws);
-      handleDisconnect(ws);
+      handleDisconnect(ws).catch(() => {});
     });
   });
 
   startHeartbeat();
+  startIdleRoomCleanup();
 }

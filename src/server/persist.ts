@@ -3,39 +3,79 @@ import { activeRooms } from './state';
 import { logger } from './logger';
 import { RoomState } from '../types';
 
+function serializeRoomState(room: RoomState): string {
+  return JSON.stringify({
+    roomId: room.roomId,
+    name: room.name,
+    stake: room.stake,
+    status: room.status,
+    players: room.players,
+    balls: room.balls.map(b => ({
+      id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+      radius: b.radius,
+      isPocketed: b.isPocketed, type: b.type,
+      color: b.color, number: b.number,
+      spinX: b.spinX, spinY: b.spinY,
+    })),
+    currentTurn: room.currentTurn,
+    assignedSides: room.assignedSides,
+    scratchOccurred: room.scratchOccurred,
+    pocketedThisTurn: room.pocketedThisTurn,
+    ballInHandRestriction: room.ballInHandRestriction,
+    log: room.log,
+    commissionRate: room.commissionRate,
+    turnTimer: room.turnTimer,
+    animVersion: room.animVersion || 0,
+  });
+}
+
 export async function saveRoomSnapshot(room: RoomState): Promise<void> {
   try {
-    const state = JSON.stringify({
-      roomId: room.roomId,
-      name: room.name,
-      stake: room.stake,
-      status: room.status,
-      players: room.players,
-  balls: room.balls.map(b => ({
-    id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
-    radius: b.radius,
-    isPocketed: b.isPocketed, type: b.type,
-    color: b.color, number: b.number,
-    spinX: b.spinX, spinY: b.spinY,
-  })),
-      currentTurn: room.currentTurn,
-      assignedSides: room.assignedSides,
-      scratchOccurred: room.scratchOccurred,
-      pocketedThisTurn: room.pocketedThisTurn,
-      ballInHandRestriction: room.ballInHandRestriction,
-      log: room.log,
-      commissionRate: room.commissionRate,
-      turnTimer: room.turnTimer,
-      animVersion: room.animVersion || 0,
-    });
-
+    const data = serializeRoomState(room);
     await prisma.roomSnapshot.upsert({
       where: { roomId: room.roomId },
-      create: { roomId: room.roomId, name: room.name, stake: room.stake, status: room.status, state },
-      update: { stake: room.stake, status: room.status, state, name: room.name },
+      create: { roomId: room.roomId, name: room.name, stake: room.stake, status: room.status, state: data },
+      update: { stake: room.stake, status: room.status, state: data, name: room.name },
     });
   } catch (err) {
     logger.error('Failed to persist room snapshot', { roomId: room.roomId, error: String(err) });
+  }
+}
+
+const MAX_QUEUE_SIZE = 50;
+let persistQueue: Array<{ roomId: string; data: string; name: string; stake: number; status: string }> = [];
+let persistScheduled = false;
+
+async function flushPersistQueue(): Promise<void> {
+  const batch = persistQueue;
+  persistQueue = [];
+  persistScheduled = false;
+
+  for (const item of batch) {
+    try {
+      await prisma.roomSnapshot.upsert({
+        where: { roomId: item.roomId },
+        create: { roomId: item.roomId, name: item.name, stake: item.stake, status: item.status, state: item.data },
+        update: { stake: item.stake, status: item.status, state: item.data, name: item.name },
+      });
+    } catch (err) {
+      logger.error('Failed to persist room snapshot', { roomId: item.roomId, error: String(err) });
+    }
+  }
+}
+
+function enqueuePersist(room: RoomState): void {
+  if (persistQueue.length >= MAX_QUEUE_SIZE) return;
+  const data = serializeRoomState(room);
+  const existing = persistQueue.findIndex(e => e.roomId === room.roomId);
+  if (existing >= 0) {
+    persistQueue[existing] = { roomId: room.roomId, data, name: room.name, stake: room.stake, status: room.status };
+  } else {
+    persistQueue.push({ roomId: room.roomId, data, name: room.name, stake: room.stake, status: room.status });
+  }
+  if (!persistScheduled) {
+    persistScheduled = true;
+    setImmediate(flushPersistQueue);
   }
 }
 
@@ -101,7 +141,7 @@ export function startSnapshotInterval(): void {
   snapshotTimer = setInterval(() => {
     for (const room of activeRooms.values()) {
       if (room.status === 'playing' || room.status === 'waiting') {
-        saveRoomSnapshot(room);
+        enqueuePersist(room);
       }
     }
   }, SNAPSHOT_INTERVAL_MS);

@@ -159,6 +159,12 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const [waitingForSync, setWaitingForSync] = useState(false);
   const lastBallsRef = useRef<string>(JSON.stringify(roomState.balls));
   const pullStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isShiftHeldRef = useRef(false);
+  const DEAD_ZONE_PX = 5; // minimum drag distance before power registers
+  const AIM_SENSITIVITY = 0.0015; // radians per pixel of ortho drag (was 0.003)
+  const SHIFT_MODIFIER = 0.3; // precision mode sensitivity multiplier
+  const SMOOTH_FACTOR = 0.35; // lerp factor for angle smoothing (1 = no smoothing)
+  const targetAimAngleRef = useRef(0);
 
   useEffect(() => {
     if (!isAnimating && !waitingForSync) {
@@ -180,14 +186,17 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') { isShiftHeldRef.current = true; return; }
       if (!isMyTurn || isAnimating || isScratchPlacing) return;
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea') return;
+      const step = isShiftHeldRef.current ? 0.004 : 0.015;
+      const powerStep = isShiftHeldRef.current ? 1 : 2;
       switch (e.key) {
-        case 'ArrowLeft': case 'a': case 'A': e.preventDefault(); setAimAngle(p => { let n = p - 0.015; while (n > Math.PI) n -= Math.PI * 2; while (n < -Math.PI) n += Math.PI * 2; return n; }); break;
-        case 'ArrowRight': case 'd': case 'D': e.preventDefault(); setAimAngle(p => { let n = p + 0.015; while (n > Math.PI) n -= Math.PI * 2; while (n < -Math.PI) n += Math.PI * 2; return n; }); break;
-        case 'ArrowUp': case 'w': case 'W': e.preventDefault(); setShotPower(p => Math.min(100, p + 2)); break;
-        case 'ArrowDown': case 's': case 'S': e.preventDefault(); setShotPower(p => Math.max(5, p - 2)); break;
+        case 'ArrowLeft': case 'a': case 'A': e.preventDefault(); setAimAngle(p => { let n = p - step; while (n > Math.PI) n -= Math.PI * 2; while (n < -Math.PI) n += Math.PI * 2; return n; }); break;
+        case 'ArrowRight': case 'd': case 'D': e.preventDefault(); setAimAngle(p => { let n = p + step; while (n > Math.PI) n -= Math.PI * 2; while (n < -Math.PI) n += Math.PI * 2; return n; }); break;
+        case 'ArrowUp': case 'w': case 'W': e.preventDefault(); setShotPower(p => Math.min(100, p + powerStep)); break;
+        case 'ArrowDown': case 's': case 'S': e.preventDefault(); setShotPower(p => Math.max(5, p - powerStep)); break;
         case '1': setShotPower(25); break;
         case '2': setShotPower(50); break;
         case '3': setShotPower(75); break;
@@ -195,8 +204,12 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
         case ' ': case 'Enter': e.preventDefault(); handleShootClick(); break;
       }
     };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') isShiftHeldRef.current = false;
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, [isMyTurn, isAnimating, isScratchPlacing, aimAngle, shotPower, spinX, spinY, animatedBalls]);
 
   useEffect(() => {
@@ -411,11 +424,13 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed) {
         if (isMobile.current) {
-          // Mobile: just track aim on hover, no pull/shoot from canvas
           if (!isAimLockedRef.current && !isInitialDown) {
-            const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-            setAimAngle(newAngle);
-            aimAngleRef.current = newAngle;
+            const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+            targetAimAngleRef.current = rawAngle;
+            const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
+            const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+            setAimAngle(smoothed);
+            aimAngleRef.current = smoothed;
           }
           return;
         }
@@ -425,29 +440,39 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           isPullingRef.current = true;
           if (!isAimLockedRef.current) {
             const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+            targetAimAngleRef.current = newAngle;
             setAimAngle(newAngle);
             aimAngleRef.current = newAngle;
             initialAimAngleRef.current = newAngle;
           }
         } else if (pullStartPosRef.current) {
-          if (!isAimLockedRef.current) {
-            const dx = coords.x - pullStartPosRef.current.x;
-            const dy = coords.y - pullStartPosRef.current.y;
-            const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-            const newAngle = initialAimAngleRef.current + orthoDrag * 0.003;
-            setAimAngle(newAngle);
-            aimAngleRef.current = newAngle;
-          }
-          const dragDist = Math.hypot(coords.x - pullStartPosRef.current.x, coords.y - pullStartPosRef.current.y);
-          const rawPower = Math.min(100, dragDist / 2.4);
+          const pullDx = coords.x - pullStartPosRef.current.x;
+          const pullDy = coords.y - pullStartPosRef.current.y;
+          const dragDist = Math.hypot(pullDx, pullDy);
+          // Dead zone: ignore tiny movements
+          const effectiveDrag = Math.max(0, dragDist - DEAD_ZONE_PX);
+          const dragFactor = isMobile.current ? 1.2 : 2.4;
+          const rawPower = Math.min(100, effectiveDrag / dragFactor);
           const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
           const power = Math.min(100, Math.max(5, Math.floor(curvedPower)));
           setShotPower(power);
           shotPowerRef.current = power;
+          if (!isAimLockedRef.current) {
+            const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
+            const sens = isShiftHeldRef.current ? AIM_SENSITIVITY * SHIFT_MODIFIER : AIM_SENSITIVITY;
+            const newAngle = initialAimAngleRef.current + orthoDrag * sens;
+            targetAimAngleRef.current = newAngle;
+            const smoothed = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
+            setAimAngle(smoothed);
+            aimAngleRef.current = smoothed;
+          }
         } else if (!isAimLockedRef.current) {
-          const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-          setAimAngle(newAngle);
-          aimAngleRef.current = newAngle;
+          const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+          targetAimAngleRef.current = rawAngle;
+          const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
+          const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+          setAimAngle(smoothed);
+          aimAngleRef.current = smoothed;
         }
       }
     }
@@ -460,14 +485,17 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     if (isAnimatingRef.current) return;
     if (isPointerActive || pullStartPosRef.current) handlePointerAction(e, false);
     else if (isMobile.current) {
-      // Mobile: always track aim on hover without needing pointer down
       if (isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
         const coords = getPointerCoords(e);
         if (coords) {
           const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
           if (cueBall && !cueBall.isPocketed) {
-            aimAngleRef.current = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-            setAimAngle(aimAngleRef.current);
+            const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+            targetAimAngleRef.current = rawAngle;
+            const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
+            const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+            aimAngleRef.current = smoothed;
+            setAimAngle(smoothed);
           }
         }
       }
@@ -475,7 +503,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const coords = getPointerCoords(e);
       if (coords) {
         const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
-        if (cueBall && !cueBall.isPocketed) setAimAngle(Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x));
+        if (cueBall && !cueBall.isPocketed) {
+          const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+          targetAimAngleRef.current = rawAngle;
+          const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
+          const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+          setAimAngle(smoothed);
+          aimAngleRef.current = smoothed;
+        }
       }
     }
   };
