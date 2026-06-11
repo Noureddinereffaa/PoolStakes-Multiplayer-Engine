@@ -5,7 +5,7 @@ import {
   activeRooms, clientsByRoom, playerRoomMap, userSockets,
   getOrCreateRoom, broadcastRoom, cleanupRoom,
   pushRoomLog, generateRoomCode, findRoomByCode, pushEventLog,
-  withRoomLock, roomLocks, sendFullState,
+  withRoomLock, sendFullState,
   cancelForfeitTimer, startForfeitTimer, DISCONNECT_TIMEOUT_MS
 } from '../state';
 import { ensureLaravelUser, createPlayerFromUser, lockRoomEscrow } from '../room';
@@ -19,9 +19,9 @@ export interface RoomJoinResult {
   room?: RoomState;
 }
 
-export function createRoom(ws: WebSocket, userId: string, username: string, stake: number, isPublic: boolean): { room: RoomState; code: string } {
+export function createRoom(ws: WebSocket, userId: string, username: string, stake: number, isPublic: boolean, customRoomId?: string): { room: RoomState; code: string } {
   const code = generateRoomCode();
-  const roomId = `room_${code}_${Date.now()}`;
+  const roomId = customRoomId || `room_${code}_${Date.now()}`;
   const room = getOrCreateRoom(roomId, `Room ${code}`, stake);
   room.roomCode = code;
   room.isPublic = isPublic;
@@ -30,7 +30,7 @@ export function createRoom(ws: WebSocket, userId: string, username: string, stak
 }
 
 export async function joinRoom(ws: WebSocket, roomId: string, userId: string, username: string, stake: number): Promise<RoomJoinResult> {
-  const result = await withRoomLock<RoomJoinResult>(roomId, async () => {
+  return withRoomLock<RoomJoinResult>(roomId, async () => {
     const room = activeRooms.get(roomId);
     if (!room) return { success: false, error: 'Room not found.' };
     if (room.status !== 'waiting') return { success: false, error: 'Room is not in joinable state.' };
@@ -76,9 +76,6 @@ export async function joinRoom(ws: WebSocket, roomId: string, userId: string, us
 
     return { success: true, room };
   });
-
-  if (result === null) return { success: false, error: 'Room is busy. Please try again.' };
-  return result;
 }
 
 export async function joinRoomByCode(ws: WebSocket, code: string, userId: string, username: string): Promise<RoomJoinResult> {
@@ -92,7 +89,7 @@ export async function cancelWaiting(ws: WebSocket, userId: string): Promise<{ su
   if (!mapping) return { success: false, reason: 'No active room.' };
 
   const roomId = mapping.roomId;
-  const result = await withRoomLock<{ success: boolean; reason?: string }>(roomId, async () => {
+  return withRoomLock<{ success: boolean; reason?: string }>(roomId, async () => {
     const room = activeRooms.get(roomId);
     if (!room) return { success: false, reason: 'Room not found.' };
     if (room.status !== 'waiting') return { success: false, reason: 'Game already started.' };
@@ -115,7 +112,4 @@ export async function cancelWaiting(ws: WebSocket, userId: string): Promise<{ su
     pushRoomLog(room, `${playerName} left the table.`);
     return { success: true };
   });
-
-  if (result === null) return { success: false, reason: 'Room is busy. Try again.' };
-  return result;
 }

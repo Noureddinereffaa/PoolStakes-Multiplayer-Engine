@@ -138,7 +138,6 @@ export function useBilliardsSocket({
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
-    let aiScheduled = autoJoinAI;
 
     fallbackTimerRef.current = setTimeout(() => {
       if (!mountedRef.current) return;
@@ -192,6 +191,12 @@ export function useBilliardsSocket({
 
       if (isReconnect) {
         ws.send(JSON.stringify({ type: 'reconnect', token }));
+      } else if (autoJoinAI) {
+        ws.send(JSON.stringify({
+          type: 'start_ai_match',
+          difficulty: typeof autoJoinAI === 'string' ? autoJoinAI : 'medium',
+          username: usernameRef.current ?? 'Player'
+        }));
       } else {
         ws.send(JSON.stringify({
           type: 'join',
@@ -254,11 +259,6 @@ export function useBilliardsSocket({
               sessionStorage.setItem('arena_room_id', msg.state.roomId || '');
               sessionStorage.setItem('arena_stake', String(msg.state.stake || 0));
             } catch {}
-            if (aiScheduled && msg.state.players.length === 1 && msg.state.status === 'waiting') {
-              const difficulty = typeof aiScheduled === 'string' ? aiScheduled : 'medium';
-              ws.send(JSON.stringify({ type: 'set_ai_opponent', difficulty }));
-              aiScheduled = false;
-            }
             break;
           case 'physics_frames':
             if (mountedRef.current) {

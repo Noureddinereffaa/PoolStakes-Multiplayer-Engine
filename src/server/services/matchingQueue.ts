@@ -10,25 +10,36 @@ interface WaitingEntry {
 }
 
 const queues = new Map<number, WaitingEntry[]>();
-let queueLock = false;
-const QUEUE_LOCK_WAIT_MS = 5000;
 
-async function acquireQueueLock(): Promise<boolean> {
-  const deadline = Date.now() + QUEUE_LOCK_WAIT_MS;
-  while (queueLock) {
-    if (Date.now() > deadline) return false;
-    await new Promise(r => setTimeout(r, 10));
+// ── Per-stake async mutex ──────────────────────────────
+const stakeLocks = new Map<number, Array<() => void>>();
+const stakeLocked = new Set<number>();
+
+function acquireStakeLock(stake: number): Promise<void> {
+  return new Promise(resolve => {
+    if (stakeLocked.has(stake)) {
+      if (!stakeLocks.has(stake)) stakeLocks.set(stake, []);
+      stakeLocks.get(stake)!.push(resolve);
+    } else {
+      stakeLocked.add(stake);
+      resolve();
+    }
+  });
+}
+
+function releaseStakeLock(stake: number): void {
+  const next = stakeLocks.get(stake)?.shift();
+  if (next) next();
+  else {
+    stakeLocked.delete(stake);
+    stakeLocks.delete(stake);
   }
-  queueLock = true;
-  return true;
 }
 
-function releaseQueueLock(): void {
-  queueLock = false;
-}
+// ── Queue operations ───────────────────────────────────
 
 export async function addToQueue(ws: WebSocket, userId: string, username: string, stake: number): Promise<boolean> {
-  if (!await acquireQueueLock()) return false;
+  await acquireStakeLock(stake);
   try {
     for (const [, q] of queues) {
       if (q.some(e => e.ws === ws || e.userId === userId)) return true;
@@ -38,29 +49,38 @@ export async function addToQueue(ws: WebSocket, userId: string, username: string
     pushEventLog('queue_added', { userId, username, stake, queueSize: queues.get(stake)!.length });
     return true;
   } finally {
-    releaseQueueLock();
+    releaseStakeLock(stake);
   }
 }
 
 export async function removeFromQueue(ws: WebSocket, userId?: string): Promise<void> {
-  if (!await acquireQueueLock()) return;
+  // Need to try all stakes since we don't know which one the user is in
+  let targetStake: number | undefined;
+  for (const [stake, queue] of queues) {
+    if (queue.some(e => e.ws === ws || e.userId === userId)) {
+      targetStake = stake;
+      break;
+    }
+  }
+  if (targetStake === undefined) return;
+
+  await acquireStakeLock(targetStake);
   try {
-    for (const [stake, queue] of queues) {
-      const idx = queue.findIndex(e => e.ws === ws || e.userId === userId);
-      if (idx !== -1) {
-        const removed = queue.splice(idx, 1)[0];
-        if (queue.length === 0) queues.delete(stake);
-        pushEventLog('queue_removed', { userId: removed.userId, username: removed.username, stake: removed.stake });
-        return;
-      }
+    const queue = queues.get(targetStake);
+    if (!queue) return;
+    const idx = queue.findIndex(e => e.ws === ws || e.userId === userId);
+    if (idx !== -1) {
+      const removed = queue.splice(idx, 1)[0];
+      if (queue.length === 0) queues.delete(targetStake);
+      pushEventLog('queue_removed', { userId: removed.userId, username: removed.username, stake: removed.stake });
     }
   } finally {
-    releaseQueueLock();
+    releaseStakeLock(targetStake);
   }
 }
 
 export async function tryMatch(stake: number): Promise<{ first: WaitingEntry; second: WaitingEntry } | null> {
-  if (!await acquireQueueLock()) return null;
+  await acquireStakeLock(stake);
   try {
     const queue = queues.get(stake);
     if (!queue || queue.length < 2) return null;
@@ -77,7 +97,7 @@ export async function tryMatch(stake: number): Promise<{ first: WaitingEntry; se
     pushEventLog('queue_matched', { stake, firstId: first.userId, secondId: second.userId });
     return { first, second };
   } finally {
-    releaseQueueLock();
+    releaseStakeLock(stake);
   }
 }
 

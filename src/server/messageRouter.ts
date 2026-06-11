@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 import { SocketMessage } from '../types';
 import {
   handleReconnect,
-  handleSetAiOpponent,
+  handleSetAiOpponent as handlePvPSetAiOpponent,
   handlePreviewAim,
   handleShoot,
   handleResetCueBall,
@@ -17,17 +17,75 @@ import {
   handleCancelWaiting,
   handleAuthenticate,
 } from './gameActions';
+import {
+  isAiPlayer,
+  getAiPlayerRoom,
+  handleStartAiMatch,
+  handleSetAiOpponent as handleAiSetAiOpponent,
+  handleAiShoot,
+  handleAiPreviewAim,
+  handleAiResetCueBall,
+  handleAiRematch,
+  handleAiDisconnect,
+} from './aiMatchManager';
 import { pushEventLog } from './state';
 
+function routeAiMessage(ws: WebSocket, msg: SocketMessage): void {
+  pushEventLog('ws_ai_route', { type: msg.type });
+  switch (msg.type) {
+    case 'start_ai_match':
+      handleStartAiMatch(ws, msg);
+      break;
+    case 'set_ai_opponent':
+      handleAiSetAiOpponent(ws, msg);
+      break;
+    case 'shoot':
+      handleAiShoot(ws, msg);
+      break;
+    case 'preview_aim':
+      handleAiPreviewAim(ws, msg);
+      break;
+    case 'reset_cue_ball':
+      handleAiResetCueBall(ws, msg);
+      break;
+    case 'rematch':
+      handleAiRematch(ws);
+      break;
+    case 'leave':
+      handleAiDisconnect(ws);
+      break;
+    case 'chat':
+      handleChat(ws, msg);
+      break;
+    case 'ping':
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'pong' }));
+      break;
+    default:
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'error', message: `Unknown message type for AI match: ${(msg as any).type}` }));
+      }
+      break;
+  }
+}
+
 export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise<void> {
-  pushEventLog('ws_message_in', { type: msg.type, sensitive: msg.type === 'reconnect' });
+  pushEventLog('ws_message_in', { type: msg.type });
+
+  // Mode-based dispatch: AI vs PvP
+  if (isAiPlayer(ws)) {
+    routeAiMessage(ws, msg);
+    return;
+  }
 
   switch (msg.type) {
+    case 'start_ai_match':
+      handleStartAiMatch(ws, msg);
+      break;
     case 'reconnect':
       await handleReconnect(ws, msg);
       break;
     case 'set_ai_opponent':
-      await handleSetAiOpponent(ws, msg);
+      await handlePvPSetAiOpponent(ws, msg);
       break;
     case 'preview_aim':
       handlePreviewAim(ws, msg);

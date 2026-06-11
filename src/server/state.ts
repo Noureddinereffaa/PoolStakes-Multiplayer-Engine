@@ -19,24 +19,42 @@ export const payingOutRooms = new Set<string>();
 export const DISCONNECT_TIMEOUT_MS = 30000;
 export const forfeitTimers = new Map<string, NodeJS.Timeout>();
 
-/** Per-room mutex: roomId → true when a critical operation is in progress */
-export const roomLocks = new Set<string>();
+/** Per-room async mutex: queues operations instead of dropping */
+const roomMutexQueues = new Map<string, Array<() => void>>();
 
 /** Track all setTimeout handles per room for cleanup on deletion */
 export const roomTimeouts = new Map<string, Set<NodeJS.Timeout>>();
 
-export async function withRoomLock<T>(roomId: string, fn: () => Promise<T>): Promise<T | null> {
-  if (roomLocks.has(roomId)) {
-    pushEventLog('room_lock_contention', { roomId });
-    return null;
-  }
-  roomLocks.add(roomId);
-  try {
-    return await fn();
-  } finally {
-    roomLocks.delete(roomId);
-  }
+export async function withRoomLock<T>(roomId: string, fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const runNext = () => {
+      roomLocksCurrently.add(roomId);
+      fn().then(res => {
+        roomLocksCurrently.delete(roomId);
+        resolve(res);
+        const next = roomMutexQueues.get(roomId)?.shift();
+        if (next) next();
+        else roomMutexQueues.delete(roomId);
+      }).catch(err => {
+        roomLocksCurrently.delete(roomId);
+        reject(err);
+        const next = roomMutexQueues.get(roomId)?.shift();
+        if (next) next();
+        else roomMutexQueues.delete(roomId);
+      });
+    };
+
+    if (roomLocksCurrently.has(roomId)) {
+      if (!roomMutexQueues.has(roomId)) roomMutexQueues.set(roomId, []);
+      roomMutexQueues.get(roomId)!.push(runNext);
+    } else {
+      runNext();
+    }
+  });
 }
+
+/** Track currently locked roomIds (used internally by withRoomLock) */
+const roomLocksCurrently = new Set<string>();
 
 export function registerRoomTimeout(roomId: string, timer: NodeJS.Timeout): void {
   if (!roomTimeouts.has(roomId)) roomTimeouts.set(roomId, new Set());
@@ -263,7 +281,8 @@ export function cleanupRoom(roomId: string): void {
 
   cancelForfeitTimer(roomId);
   clearRoomTimeouts(roomId);
-  roomLocks.delete(roomId);
+  roomMutexQueues.delete(roomId);
+  roomLocksCurrently.delete(roomId);
   activeRooms.delete(roomId);
   clientsByRoom.delete(roomId);
   animatingRoomIds.delete(roomId);

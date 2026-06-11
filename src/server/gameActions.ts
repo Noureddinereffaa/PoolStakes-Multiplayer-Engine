@@ -7,7 +7,7 @@ import {
   userSockets, rematchingRooms, getOrCreateRoom, broadcastRoom,
   pushRoomLog, cancelForfeitTimer, startForfeitTimer, DISCONNECT_TIMEOUT_MS,
   enforceSingleSocket, removeUserSocket, pushEventLog, sendFullState, cleanupRoom,
-  registerRoomTimeout, roomLocks, getPublicRooms, withRoomLock
+  registerRoomTimeout, getPublicRooms, withRoomLock
 } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { sendPushNotification } from './push';
@@ -183,7 +183,7 @@ export async function handleCancelWaiting(ws: WebSocket): Promise<void> {
   }
 }
 
-// ── Set AI Opponent ──────────────────────────────────────────
+// ── Set AI Opponent (PvP rooms with stake > 0) ──────────────
 export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMessage, { type: 'set_ai_opponent' }>): Promise<void> {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;

@@ -83,8 +83,9 @@ export type SocketMessage =
   | { type: 'reset_cue_ball'; x: number; y: number }
   | { type: 'chat'; message: string }
   | { type: 'set_ai_opponent'; difficulty?: Difficulty }
+  | { type: 'start_ai_match'; difficulty?: Difficulty; token?: string; username?: string }
   | { type: 'rematch' }
-  // New room management messages:
+  // Room management messages:
   | { type: 'authenticate'; token?: string }
   | { type: 'create_room'; stake: number; isPublic?: boolean; token?: string }
   | { type: 'list_rooms'; stake?: number }

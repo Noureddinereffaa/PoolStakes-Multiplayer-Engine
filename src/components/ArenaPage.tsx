@@ -538,45 +538,50 @@ export default function ArenaPage({
             </motion.div>
           )}
 
-          {/* Right side controls */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 p-2 rounded-2xl bg-black/40 backdrop-blur-md border border-amber-900/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
-            <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
-
-            {/* Desktop: lock + power bar + shoot */}
-            {(!isMobile || (isMobile && !isFullscreen)) && (
-              <>
-                <button onClick={() => setIsAimLocked(!isAimLocked)}
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
-                >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
-                <div className="flex flex-col items-center gap-0.5">
-                  <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
-                    <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
-                  </div>
-                  <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
+          {/* Right side controls — desktop only */}
+          {!isMobile && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-2 p-2 rounded-2xl bg-black/40 backdrop-blur-md border border-amber-900/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]">
+              <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
+              <button onClick={() => setIsAimLocked(!isAimLocked)}
+                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-lg ${isAimLocked ? 'bg-rose-500/20 border border-rose-500/40 text-rose-300 shadow-rose-500/10' : 'bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300'}`}
+              >{isAimLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}</button>
+              <div className="flex flex-col items-center gap-0.5">
+                <div className="w-1.5 h-10 rounded-full bg-black/70 border border-amber-900/30 overflow-hidden relative shadow-inner">
+                  <div className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-amber-500 via-amber-400 to-amber-300 transition-all duration-150" style={{ height: `${shotPower}%` }} />
                 </div>
-                <button onClick={handleShootClick}
-                  disabled={!isMyTurn}
-                  className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
-                ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
-              </>
-            )}
-
-            {/* Mobile: swipe to shoot (only in fullscreen) */}
-            {isMobile && isFullscreen && (
-              <MobileSwipeShooter
-                aimAngle={aimAngle}
-                onAim={(angle) => { tableRef.current?.setAimAngle(angle); }}
-                onPowerChange={(p) => tableRef.current?.setShotPower(p)}
-                onShoot={handleShootClick}
+                <span className="text-[5px] font-mono text-amber-500/60">PWR</span>
+              </div>
+              <button onClick={handleShootClick}
                 disabled={!isMyTurn}
-                shotPower={shotPower}
-              />
-            )}
+                className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.3)] disabled:opacity-30 disabled:cursor-not-allowed transition-all hover:scale-110 active:scale-95 hover:shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+              ><div className="w-2.5 h-2.5 rounded-full bg-white/90" /></button>
+              <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
+                className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300 transition-all"
+              >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
+            </div>
+          )}
 
-            <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
-              className="w-7 h-7 rounded-lg flex items-center justify-center bg-black/50 border border-amber-900/40 text-amber-500 hover:border-amber-500/50 hover:text-amber-300 transition-all"
-            >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
-          </div>
+          {/* Mobile: bottom power buttons (left + right) with drag-to-power + release-to-shoot */}
+          {isMobile && (
+            <>
+              <div className="absolute left-0 bottom-0 z-20">
+                <MobilePowerButton side="left" shotPower={shotPower}
+                  disabled={!isMyTurn}
+                  onPowerChange={(p) => tableRef.current?.setShotPower(p)}
+                  onShoot={handleShootClick} />
+              </div>
+              <div className="absolute right-0 bottom-0 z-20">
+                <MobilePowerButton side="right" shotPower={shotPower}
+                  disabled={!isMyTurn}
+                  onPowerChange={(p) => tableRef.current?.setShotPower(p)}
+                  onShoot={handleShootClick} />
+              </div>
+              {/* Mute toggle for mobile - compact, top-right */}
+              <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
+                className="absolute top-1 right-1 z-20 w-6 h-6 rounded-lg flex items-center justify-center bg-black/40 text-amber-500/70"
+              >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
+            </>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -642,92 +647,105 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Swipe Shooter (drag to aim & shoot in one gesture) ─── */
-function MobileSwipeShooter({ shotPower, aimAngle, onAim, onPowerChange, onShoot, disabled }: {
-  shotPower: number; aimAngle: number; onAim: (angle: number) => void; onPowerChange: (p: number) => void; onShoot: () => void; disabled: boolean;
+/* ─── Mobile Power-Drag Button (left/right edge, drag outward to power, release to shoot) ─── */
+function MobilePowerButton({ side, shotPower, disabled, onPowerChange, onShoot }: {
+  side: 'left' | 'right'; shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
-  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
-  const startAngleRef = useRef(0);
-  const elRef = useRef<HTMLDivElement>(null);
-  const totalDxRef = useRef(0);
+  const [dragging, setDragging] = useState(false);
+  const startXRef = useRef(0);
+  const btnRef = useRef<HTMLDivElement>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
     const el = e.currentTarget;
     el.setPointerCapture(e.pointerId);
-    startAngleRef.current = aimAngle;
-    totalDxRef.current = 0;
-    setDragPos({ x: e.clientX, y: e.clientY });
+    startXRef.current = e.clientX;
+    setDragging(true);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragPos) return;
-    if (!elRef.current) return;
-    const rect = elRef.current.getBoundingClientRect();
-    const dx = e.clientX - dragPos.x;
-    // Dead zone: ignore tiny horizontal movements
-    const DEAD_ZONE = 4;
-    const effectiveDx = Math.abs(dx) > DEAD_ZONE ? dx - Math.sign(dx) * DEAD_ZONE : 0;
-    totalDxRef.current += effectiveDx;
-    // Horizontal drag → aim angle (left/right fine-tune), half the sensitivity
-    const angleDelta = totalDxRef.current * 0.003;
-    onAim(startAngleRef.current + angleDelta);
-    // Vertical from bottom edge → power with curve
-    const relY = (rect.bottom - e.clientY) / rect.height;
-    const rawPower = Math.max(5, Math.min(100, Math.round(relY * 100)));
+    if (!dragging) return;
+    const dx = Math.abs(e.clientX - startXRef.current);
+    const rawPower = Math.min(100, Math.round((dx / 120) * 100));
     const curvedPower = Math.floor(Math.pow(rawPower / 100, 0.85) * 100);
-    onPowerChange(curvedPower);
+    onPowerChange(Math.max(5, curvedPower));
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!dragPos) return;
-    const el = e.currentTarget;
-    try { el.releasePointerCapture(e.pointerId); } catch {}
-    setDragPos(null);
-    totalDxRef.current = 0;
+    if (!dragging) return;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    setDragging(false);
     if (!disabled) onShoot();
   };
 
+  const isRight = side === 'right';
+  const edgeDist = Math.max(0, shotPower - 5) / 95;
+
   return (
-    <div className="absolute right-2 bottom-2 z-20 touch-none select-none"
-      style={{ width: 'clamp(36px, 8vw, 52px)', height: 'clamp(100px, 35vh, 180px)' }}
+    <div
+      ref={btnRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className={`touch-none select-none relative ${disabled ? 'opacity-30' : ''}`}
+      style={{
+        width: 'clamp(52px, 14vw, 80px)',
+        height: 'clamp(52px, 14vw, 80px)',
+      }}
     >
+      {/* Outer ring glow */}
       <div
-        ref={elRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className={`relative w-full h-full rounded-xl border cursor-pointer overflow-hidden
-          ${disabled ? 'opacity-30' : ''}`}
+        className="absolute inset-0 rounded-full transition-all duration-100"
         style={{
-          background: 'linear-gradient(180deg, #1a1208 0%, #0d0806 50%, #000 100%)',
-          borderColor: dragPos ? 'rgba(245,158,11,0.5)' : 'rgba(217,119,6,0.25)',
-          boxShadow: dragPos
-            ? 'inset 0 0 30px rgba(245,158,11,0.1), 0 0 20px rgba(245,158,11,0.15)'
-            : 'inset 0 0 15px rgba(0,0,0,0.5), 0 0 10px rgba(0,0,0,0.3)',
+          background: dragging
+            ? 'radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%)'
+            : 'transparent',
+          transform: `translateX(${isRight ? edgeDist * 30 : -edgeDist * 30}px)`,
+        }}
+      />
+      {/* Main button */}
+      <div
+        className="absolute inset-[6px] rounded-full flex items-center justify-center transition-all duration-100"
+        style={{
+          background: dragging
+            ? 'radial-gradient(circle at 50% 50%, #2a1f0a 0%, #0d0806 100%)'
+            : 'radial-gradient(circle at 50% 50%, #1a1208 0%, #0d0806 100%)',
+          border: `1px solid ${dragging ? 'rgba(245,158,11,0.6)' : 'rgba(217,119,6,0.3)'}`,
+          boxShadow: dragging
+            ? `inset 0 0 20px rgba(245,158,11,0.05), 0 0 ${10 + edgeDist * 25}px rgba(245,158,11,${0.05 + edgeDist * 0.25}), ${isRight ? edgeDist * 35 : 0}px 0 ${edgeDist * 20}px rgba(245,158,11,0.08)`
+            : 'inset 0 0 15px rgba(0,0,0,0.5), 0 0 8px rgba(0,0,0,0.3)',
+          transform: `translateX(${isRight ? edgeDist * 20 : -edgeDist * 20}px)`,
         }}
       >
-        {/* Power fill (from bottom) */}
-        <div
-          className="absolute bottom-0 inset-x-0 transition-all duration-75 rounded-b-xl"
-          style={{
-            height: `${shotPower}%`,
-            background: 'linear-gradient(0deg, rgba(245,158,11,0.2) 0%, rgba(217,119,6,0.05) 100%)',
-            boxShadow: 'inset 0 0 20px rgba(245,158,11,0.1)',
-          }}
-        />
-        {/* Drag indicator */}
-        {dragPos && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-1 h-1 rounded-full bg-amber-400 shadow-[0_0_6px_#f59e0b]" />
-          </div>
-        )}
+        {/* Power arc fill */}
+        <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(217,119,6,0.1)" strokeWidth="3" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke={shotPower > 75 ? '#f59e0b' : shotPower > 35 ? '#d97706' : '#b45309'}
+            strokeWidth="3" strokeLinecap="round"
+            strokeDasharray={`${edgeDist * 264} 264`}
+            style={{ filter: dragging ? 'drop-shadow(0 0 4px rgba(245,158,11,0.5))' : 'none' }}
+          />
+        </svg>
+        {/* Inner icon */}
+        <div className="relative z-10 flex flex-col items-center">
+          <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            {isRight
+              ? <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              : <path strokeLinecap="round" strokeLinejoin="round" d="M11 7l-5 5m0 0l5 5m-5-5h12" />
+            }
+          </svg>
+          {dragging && (
+            <span className="text-[7px] font-black font-mono text-amber-400 mt-0.5">{shotPower}%</span>
+          )}
+        </div>
       </div>
-      {/* Labels */}
-      {!dragPos && (
-        <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[5px] font-mono text-amber-500/50 tracking-widest whitespace-nowrap pointer-events-none">
-          SHOOT
+      {/* Pull direction hint */}
+      {!dragging && !disabled && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          style={{ transform: `translateX(${isRight ? 26 : -26}px)` }}
+        >
+          <div className="w-1 h-1 rounded-full bg-amber-500/30 animate-pulse" />
         </div>
       )}
     </div>
