@@ -62,8 +62,6 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const [isScratchPlacing, setIsScratchPlacing] = useState(false);
   const [placedPos, setPlacedPos] = useState({ x: 200, y: 200 });
 
-  const [cameraOffset, setCameraOffset] = useState({ x: 0, y: 0 });
-  const cameraOffsetRef = useRef({ x: 0, y: 0 });
   const [dragMode, setDragMode] = useState<'rotate' | 'pan' | 'pull' | null>(null);
   const dragModeRef = useRef<'rotate' | 'pan' | 'pull' | null>(null);
 
@@ -142,7 +140,6 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   useEffect(() => { roomStateRef.current = roomState; }, [roomState]);
   useEffect(() => { difficultyRef.current = difficulty; }, [difficulty]);
   useEffect(() => { myPlayerIdRef.current = myPlayerId; }, [myPlayerId]);
-  useEffect(() => { cameraOffsetRef.current = cameraOffset; }, [cameraOffset]);
   useEffect(() => { dragModeRef.current = dragMode; }, [dragMode]);
 
   useEffect(() => {
@@ -425,7 +422,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     roomStateRef, difficultyRef, myPlayerIdRef, ballRotationsRef, impactShakeRef,
     feltRipplesRef, chalkParticlesRef, dustSpecksRef, sinkingBallsRef, strikeAnimRef,
     turnStartTimestampRef, animatedBallsRef, isMobileRef: isMobile, opponentAim,
-    impactFlashesRef, cameraOffsetRef, isFineAimRef, aimInertiaVelocityRef,
+    impactFlashesRef, isFineAimRef, aimInertiaVelocityRef,
   });
 
   const getPointerCoords = (e: any) => {
@@ -442,7 +439,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     const screenY = ((clientYRaw - rect.top) / rect.height) * 400;
     
     // Account for camera pan offset to get world coordinates
-    return { x: screenX - cameraOffsetRef.current.x, y: screenY - cameraOffsetRef.current.y };
+    return { x: screenX, y: screenY };
   };
 
   const handlePointerAction = (e: any, isInitialDown = false) => {
@@ -512,7 +509,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
         } else {
           // ================= MOBILE SMART ZONES =================
           if (isInitialDown) {
-            dragStartXRef.current = coords.x + cameraOffsetRef.current.x;
+            dragStartXRef.current = coords.x;
             pullStartPosRef.current = coords;
             aimInertiaVelocityRef.current = 0;
             
@@ -547,33 +544,16 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               setShotPower(power);
               shotPowerRef.current = power;
             } else if (dragModeRef.current === 'pan' && pullStartPosRef.current) {
-              // Pan camera - tighter limits for better gameplay
-              const dx = coords.x - pullStartPosRef.current.x;
-              const dy = coords.y - pullStartPosRef.current.y;
-              setCameraOffset(prev => {
-                const newX = Math.max(-100, Math.min(100, prev.x + dx * 0.7));
-                const newY = Math.max(-60, Math.min(60, prev.y + dy * 0.7));
-                return { x: newX, y: newY };
-              });
-              // Update pull start pos to new coords so delta is continuous
+              // Pan camera removed
               pullStartPosRef.current = coords;
             } 
             else if (dragModeRef.current === 'rotate') {
-              // Always ensure camera is centered
-              setCameraOffset({ x: 0, y: 0 });
-              
-              const screenX = coords.x;
-              const deltaX = screenX - dragStartXRef.current;
-              dragStartXRef.current = screenX;
-
+              const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
+              targetAimAngleRef.current = rawAngle;
               const sens = isFineAimRef.current ? SHIFT_MODIFIER : 1;
-              const angleChange = deltaX * 0.005 * sens;
-
-              const newAngle = aimAngleRef.current + angleChange;
-              targetAimAngleRef.current = newAngle;
-              
-              setAimAngle(newAngle);
-              aimAngleRef.current = newAngle;
+              const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+              setAimAngle(smoothed);
+              aimAngleRef.current = smoothed;
             }
           }
         }
@@ -725,10 +705,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   return (
     <div ref={containerRef} className="w-full h-full relative bg-gradient-to-b from-[#0a0604] to-[#040201] overflow-hidden touch-none" style={{ touchAction: 'none' }}>
       {/* Pure Canvas - fills container, zero overlays */}
-      <div className="absolute inset-0 flex items-center justify-center transition-transform duration-700 ease-out touch-none" style={{ 
-        willChange: 'transform',
-        transform: isPointerActive && !isScratchPlacing && !isAnimating ? 'scale(1.06)' : 'scale(1.00)'
-      }}>
+      <div className="absolute inset-0 flex items-center justify-center touch-none">
         <div className="w-full h-full flex items-center justify-center">
           <canvas
             ref={canvasRef}
@@ -738,7 +715,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             onClick={isScratchPlacing ? handleConfirmPlacement : undefined}
-            style={{ touchAction: 'none', maxWidth: '100%', maxHeight: '100%', aspectRatio: '2/1' }}
+            style={{ touchAction: 'none', width: '100%', height: '100%', objectFit: 'contain' }}
           />
         </div>
       </div>

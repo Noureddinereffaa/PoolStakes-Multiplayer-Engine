@@ -595,7 +595,7 @@ export default function App() {
         <Route path="/arena" element={
           <ProtectedRoute userSession={userSession}>
             <Suspense fallback={<PageLoader />}>
-            <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="h-screen bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
+            <div id="arena-container" dir={language === 'ar' ? 'rtl' : 'ltr'} className="h-[100dvh] bg-slate-950 text-slate-100 flex flex-col antialiased selection:bg-emerald-500 selection:text-slate-950">
 
               {/* Visual background emerald radial glow highlights */}
               <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full filter blur-[120px] pointer-events-none" />

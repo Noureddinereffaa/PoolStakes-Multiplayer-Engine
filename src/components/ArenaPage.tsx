@@ -308,9 +308,9 @@ export default function ArenaPage({
 
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
 
-  // One-shot fullscreen on first user interaction (captures navigation gesture)
+  // One-shot fullscreen on first user interaction (captures any click/touch)
   useEffect(() => {
-    if (!isMobile || checkFullscreen()) return;
+    if (checkFullscreen()) return;
     const el = containerRef.current;
     if (!el) return;
     const handler = () => {
@@ -322,7 +322,7 @@ export default function ArenaPage({
       el.removeEventListener('pointerdown', handler);
       el.removeEventListener('touchstart', handler);
     };
-  }, [isMobile]);
+  }, []);
 
   const toggleFullscreen = () => {
     if (isFullscreen) {
@@ -486,10 +486,6 @@ export default function ArenaPage({
                   <span className="text-[clamp(6px,1.4vw,10px)] font-bold text-amber-200 font-mono truncate max-w-[clamp(40px,10vw,80px)]">{opponent?.username || 'Waiting...'}</span>
                   <div className={`w-[clamp(3px,0.6vw,5px)] h-[clamp(3px,0.6vw,5px)] rounded-full shrink-0 ${!isMyTurn && roomState.status === 'playing' ? 'bg-amber-400 shadow-[0_0_4px_#f59e0b]' : 'bg-amber-800'}`} />
                 </div>
-                <button onClick={toggleFullscreen}
-                  className="p-[clamp(2px,0.5vw,5px)] rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"
-                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                >{isFullscreen ? <Minimize className="w-[clamp(8px,1.6vw,12px)] h-[clamp(8px,1.6vw,12px)]" /> : <Maximize className="w-[clamp(8px,1.6vw,12px)] h-[clamp(8px,1.6vw,12px)]" />}</button>
                 <button onClick={() => setShowSidebar(prev => !prev)} className="p-1 rounded bg-white/5 hover:bg-white/15 transition text-white/60 hover:text-white"><Users className="w-2.5 h-2.5" /></button>
                 <button onClick={onQuitRoom} className="hidden md:inline-flex px-1.5 py-0.5 rounded bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-[7px] font-bold transition shrink-0">{language === 'ar' ? 'مغادرة' : 'Quit'}</button>
               </div>
@@ -632,14 +628,8 @@ export default function ArenaPage({
                 className="absolute top-1 right-1 z-20 w-6 h-6 rounded-lg flex items-center justify-center bg-black/40 text-amber-500/70"
               >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
 
-              {/* Game Feel Controls: Fine Aim & Spin UI triggers */}
+              {/* Game Feel Controls: Spin UI trigger */}
               <div className="absolute top-10 right-1 z-20 flex flex-col gap-2">
-                <button 
-                  onClick={() => setIsFineAim(!isFineAim)}
-                  className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-lg transition-all ${isFineAim ? 'bg-amber-500 text-black border-amber-300' : 'bg-black/60 text-amber-400 border-amber-500/50'}`}
-                >
-                  <span className="text-[10px] font-black leading-none">AIM</span>
-                </button>
                 <button 
                   onClick={() => setShowSpinUI(!showSpinUI)}
                   className="w-8 h-8 rounded-full border border-amber-500/50 bg-black/60 flex items-center justify-center shadow-lg"

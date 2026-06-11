@@ -42,6 +42,16 @@ export async function saveRoomSnapshot(room: RoomState): Promise<void> {
   }
 }
 
+/** Delete a single room snapshot from the database (called on room cleanup) */
+export async function deleteRoomSnapshot(roomId: string): Promise<void> {
+  try {
+    await prisma.roomSnapshot.deleteMany({ where: { roomId } });
+    logger.info('Deleted room snapshot', { roomId });
+  } catch (err) {
+    logger.error('Failed to delete room snapshot', { roomId, error: String(err) });
+  }
+}
+
 const MAX_QUEUE_SIZE = 50;
 let persistQueue: Array<{ roomId: string; data: string; name: string; stake: number; status: string }> = [];
 let persistScheduled = false;
@@ -79,9 +89,20 @@ function enqueuePersist(room: RoomState): void {
   }
 }
 
+/** Only restore snapshots that are still active (playing/waiting) and were updated recently */
+const SNAPSHOT_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+
 export async function restoreRoomSnapshots(): Promise<void> {
   try {
-    const snapshots = await prisma.roomSnapshot.findMany();
+    const cutoff = new Date(Date.now() - SNAPSHOT_MAX_AGE_MS);
+    const snapshots = await prisma.roomSnapshot.findMany({
+      where: {
+        status: { in: ['playing', 'waiting', 'ready'] },
+        updatedAt: { gte: cutoff },
+      },
+    });
+
+    let restoredCount = 0;
     for (const snap of snapshots) {
       try {
         const state = JSON.parse(snap.state) as {
@@ -119,22 +140,55 @@ export async function restoreRoomSnapshots(): Promise<void> {
         };
 
         activeRooms.set(room.roomId, room);
-        logger.info('Restored room from snapshot', { roomId: room.roomId });
+        restoredCount++;
+        logger.info('Restored room from snapshot', { roomId: room.roomId, status: room.status });
       } catch (parseErr) {
         logger.warn('Failed to parse room snapshot', { roomId: snap.roomId, error: String(parseErr) });
       }
     }
-    if (snapshots.length > 0) {
-      logger.info(`Restored ${snapshots.length} room(s) from DB snapshots`);
+    if (restoredCount > 0) {
+      logger.info(`Restored ${restoredCount} active room(s) from DB snapshots`);
     }
+
+    // Immediately purge stale snapshots on startup
+    await purgeStaleSnapshots();
   } catch (err) {
     logger.error('Failed to restore room snapshots', { error: String(err) });
   }
 }
 
+/** Delete snapshots that are completed/cancelled OR older than the max age */
+export async function purgeStaleSnapshots(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - SNAPSHOT_MAX_AGE_MS);
+
+    // 1. Delete all finished-state snapshots
+    const finishedResult = await prisma.roomSnapshot.deleteMany({
+      where: { status: { in: ['gameover', 'completed', 'cancelled', 'forfeited'] } },
+    });
+
+    // 2. Delete any snapshot older than the cutoff regardless of status
+    const staleResult = await prisma.roomSnapshot.deleteMany({
+      where: { updatedAt: { lt: cutoff } },
+    });
+
+    const totalPurged = finishedResult.count + staleResult.count;
+    if (totalPurged > 0) {
+      logger.info(`Purged ${totalPurged} stale room snapshots`, {
+        finished: finishedResult.count,
+        expired: staleResult.count,
+      });
+    }
+  } catch (err) {
+    logger.error('Failed to purge stale snapshots', { error: String(err) });
+  }
+}
+
 const SNAPSHOT_INTERVAL_MS = 10_000;
+const PURGE_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 let snapshotTimer: ReturnType<typeof setInterval> | null = null;
+let purgeTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startSnapshotInterval(): void {
   if (snapshotTimer) return;
@@ -146,11 +200,23 @@ export function startSnapshotInterval(): void {
     }
   }, SNAPSHOT_INTERVAL_MS);
   logger.info(`Room snapshot interval started (${SNAPSHOT_INTERVAL_MS}ms)`);
+
+  // Periodic stale snapshot purge
+  if (!purgeTimer) {
+    purgeTimer = setInterval(() => {
+      purgeStaleSnapshots().catch(() => {});
+    }, PURGE_INTERVAL_MS);
+    logger.info(`Stale snapshot purge scheduled every ${PURGE_INTERVAL_MS / 60_000}min`);
+  }
 }
 
 export function stopSnapshotInterval(): void {
   if (snapshotTimer) {
     clearInterval(snapshotTimer);
     snapshotTimer = null;
+  }
+  if (purgeTimer) {
+    clearInterval(purgeTimer);
+    purgeTimer = null;
   }
 }

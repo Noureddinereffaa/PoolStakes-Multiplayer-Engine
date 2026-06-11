@@ -39,7 +39,6 @@ interface RenderContext {
     | { angle: number; power: number; spinX?: number; spinY?: number }
     | null
   impactFlashesRef?: RefObject<{x: number, y: number, startTime: number}[]>;
-  cameraOffsetRef?: RefObject<{x: number, y: number}>;
   isFineAimRef?: RefObject<boolean>;
   aimInertiaVelocityRef?: RefObject<number>;
 }
@@ -769,9 +768,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
 
       ctx2d.save();
-      // Apply camera pan offset
-      const camOff = ctx.cameraOffsetRef?.current || { x: 0, y: 0 };
-      ctx2d.translate(camOff.x, camOff.y);
       if (ctx.impactShakeRef.current > 0.05) {
         const sx = (Math.random() - 0.5) * ctx.impactShakeRef.current;
         const sy = (Math.random() - 0.5) * ctx.impactShakeRef.current;
@@ -780,7 +776,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       // Draw Cached Static Table Background
       if (ctx.offscreenCanvasRef.current) {
-        ctx2d.drawImage(ctx.offscreenCanvasRef.current, 0, 0);
+        ctx2d.drawImage(ctx.offscreenCanvasRef.current, 0, 0, 800, 400);
       }
 
       // 4.5. Sinking ball animation — balls shrink + fade as they fall into pocket
@@ -885,13 +881,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             : b.y;
         const ballRadius = b.radius || 10;
 
-        // Dynamic Lighting: light position shifts with camera offset for 3D parallax feel
-        const camOff2 = ctx.cameraOffsetRef?.current || { x: 0, y: 0 };
+        // Dynamic Lighting
         const baseLightDir = -0.7;
-        const lightDir = baseLightDir + camOff2.x * 0.002;
+        const lightDir = baseLightDir;
         const lightDist = 6;
-        const shadowOffX = Math.cos(lightDir) * lightDist + camOff2.x * 0.025;
-        const shadowOffY = Math.sin(lightDir) * lightDist + 3 + camOff2.y * 0.025;
+        const shadowOffX = Math.cos(lightDir) * lightDist;
+        const shadowOffY = Math.sin(lightDir) * lightDist + 3;
 
         const castShadow = ctx2d.createRadialGradient(
           px + shadowOffX + 2, py + shadowOffY + 2, 0,
@@ -3417,19 +3412,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               cueBall.y - 20
             );
             ctx2d.restore();
-          } else {
-            ctx2d.font =
-              '500 9.5px "Inter", sans-serif';
-            ctx2d.fillStyle =
-              'rgba(255, 255, 255, 0.55)';
-            ctx2d.textAlign = 'center';
-            ctx2d.fillText(
-              isMyTurnActive
-                ? 'إسحب في أي مكان وقـف بالقـوة • SLIDE TO AIM & PULL TO SHOOT'
-                : 'الخصم يقوم بضبط الضربة الآن • OPPONENT IS ADJUSTING AIM...',
-              cueBall.x,
-              cueBall.y - 20
-            );
           }
         }
       }
@@ -3795,13 +3777,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const srcW = magW / magZoom;
         const srcH = magH / magZoom;
         
-        // We want the center of the magnifier to be `lastDrawContactX, lastDrawContactY` PLUS camera pan
-        const camX = ctx.cameraOffsetRef?.current?.x || 0;
-        const camY = ctx.cameraOffsetRef?.current?.y || 0;
-        
         // Target in screen space
-        const targetScreenX = lastDrawContactX + camX;
-        const targetScreenY = lastDrawContactY + camY;
+        const targetScreenX = lastDrawContactX;
+        const targetScreenY = lastDrawContactY;
         
         const srcX = targetScreenX - srcW / 2;
         const srcY = targetScreenY - srcH / 2;

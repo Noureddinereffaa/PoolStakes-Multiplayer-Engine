@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import { RoomState, MatchHistory } from '../types';
 import { getInitialBalls } from './physics';
 import { logger } from './logger';
+import { deleteRoomSnapshot } from './persist';
 
 export const activeRooms = new Map<string, RoomState>();
 export const animatingRoomIds = new Set<string>();
@@ -312,6 +313,10 @@ export function cleanupRoom(roomId: string): void {
   activeRooms.delete(roomId);
   clientsByRoom.delete(roomId);
   animatingRoomIds.delete(roomId);
+
+  // Delete the DB snapshot so it doesn't accumulate
+  deleteRoomSnapshot(roomId).catch(() => {});
+
   pushEventLog('room_cleaned_up', { roomId });
 }
 
