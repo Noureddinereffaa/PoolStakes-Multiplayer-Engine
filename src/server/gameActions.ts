@@ -118,7 +118,11 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
   }
 
   // No existing room — add to matching queue
-  await addToQueue(ws, decoded.id, username, stake);
+  const queued = await addToQueue(ws, decoded.id, username, stake);
+  if (!queued) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Queue is full. Try again later.' }));
+    return;
+  }
   ws.send(JSON.stringify({ type: 'searching', stake, queueSize: 1 }));
 
   // Try to match immediately

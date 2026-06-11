@@ -10,6 +10,7 @@ interface WaitingEntry {
 }
 
 const queues = new Map<number, WaitingEntry[]>();
+const MAX_QUEUE_SIZE = 100;
 
 // ── Per-stake async mutex ──────────────────────────────
 const stakeLocks = new Map<number, Array<() => void>>();
@@ -38,13 +39,26 @@ function releaseStakeLock(stake: number): void {
 
 // ── Queue operations ───────────────────────────────────
 
+function sweepStaleEntries(): void {
+  for (const [stake, queue] of queues) {
+    const alive = queue.filter(e => e.ws.readyState === WebSocket.OPEN);
+    if (alive.length !== queue.length) {
+      if (alive.length === 0) queues.delete(stake);
+      else queues.set(stake, alive);
+    }
+  }
+}
+
 export async function addToQueue(ws: WebSocket, userId: string, username: string, stake: number): Promise<boolean> {
   await acquireStakeLock(stake);
   try {
+    sweepStaleEntries();
     for (const [, q] of queues) {
       if (q.some(e => e.ws === ws || e.userId === userId)) return true;
     }
-    if (!queues.has(stake)) queues.set(stake, []);
+    const existing = queues.get(stake);
+    if (existing && existing.length >= MAX_QUEUE_SIZE) return false;
+    if (!existing) queues.set(stake, []);
     queues.get(stake)!.push({ ws, userId, username, stake, joinedAt: Date.now() });
     pushEventLog('queue_added', { userId, username, stake, queueSize: queues.get(stake)!.length });
     return true;
@@ -82,17 +96,26 @@ export async function removeFromQueue(ws: WebSocket, userId?: string): Promise<v
 export async function tryMatch(stake: number): Promise<{ first: WaitingEntry; second: WaitingEntry } | null> {
   await acquireStakeLock(stake);
   try {
+    // Sweep stale entries before matching
     const queue = queues.get(stake);
     if (!queue || queue.length < 2) return null;
-
-    const first = queue.shift()!;
-    const secondIdx = queue.findIndex(e => e.ws !== first.ws && e.userId !== first.userId);
-    if (secondIdx === -1) {
-      queue.unshift(first);
+    const alive = queue.filter(e => e.ws.readyState === WebSocket.OPEN);
+    if (alive.length < 2) {
+      if (alive.length === 0) queues.delete(stake);
+      else queues.set(stake, alive);
       return null;
     }
-    const second = queue.splice(secondIdx, 1)[0];
-    if (queue.length === 0) queues.delete(stake);
+    // Rebuild with stale entries removed
+    queues.set(stake, alive);
+
+    const first = alive.shift()!;
+    const secondIdx = alive.findIndex(e => e.ws !== first.ws && e.userId !== first.userId);
+    if (secondIdx === -1) {
+      alive.unshift(first);
+      return null;
+    }
+    const second = alive.splice(secondIdx, 1)[0];
+    if (alive.length === 0) queues.delete(stake);
 
     pushEventLog('queue_matched', { stake, firstId: first.userId, secondId: second.userId });
     return { first, second };

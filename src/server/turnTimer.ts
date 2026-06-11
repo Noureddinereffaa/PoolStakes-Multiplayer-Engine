@@ -1,4 +1,4 @@
-import { activeRooms, animatingRoomIds, broadcastRoom, clientsByRoom, pushRoomLog, cancelForfeitTimer, pushEventLog, cleanupRoom, DISCONNECT_TIMEOUT_MS } from './state';
+import { activeRooms, animatingRoomIds, broadcastRoom, clientsByRoom, pushRoomLog, pushEventLog, cleanupRoom } from './state';
 import { triggerAiShot, findValidCueBallPosition } from './gameLogic';
 import { prisma } from './db';
 
@@ -34,29 +34,6 @@ export function startTurnTimer(): void {
         return;
       }
       roomIdleTicks.delete(roomId);
-
-      // ── Both-disconnected cleanup ──
-      if (room.status === 'playing') {
-        const disconnectedCount = room.disconnectedPlayerIds?.length || 0;
-        if (disconnectedCount >= 2) {
-          // Both players are disconnected — check if reconnect deadline passed
-          const now = Date.now();
-          const allExpired = (room.disconnectedPlayerIds || []).every(pid => {
-            const deadline = room.reconnectDeadlines?.[pid];
-            return deadline && now > deadline;
-          });
-
-          if (allExpired) {
-            pushRoomLog(room, '⏰ Both players failed to reconnect. Match voided.');
-            pushEventLog('both_disconnect_cleanup', { roomId });
-            room.status = 'gameover';
-            room.winnerId = undefined;
-            cancelForfeitTimer(roomId);
-            broadcastRoom(roomId);
-            return;
-          }
-        }
-      }
 
       // ── Turn timer ──
       if (room.status !== 'playing') return;

@@ -1,4 +1,8 @@
-import 'dotenv/config';
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config({ path: '.env.development' });
+} else {
+  require('dotenv').config();
+}
 import express from 'express';
 import helmet from 'helmet';
 import { createServer } from 'http';
