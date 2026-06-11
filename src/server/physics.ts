@@ -44,10 +44,11 @@ const COR_TERM  = -(1 + COR) * 0.5;
 // ═══════════════════════════════════════════════════════
 //  POCKETS
 // ═══════════════════════════════════════════════════════
-// Corner pockets are tighter (18) than middle pockets (22)
+// Corner pockets are tighter (22) than middle pockets (26)
+// Any ball whose center is within a pocket's radius (>50% of ball over the hole)
+// is immediately pocketed — no speed or angle gate required.
+// Design goal: "ball with more than half its body over the hole must enter."
 const POCKET_RADII        = [22, 26, 22, 22, 26, 22];
-const POCKET_INNER_FACTOR = 0.92;
-const POCKET_ACCEPT_DEG   = 75; // acceptance angle in degrees
 
 const POCKET_POS = [
   { x: CUSHION + 3,           y: CUSHION + 3           },
@@ -128,20 +129,37 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
     const vy = b.vy;
     const spdSq = vx * vx + vy * vy;
 
-    // Dead-ball stop
-    if (spdSq < 0.01) {
+    const spd = Math.sqrt(spdSq);
+
+    // Dead-ball stop (lowered threshold since we now use constant deceleration)
+    if (spd < 0.02) {
       b.vx = 0;
       b.vy = 0;
       continue;
     }
 
-    // Gradual slide→roll friction
-    const spd = Math.sqrt(spdSq);
+    // Gradual slide→roll friction (exponential)
     const t = Math.min(1, spd / V_S);
     const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
     const f = Math.pow(mu, dt);
-    b.vx = vx * f;
-    b.vy = vy * f;
+    
+    let nvx = vx * f;
+    let nvy = vy * f;
+
+    // Constant rolling resistance (linear deceleration) for realistic final stop
+    const rollingDecel = 1.2 * dt;
+    const newSpd = Math.sqrt(nvx * nvx + nvy * nvy);
+    
+    if (newSpd > rollingDecel) {
+      nvx -= (nvx / newSpd) * rollingDecel;
+      nvy -= (nvy / newSpd) * rollingDecel;
+    } else {
+      nvx = 0;
+      nvy = 0;
+    }
+
+    b.vx = nvx;
+    b.vy = nvy;
 
     // Cue ball spin
     if (b.id === 0) {
@@ -256,7 +274,6 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
 }
 
 function detectPockets(balls: Ball[]): void {
-  const MAX_COS = Math.cos(POCKET_ACCEPT_DEG * Math.PI / 180);
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
     if (b.isPocketed) continue;
@@ -264,22 +281,13 @@ function detectPockets(balls: Ball[]): void {
     for (let pi = 0; pi < POCKET_POS.length; pi++) {
       const p = POCKET_POS[pi];
       const r = POCKET_RADII[pi];
-      const r2 = r * r;
-      const inner2 = (r * POCKET_INNER_FACTOR) ** 2;
       const dx = b.x - p.x;
       const dy = b.y - p.y;
       const d2 = dx * dx + dy * dy;
 
-      if (d2 >= r2) continue;
+      if (d2 >= r * r) continue;
 
-      if (d2 >= inner2) {
-        const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-        if (spd > 0.05) {
-          const dot = -(b.vx * dx + b.vy * dy) / (spd * Math.sqrt(d2));
-          if (dot < MAX_COS) continue;
-        }
-      }
-
+      // Ball center is within pocket radius → >50% of ball over the hole → pocket it
       b.isPocketed = true;
       b.vx = 0;
       b.vy = 0;

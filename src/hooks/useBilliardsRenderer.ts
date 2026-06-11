@@ -38,11 +38,13 @@ interface RenderContext {
   opponentAim:
     | { angle: number; power: number; spinX?: number; spinY?: number }
     | null
-    | undefined;
+  impactFlashesRef?: RefObject<{x: number, y: number, startTime: number}[]>;
+  cameraOffsetRef?: RefObject<{x: number, y: number}>;
+  isFineAimRef?: RefObject<boolean>;
+  aimInertiaVelocityRef?: RefObject<number>;
 }
 
-const ballTrails = new Map<number, { x: number; y: number }[]>();
-const TRAIL_LENGTH = 6;
+
 
 function lightenColor(hex: string, percent: number): string {
   const num = parseInt(hex.replace('#', ''), 16);
@@ -58,6 +60,22 @@ function darkenColor(hex: string, percent: number): string {
   const g = Math.max(0, ((num >> 8) & 0x00FF) - Math.round(255 * percent / 100));
   const b = Math.max(0, (num & 0x0000FF) - Math.round(255 * percent / 100));
   return `rgb(${r},${g},${b})`;
+}
+
+function drawArrowhead(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, size: number, color: string) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size, size / 1.5);
+  ctx.lineTo(-size, -size / 1.5);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8;
+  ctx.fill();
+  ctx.restore();
 }
 
 export function useBilliardsRenderer(ctx: RenderContext) {
@@ -606,6 +624,31 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           offCtx.fillStyle = voidGrad;
           offCtx.fill();
 
+          // Pocket Net (Crosshatch inside the void)
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, 20, 0, Math.PI * 2);
+          offCtx.clip();
+          offCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+          offCtx.lineWidth = 0.5;
+          for (let i = -20; i <= 20; i += 3) {
+            offCtx.beginPath();
+            offCtx.moveTo(p.x - 20, p.y + i);
+            offCtx.lineTo(p.x + 20, p.y + i);
+            offCtx.stroke();
+            offCtx.beginPath();
+            offCtx.moveTo(p.x + i, p.y - 20);
+            offCtx.lineTo(p.x + i, p.y + 20);
+            offCtx.stroke();
+          }
+          // Inner drop shadow to give depth to the net
+          const innerShadow = offCtx.createRadialGradient(p.x, p.y, 10, p.x, p.y, 20);
+          innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
+          innerShadow.addColorStop(1, 'rgba(0,0,0,0.8)');
+          offCtx.fillStyle = innerShadow;
+          offCtx.fill();
+          offCtx.restore();
+
           // Pocket rim highlight (inner bevel - brighter)
           offCtx.beginPath();
           offCtx.arc(p.x, p.y, 22, p.ang - 0.5, p.ang + 0.5);
@@ -708,6 +751,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       // Clear background
       ctx2d.clearRect(0, 0, 800, 400);
 
+      let lastDrawContactX: number | null = null;
+      let lastDrawContactY: number | null = null;
+
       // Decay impact camera shake based on real time (not frame rate dependent)
       const now = performance.now();
       const dtMs = now - lastFrameTime;
@@ -722,6 +768,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
 
       ctx2d.save();
+      // Apply camera pan offset
+      const camOff = ctx.cameraOffsetRef?.current || { x: 0, y: 0 };
+      ctx2d.translate(camOff.x, camOff.y);
       if (ctx.impactShakeRef.current > 0.05) {
         const sx = (Math.random() - 0.5) * ctx.impactShakeRef.current;
         const sy = (Math.random() - 0.5) * ctx.impactShakeRef.current;
@@ -741,15 +790,23 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const t = sb.progress / sb.maxProgress;
         const sx = sb.ball.x + (sb.pocketX - sb.ball.x) * t;
         const sy = sb.ball.y + (sb.pocketY - sb.ball.y) * t;
-        const scale = 1 - t * 0.7;
+        const scale = 1 - t * 0.8;
         const alpha = 1 - t * t;
         const r = (sb.ball.radius || 10) * scale;
         ctx2d.save();
         ctx2d.globalAlpha = alpha;
+        
+        // Enhance 3D drop shadow
         ctx2d.beginPath();
-        ctx2d.arc(sx + 2 * t, sy + 2 * t, r * 1.8, 0, Math.PI * 2);
-        ctx2d.fillStyle = `rgba(0,0,0,${0.4 * (1 - t)})`;
+        ctx2d.ellipse(sx + 4 * t, sy + 6 * t, r * 1.4, r * 1.0, 0, 0, Math.PI * 2);
+        ctx2d.fillStyle = `rgba(0,0,0,${0.6 * (1 - t)})`;
         ctx2d.fill();
+        
+        // Rotate while falling
+        ctx2d.translate(sx, sy);
+        ctx2d.rotate(t * Math.PI * 4); // fast spin
+        ctx2d.translate(-sx, -sy);
+        
         const grad = ctx2d.createRadialGradient(sx - r * 0.25, sy - r * 0.25, 0, sx, sy, r);
         grad.addColorStop(0, lightenColor(sb.ball.color, 40));
         grad.addColorStop(0.5, sb.ball.color);
@@ -763,26 +820,31 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
       ctx.sinkingBallsRef.current = aliveSink;
 
-      // 4.6. Ball trail — fading motion streaks behind moving balls
-      for (const b of ctx.animatedBallsRef.current) {
-        if (b.isPocketed) { ballTrails.delete(b.id); continue; }
-        const trail = ballTrails.get(b.id) || [];
-        trail.push({ x: b.x, y: b.y });
-        if (trail.length > TRAIL_LENGTH) trail.shift();
-        ballTrails.set(b.id, trail);
-      }
-      ctx2d.save();
-      for (const [, trail] of ballTrails) {
-        for (let i = 0; i < trail.length; i++) {
-          const alpha = (i + 1) / trail.length * 0.25;
-          const r = 10 * ((i + 1) / trail.length) * 0.6;
+      // 4.6. Render Impact Flashes
+      if (ctx.impactFlashesRef?.current) {
+        for (let i = ctx.impactFlashesRef.current.length - 1; i >= 0; i--) {
+          const flash = ctx.impactFlashesRef.current[i];
+          const elapsed = performance.now() - flash.startTime;
+          if (elapsed > 40) {
+            ctx.impactFlashesRef.current.splice(i, 1);
+            continue;
+          }
+          const t = elapsed / 40; // 40ms flash
+          ctx2d.save();
+          ctx2d.globalCompositeOperation = 'lighter';
+          const fGrad = ctx2d.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, 60 * (1 - t));
+          fGrad.addColorStop(0, `rgba(255, 255, 255, ${0.8 * (1 - t)})`);
+          fGrad.addColorStop(0.3, `rgba(255, 220, 180, ${0.4 * (1 - t)})`);
+          fGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx2d.fillStyle = fGrad;
           ctx2d.beginPath();
-          ctx2d.arc(trail[i].x, trail[i].y, r, 0, Math.PI * 2);
-          ctx2d.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx2d.arc(flash.x, flash.y, 60 * (1 - t), 0, Math.PI * 2);
           ctx2d.fill();
+          ctx2d.restore();
         }
       }
-      ctx2d.restore();
+
+      // Motion Blur / Speed trails removed to make ball movement realistic and professional without artificial trails.
 
       // Felt wear marks from rolling balls (subtle nap compression)
       ctx2d.save();
@@ -822,11 +884,13 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             : b.y;
         const ballRadius = b.radius || 10;
 
-        // Directional cast shadow (overhead light - dramatic drop shadow)
-        const lightDir = -0.7;
+        // Dynamic Lighting: light position shifts with camera offset for 3D parallax feel
+        const camOff2 = ctx.cameraOffsetRef?.current || { x: 0, y: 0 };
+        const baseLightDir = -0.7;
+        const lightDir = baseLightDir + camOff2.x * 0.002;
         const lightDist = 6;
-        const shadowOffX = Math.cos(lightDir) * lightDist;
-        const shadowOffY = Math.sin(lightDir) * lightDist + 3;
+        const shadowOffX = Math.cos(lightDir) * lightDist + camOff2.x * 0.025;
+        const shadowOffY = Math.sin(lightDir) * lightDist + 3 + camOff2.y * 0.025;
 
         const castShadow = ctx2d.createRadialGradient(
           px + shadowOffX + 2, py + shadowOffY + 2, 0,
@@ -1704,15 +1768,30 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               );
               ctx2d.strokeStyle = coreGrad;
               ctx2d.lineWidth = 2.5 * (ctx.isMobileRef.current ? 0.45 : 1);
-              ctx2d.setLineDash([8, 5]);
-              ctx2d.lineDashOffset =
-                -(Date.now() / 50) % 13;
+              ctx2d.setLineDash([4, 6]);
+              ctx2d.lineDashOffset = -(Date.now() / 50) % 13;
               ctx2d.shadowColor = mainShadowColor;
               ctx2d.shadowBlur = 8 * (ctx.isMobileRef.current ? 0.5 : 1);
               ctx2d.beginPath();
-              ctx2d.moveTo(cueBall.x, cueBall.y);
-              ctx2d.lineTo(contactX, contactY);
-              ctx2d.stroke();
+              
+              const dx = contactX - cueBall.x;
+              const dy = contactY - cueBall.y;
+              const dist = Math.hypot(dx, dy);
+              if (dist > 0) {
+                const numDots = Math.floor(dist / 10);
+                for (let i = 0; i <= numDots; i++) {
+                  const pT = i / numDots;
+                  const px = cueBall.x + dx * pT;
+                  const py = cueBall.y + dy * pT;
+                  const opacity = Math.max(0, 1.0 - pT * 0.8);
+                  ctx2d.globalAlpha = opacity;
+                  ctx2d.moveTo(px, py);
+                  ctx2d.lineTo(px + (dx / dist) * 4, py + (dy / dist) * 4);
+                }
+                ctx2d.stroke();
+              }
+              ctx2d.globalAlpha = 1.0;
+              
               ctx2d.setLineDash([]);
               ctx2d.restore();
 
@@ -1738,6 +1817,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.lineTo(contactX, contactY);
               ctx2d.stroke();
               ctx2d.restore();
+
+              // Add Arrowhead at the end of the main aim line
+              drawArrowhead(ctx2d, contactX, contactY, Math.atan2(aimDy, aimDx), 5, mainLaserColor);
 
               // Layer 5: Distance markers (subtle dots along the line)
               ctx2d.save();
@@ -1938,6 +2020,53 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 ctx2d.restore();
               }
 
+              // === Contact Point Preview (8 Ball Pool style) ===
+              if (pType === 'ball' && targetBallObj) {
+                lastDrawContactX = realContactX;
+                lastDrawContactY = realContactY;
+
+                // Calculate where the cue ball would touch the target ball surface
+                const dirX = targetBallObj.x - realContactX;
+                const dirY = targetBallObj.y - realContactY;
+                const dirLen = Math.hypot(dirX, dirY) || 1;
+                const normDirX = dirX / dirLen;
+                const normDirY = dirY / dirLen;
+                
+                // White Contact Dot on target ball surface (where the cue ball hits)
+                const dotX = targetBallObj.x - normDirX * (targetBallObj.radius || 10);
+                const dotY = targetBallObj.y - normDirY * (targetBallObj.radius || 10);
+                
+                ctx2d.save();
+                // Outer white glow
+                ctx2d.beginPath();
+                ctx2d.arc(dotX, dotY, 4.5, 0, Math.PI * 2);
+                ctx2d.fillStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx2d.fill();
+                // Solid white dot
+                ctx2d.beginPath();
+                ctx2d.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+                ctx2d.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx2d.fill();
+                // Inner bright core
+                ctx2d.beginPath();
+                ctx2d.arc(dotX, dotY, 1.2, 0, Math.PI * 2);
+                ctx2d.fillStyle = '#ffffff';
+                ctx2d.fill();
+                ctx2d.restore();
+
+                // Contact Ring — hollow circle at the contact point
+                ctx2d.save();
+                ctx2d.beginPath();
+                ctx2d.arc(contactX, contactY, radius * 0.6, 0, Math.PI * 2);
+                ctx2d.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx2d.lineWidth = 1.2;
+                ctx2d.setLineDash([3, 3]);
+                ctx2d.lineDashOffset = -(Date.now() / 30) % 6;
+                ctx2d.stroke();
+                ctx2d.setLineDash([]);
+                ctx2d.restore();
+              }
+
               // Glass specular spot inside contact circle
               ctx2d.save();
               const glassSpot =
@@ -2072,14 +2201,44 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.stroke();
               ctx2d.restore();
 
+              // Add Arrowhead at the end of the reflection path
+              if (bouncePoints.length > 1) {
+                const last = bouncePoints[bouncePoints.length - 1];
+                const prev = bouncePoints[bouncePoints.length - 2];
+                const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+                drawArrowhead(ctx2d, last.x, last.y, angle, 4, isMyTurnActive ? '#ffaa00' : '#00e5ff');
+              }
+
+              // Replaced with dotted path logic
               ctx2d.save();
-              ctx2d.lineWidth = 2;
-              ctx2d.strokeStyle = mainLaserColor;
-              ctx2d.setLineDash([6, 4]);
-              ctx2d.beginPath();
-              ctx2d.moveTo(bouncePoints[0].x, bouncePoints[0].y);
-              for (let i = 1; i < bouncePoints.length; i++) ctx2d.lineTo(bouncePoints[i].x, bouncePoints[i].y);
-              ctx2d.stroke();
+              const dotSpacing = 8;
+              let currentDist = 0;
+              for (let i = 0; i < bouncePoints.length - 1; i++) {
+                const p1 = bouncePoints[i];
+                const p2 = bouncePoints[i+1];
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const segLen = Math.hypot(dx, dy);
+                if (segLen === 0) continue;
+                const dirX = dx / segLen;
+                const dirY = dy / segLen;
+                
+                while (currentDist < segLen) {
+                  const px = p1.x + dirX * currentDist;
+                  const py = p1.y + dirY * currentDist;
+                  // Opacity fades out based on distance from cue ball
+                  const distFromCue = Math.hypot(px - cueBall.x, py - cueBall.y);
+                  const opacity = Math.max(0, 0.9 - (distFromCue / 800));
+                  
+                  ctx2d.beginPath();
+                  ctx2d.arc(px, py, 1.8, 0, Math.PI * 2);
+                  ctx2d.fillStyle = isMyTurnActive ? `rgba(255, 170, 0, ${opacity})` : `rgba(0, 229, 255, ${opacity})`;
+                  ctx2d.fill();
+                  
+                  currentDist += dotSpacing;
+                }
+                currentDist -= segLen; // carry over remaining spacing to next segment
+              }
               ctx2d.restore();
 
               // Render high-tech bounce points
@@ -2221,6 +2380,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               );
               ctx2d.stroke();
               ctx2d.restore();
+
+              // Add Arrowhead at the end of the object ball target path
+              drawArrowhead(ctx2d, targetContactX, targetContactY, Math.atan2(phiNormY, phiNormX), 5, '#10b981');
 
               if (
                 !targetPocket &&
@@ -3060,6 +3222,13 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             );
             lG.addColorStop(0, color1);
             lG.addColorStop(0.3, color2);
+            
+            // Specular moving highlight based on angle
+            const highlightPos = 0.5 + Math.cos(activeAngle * 2) * 0.15;
+            lG.addColorStop(Math.max(0, highlightPos - 0.05), color2);
+            lG.addColorStop(Math.min(1, Math.max(0, highlightPos)), 'rgba(255,255,255,0.4)');
+            lG.addColorStop(Math.min(1, highlightPos + 0.05), color2);
+            
             lG.addColorStop(0.7, color2);
             lG.addColorStop(1, color3);
             return lG;
@@ -3594,18 +3763,91 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       // Bright pass bloom (subtle glow on white areas) — skip on mobile for performance
       if (!ctx.isMobileRef.current) {
-      ctx2d.save();
-      ctx2d.globalCompositeOperation = 'lighter';
-      ctx2d.globalAlpha = 0.06;
-      ctx2d.filter = 'blur(3px)';
-      ctx2d.drawImage(canvas, 0, 0);
-      ctx2d.filter = 'none';
-      ctx2d.restore();
+        ctx2d.save();
+        ctx2d.globalCompositeOperation = 'lighter';
+        ctx2d.globalAlpha = 0.06;
+        ctx2d.filter = 'blur(3px)';
+        ctx2d.drawImage(canvas, 0, 0);
+        ctx2d.filter = 'none';
+        ctx2d.restore();
+      }
+
+      // === 9.5. Magnifier Zoom (Professional Aim Window) ===
+      const isFineAim = ctx.isFineAimRef?.current || false;
+      const velocity = Math.abs(ctx.aimInertiaVelocityRef?.current || 0);
+      const showMagnifier = isMyTurnActive && !isStrikingNow && ctx.isPullingRef.current === false && (isFineAim || (velocity > 0.0001 && velocity < 0.005));
+
+      if (showMagnifier && lastDrawContactX !== null && lastDrawContactY !== null) {
+        ctx2d.save();
+        ctx2d.resetTransform(); // Draw in pure screen space without camera pan
+
+        const dpr = ctx.isMobileRef.current ? Math.min(window.devicePixelRatio || 1, 1.25) : Math.min(window.devicePixelRatio || 1, 2);
+        
+        // Settings
+        const magZoom = 2; // 2x Zoom
+        const magW = 160;
+        const magH = 90;
+        const destX = 800 / 2 - magW / 2;
+        const destY = 8;
+        
+        // Calculate source rectangle in unscaled coordinates
+        const srcW = magW / magZoom;
+        const srcH = magH / magZoom;
+        
+        // We want the center of the magnifier to be `lastDrawContactX, lastDrawContactY` PLUS camera pan
+        const camX = ctx.cameraOffsetRef?.current?.x || 0;
+        const camY = ctx.cameraOffsetRef?.current?.y || 0;
+        
+        // Target in screen space
+        const targetScreenX = lastDrawContactX + camX;
+        const targetScreenY = lastDrawContactY + camY;
+        
+        const srcX = targetScreenX - srcW / 2;
+        const srcY = targetScreenY - srcH / 2;
+
+        // Draw Magnifier Border & Background
+        ctx2d.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx2d.shadowBlur = 10;
+        ctx2d.fillStyle = '#0a0a0a';
+        ctx2d.fillRect(destX, destY, magW, magH);
+        
+        ctx2d.shadowBlur = 0;
+        // Clip area for drawing canvas
+        ctx2d.beginPath();
+        ctx2d.rect(destX + 1, destY + 1, magW - 2, magH - 2);
+        ctx2d.clip();
+        
+        // Draw zoomed region from the current canvas
+        // (Note: canvas coordinates are in pixels = logical * dpr)
+        ctx2d.drawImage(
+          canvas,
+          srcX * dpr, srcY * dpr, srcW * dpr, srcH * dpr,
+          destX + 1, destY + 1, magW - 2, magH - 2
+        );
+
+        // Add a crosshair / center marker over the magnifier
+        ctx2d.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx2d.lineWidth = 1;
+        ctx2d.beginPath();
+        ctx2d.moveTo(destX + magW / 2, destY + 1);
+        ctx2d.lineTo(destX + magW / 2, destY + magH - 1);
+        ctx2d.moveTo(destX + 1, destY + magH / 2);
+        ctx2d.lineTo(destX + magW - 1, destY + magH / 2);
+        ctx2d.stroke();
+
+        ctx2d.restore(); // restore clip
+
+        // Outer border stroke
+        ctx2d.save();
+        ctx2d.resetTransform();
+        ctx2d.strokeStyle = '#f59e0b';
+        ctx2d.lineWidth = 1.5;
+        ctx2d.strokeRect(destX, destY, magW, magH);
+        ctx2d.restore();
       }
 
       // 10. Frame continuation
-      animationId =
-        requestAnimationFrame(drawLoop);
+      animationId = requestAnimationFrame(drawLoop);
     };
 
     drawLoop();

@@ -230,6 +230,8 @@ export default function ArenaPage({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [showSpinUI, setShowSpinUI] = useState(false);
+  const [isFineAim, setIsFineAim] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isPortrait, setIsPortrait] = useState(() => window.innerHeight > window.innerWidth);
   const overlayTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -476,6 +478,7 @@ export default function ArenaPage({
             myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
             physicsFrames={physicsFrames} onClearFrames={() => setPhysicsFrames(null)}
             opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
+            isFineAim={isFineAim}
           />
 
           {/* AI summon centered overlay */}
@@ -612,6 +615,40 @@ export default function ArenaPage({
               <button onClick={() => { poolAudio.toggle(); setIsMuted(poolAudio.muted); }}
                 className="absolute top-1 right-1 z-20 w-6 h-6 rounded-lg flex items-center justify-center bg-black/40 text-amber-500/70"
               >{isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}</button>
+
+              {/* Game Feel Controls: Fine Aim & Spin UI triggers */}
+              <div className="absolute top-10 right-1 z-20 flex flex-col gap-2">
+                <button 
+                  onClick={() => setIsFineAim(!isFineAim)}
+                  className={`w-8 h-8 rounded-full border flex items-center justify-center shadow-lg transition-all ${isFineAim ? 'bg-amber-500 text-black border-amber-300' : 'bg-black/60 text-amber-400 border-amber-500/50'}`}
+                >
+                  <span className="text-[10px] font-black leading-none">AIM</span>
+                </button>
+                <button 
+                  onClick={() => setShowSpinUI(!showSpinUI)}
+                  className="w-8 h-8 rounded-full border border-amber-500/50 bg-black/60 flex items-center justify-center shadow-lg"
+                >
+                  <div className="w-4 h-4 rounded-full bg-[#fde68a] relative">
+                    <div className="absolute w-1 h-1 bg-red-600 rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Spin Modal Overlay */}
+              <AnimatePresence>
+                {showSpinUI && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}
+                    className="absolute top-[35%] right-12 -translate-y-1/2 z-30 p-4 rounded-2xl bg-black/80 backdrop-blur-md border border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.2)] flex flex-col items-center gap-3"
+                  >
+                    <div className="text-[10px] text-amber-500 font-bold tracking-widest">{language === 'ar' ? 'دوران الكرة' : 'CUE SPIN'}</div>
+                    <div className="scale-[1.8] origin-center my-4">
+                      <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
+                    </div>
+                    <button onClick={() => setShowSpinUI(false)} className="px-4 py-1.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/40 w-full">{language === 'ar' ? 'تم' : 'DONE'}</button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </>
           )}
         </div>
@@ -707,8 +744,13 @@ function MobilePowerButton({ side, shotPower, disabled, onPowerChange, onShoot }
     if (!dragging) return;
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
     setDragging(false);
-    vibrate(20);
-    if (!disabled) onShoot();
+    if (!disabled && shotPower >= 5) {
+      // Trigger haptic
+      try { navigator.vibrate?.(20); } catch (_) {}
+      onShoot();
+    } else {
+      onPowerChange(0);
+    }
   };
 
   const isRight = side === 'right';
