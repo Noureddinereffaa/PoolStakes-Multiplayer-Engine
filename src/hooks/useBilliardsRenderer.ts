@@ -70,8 +70,8 @@ function drawArrowhead(ctx: CanvasRenderingContext2D, x: number, y: number, angl
   ctx.lineTo(-size, -size / 1.5);
   ctx.closePath();
   ctx.fillStyle = color;
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 8;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 3;
   ctx.fill();
   ctx.restore();
 }
@@ -236,7 +236,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const innerShadow = offCtx.createRadialGradient(400, 200, 280, 400, 200, 420);
         innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
         innerShadow.addColorStop(0.7, 'rgba(0,0,0,0)');
-        innerShadow.addColorStop(1, 'rgba(0,0,0,0.6)');
+        innerShadow.addColorStop(1, 'rgba(0,0,0,0.3)');
         offCtx.fillStyle = innerShadow;
         offCtx.fillRect(PX - 8, PY - 8, PLAY_W + 16, PLAY_H + 16);
 
@@ -376,7 +376,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         
         // Cushion inner shadow (transition from cushion to felt)
         const cushiShad = offCtx.createLinearGradient(PX, PY + 8, PX, PY + 18);
-        cushiShad.addColorStop(0, 'rgba(0,0,0,0.35)');
+        cushiShad.addColorStop(0, 'rgba(0,0,0,0.15)');
         cushiShad.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = cushiShad;
         offCtx.fillRect(PX + 4, PY + 8, PLAY_W - 8, 10);
@@ -457,7 +457,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
         // Felt edge shadows (table depth effect)
         const edgeShadowTop = offCtx.createLinearGradient(PX, PY + 6, PX, PY + 22);
-        edgeShadowTop.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowTop.addColorStop(0, 'rgba(0,0,0,0.25)');
         edgeShadowTop.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeShadowTop;
         offCtx.fillRect(PX + 8, PY + 6, PLAY_W - 16, 16);
@@ -574,11 +574,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           const isMiddle = idx === 1 || idx === 4;
           const s = (val: number) => isMiddle ? val * 0.82 : val; // Scale down middle pockets 18%
 
-          // Outer shadow ring (dramatic falloff)
+          // Outer shadow ring (subtle falloff)
           const outerRing = offCtx.createRadialGradient(p.x, p.y, s(18), p.x, p.y, s(34));
           outerRing.addColorStop(0, 'rgba(0,0,0,0)');
-          outerRing.addColorStop(0.4, 'rgba(0,0,0,0.20)');
-          outerRing.addColorStop(0.7, 'rgba(0,0,0,0.08)');
+          outerRing.addColorStop(0.4, 'rgba(0,0,0,0.10)');
+          outerRing.addColorStop(0.7, 'rgba(0,0,0,0.04)');
           outerRing.addColorStop(1, 'rgba(0,0,0,0)');
           offCtx.beginPath();
           offCtx.arc(p.x, p.y, s(34), 0, Math.PI * 2);
@@ -635,7 +635,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           // Inner drop shadow to give depth to the net
           const innerShadow = offCtx.createRadialGradient(p.x, p.y, s(10), p.x, p.y, s(20));
           innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
-          innerShadow.addColorStop(1, 'rgba(0,0,0,0.8)');
+          innerShadow.addColorStop(1, 'rgba(0,0,0,0.4)');
           offCtx.fillStyle = innerShadow;
           offCtx.fill();
           offCtx.restore();
@@ -784,10 +784,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.save();
         ctx2d.globalAlpha = alpha;
         
-        // Enhance 3D drop shadow
+        // 3D drop shadow
         ctx2d.beginPath();
         ctx2d.ellipse(sx + 4 * t, sy + 6 * t, r * 1.4, r * 1.0, 0, 0, Math.PI * 2);
-        ctx2d.fillStyle = `rgba(0,0,0,${0.6 * (1 - t)})`;
+        ctx2d.fillStyle = `rgba(0,0,0,${0.3 * (1 - t)})`;
         ctx2d.fill();
         
         // Rotate while falling
@@ -883,9 +883,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           px + shadowOffX + 2, py + shadowOffY + 2, 0,
           px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 2.0
         );
-        castShadow.addColorStop(0, 'rgba(0, 0, 0, 0.75)');
-        castShadow.addColorStop(0.12, 'rgba(0, 0, 0, 0.50)');
-        castShadow.addColorStop(0.4, 'rgba(0, 0, 0, 0.15)');
+        castShadow.addColorStop(0, 'rgba(0, 0, 0, 0.40)');
+        castShadow.addColorStop(0.12, 'rgba(0, 0, 0, 0.25)');
+        castShadow.addColorStop(0.4, 'rgba(0, 0, 0, 0.08)');
         castShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
         ctx2d.arc(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 2.0, 0, Math.PI * 2);
@@ -897,9 +897,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           px + 1, py + 3, 0,
           px + 1, py + 3, ballRadius * 1.3
         );
-        contactShadow.addColorStop(0, 'rgba(0, 0, 0, 0.85)');
-        contactShadow.addColorStop(0.25, 'rgba(0, 0, 0, 0.40)');
-        contactShadow.addColorStop(0.6, 'rgba(0, 0, 0, 0.10)');
+        contactShadow.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
+        contactShadow.addColorStop(0.25, 'rgba(0, 0, 0, 0.20)');
+        contactShadow.addColorStop(0.6, 'rgba(0, 0, 0, 0.05)');
         contactShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
         ctx2d.arc(px + 1, py + 3, ballRadius * 1.3, 0, Math.PI * 2);
@@ -1660,141 +1660,32 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ? '#ffaa00'
               : '#00e5ff';
 
-            // PRO MODE: Enhanced multi-layer aiming line with intense glow
+            // Aiming line: beam + precision center
             {
-              const lineLen =
-                Math.hypot(
-                  contactX - cueBall.x,
-                  contactY - cueBall.y
-                ) || 1;
-
-              // Layer 1: Ultra-wide outer glow (atmospheric)
               ctx2d.save();
-              const outerGlowGrad =
-                ctx2d.createLinearGradient(
-                  cueBall.x,
-                  cueBall.y,
-                  contactX,
-                  contactY
-                );
-              const hazeBase = isMyTurnActive
+              const amHaze = isMyTurnActive
                 ? [255, 170, 0]
                 : [0, 229, 255];
-              outerGlowGrad.addColorStop(
-                0,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0.18)`
-              );
-              outerGlowGrad.addColorStop(
-                0.5,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0.08)`
-              );
-              outerGlowGrad.addColorStop(
-                1,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`
-              );
-              ctx2d.strokeStyle = outerGlowGrad;
-              ctx2d.lineWidth = 18 * (ctx.isMobileRef.current ? 0.45 : 1);
+              const beamGrad = ctx2d.createLinearGradient(cueBall.x, cueBall.y, contactX, contactY);
+              beamGrad.addColorStop(0, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0.25)`);
+              beamGrad.addColorStop(0.6, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0.10)`);
+              beamGrad.addColorStop(1, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0)`);
+              ctx2d.strokeStyle = beamGrad;
+              ctx2d.lineWidth = 6 * (ctx.isMobileRef.current ? 0.45 : 1);
               ctx2d.lineCap = 'round';
-              ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 25 * (ctx.isMobileRef.current ? 0.5 : 1);
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               ctx2d.lineTo(contactX, contactY);
               ctx2d.stroke();
               ctx2d.restore();
 
-              // Layer 2: Medium glow (core beam)
+              // Precision center line
               ctx2d.save();
-              const midGlowGrad =
-                ctx2d.createLinearGradient(
-                  cueBall.x,
-                  cueBall.y,
-                  contactX,
-                  contactY
-                );
-              midGlowGrad.addColorStop(
-                0,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0.35)`
-              );
-              midGlowGrad.addColorStop(
-                0.6,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0.15)`
-              );
-              midGlowGrad.addColorStop(
-                1,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`
-              );
-              ctx2d.strokeStyle = midGlowGrad;
-              ctx2d.lineWidth = 10 * (ctx.isMobileRef.current ? 0.45 : 1);
-              ctx2d.lineCap = 'round';
-              ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 14 * (ctx.isMobileRef.current ? 0.5 : 1);
-              ctx2d.beginPath();
-              ctx2d.moveTo(cueBall.x, cueBall.y);
-              ctx2d.lineTo(contactX, contactY);
-              ctx2d.stroke();
-              ctx2d.restore();
-
-              // Layer 3: Core bright line (the actual aiming line)
-              ctx2d.save();
-              const coreGrad =
-                ctx2d.createLinearGradient(
-                  cueBall.x,
-                  cueBall.y,
-                  contactX,
-                  contactY
-                );
-              coreGrad.addColorStop(0, mainLaserColor);
-              coreGrad.addColorStop(
-                0.6,
-                mainLaserColor
-              );
-              coreGrad.addColorStop(
-                1,
-                `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`
-              );
-              ctx2d.strokeStyle = coreGrad;
-              ctx2d.lineWidth = 2.5 * (ctx.isMobileRef.current ? 0.45 : 1);
-              ctx2d.setLineDash([4, 6]);
-              ctx2d.lineDashOffset = -(Date.now() / 50) % 13;
-              ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 8 * (ctx.isMobileRef.current ? 0.5 : 1);
-              ctx2d.beginPath();
-              
-              const dx = contactX - cueBall.x;
-              const dy = contactY - cueBall.y;
-              const dist = Math.hypot(dx, dy);
-              if (dist > 0) {
-                const numDots = Math.floor(dist / 10);
-                for (let i = 0; i <= numDots; i++) {
-                  const pT = i / numDots;
-                  const px = cueBall.x + dx * pT;
-                  const py = cueBall.y + dy * pT;
-                  const opacity = Math.max(0, 1.0 - pT * 0.8);
-                  ctx2d.globalAlpha = opacity;
-                  ctx2d.moveTo(px, py);
-                  ctx2d.lineTo(px + (dx / dist) * 4, py + (dy / dist) * 4);
-                }
-                ctx2d.stroke();
-              }
-              ctx2d.globalAlpha = 1.0;
-              
-              ctx2d.setLineDash([]);
-              ctx2d.restore();
-
-              // Layer 4: Center precision line (thin, solid for exact aiming)
-              ctx2d.save();
-              const precisionGrad =
-                ctx2d.createLinearGradient(
-                  cueBall.x,
-                  cueBall.y,
-                  contactX,
-                  contactY
-                );
-              precisionGrad.addColorStop(0, '#ffffff');
-              precisionGrad.addColorStop(0.5, mainLaserColor);
-              precisionGrad.addColorStop(1, `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0)`);
-              ctx2d.strokeStyle = precisionGrad;
+              const precGrad = ctx2d.createLinearGradient(cueBall.x, cueBall.y, contactX, contactY);
+              precGrad.addColorStop(0, '#ffffff');
+              precGrad.addColorStop(0.5, mainLaserColor);
+              precGrad.addColorStop(1, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0)`);
+              ctx2d.strokeStyle = precGrad;
               ctx2d.lineWidth = 1.0 * (ctx.isMobileRef.current ? 0.6 : 1);
               ctx2d.lineCap = 'round';
               ctx2d.shadowColor = mainShadowColor;
@@ -1808,22 +1699,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               // Add Arrowhead at the end of the main aim line
               drawArrowhead(ctx2d, contactX, contactY, Math.atan2(aimDy, aimDx), 5, mainLaserColor);
 
-              // Layer 5: Distance markers (subtle dots along the line)
-              ctx2d.save();
-              ctx2d.strokeStyle = `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, 0.6)`;
-              ctx2d.lineWidth = 1;
-              const markerSpacing = 30;
-              const numMarkers = Math.floor(lineLen / markerSpacing);
-              for (let m = 1; m <= numMarkers; m++) {
-                const mx = cueBall.x + aimDx * m * markerSpacing;
-                const my = cueBall.y + aimDy * m * markerSpacing;
-                const alpha = 0.3 + 0.4 * Math.sin(Date.now() / 300 + m * 0.8);
-                ctx2d.beginPath();
-                ctx2d.arc(mx, my, 1.2 * (ctx.isMobileRef.current ? 0.5 : 1), 0, Math.PI * 2);
-                ctx2d.strokeStyle = `rgba(${hazeBase[0]}, ${hazeBase[1]}, ${hazeBase[2]}, ${alpha})`;
-                ctx2d.stroke();
-              }
-              ctx2d.restore();
+
             }
 
             if (Math.abs(activeSpinX) > 0.05 || Math.abs(activeSpinY) > 0.05) {
@@ -2174,8 +2050,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.save();
               ctx2d.strokeStyle = isMyTurnActive ? 'rgba(255, 170, 0, 0.25)' : 'rgba(0, 229, 255, 0.25)';
               ctx2d.lineWidth = 6;
-              ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 12;
+          ctx2d.shadowColor = mainShadowColor;
+          ctx2d.shadowBlur = 4;
               ctx2d.beginPath();
               ctx2d.moveTo(bouncePoints[0].x, bouncePoints[0].y);
               for (let i = 1; i < bouncePoints.length; i++) ctx2d.lineTo(bouncePoints[i].x, bouncePoints[i].y);
@@ -2332,8 +2208,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
               // Render Target Ball Primary path
               ctx2d.save();
-              ctx2d.shadowColor = '#059669';
-              ctx2d.shadowBlur = 8;
+          ctx2d.shadowColor = '#059669';
+          ctx2d.shadowBlur = 3;
               ctx2d.strokeStyle =
                 'rgba(16, 185, 129, 0.18)';
               ctx2d.lineWidth = 3.5;
@@ -2571,7 +2447,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
                 ctx2d.save();
                 ctx2d.shadowColor = '#059669';
-                ctx2d.shadowBlur = 6;
+                ctx2d.shadowBlur = 2;
                 ctx2d.strokeStyle =
                   'rgba(16, 185, 129, 0.3)';
                 ctx2d.lineWidth = 2;
@@ -2958,8 +2834,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 'bold 8.5px "JetBrains Mono", monospace';
               ctx2d.textAlign = 'center';
               ctx2d.shadowColor =
-                'rgba(0, 0, 0, 0.8)';
-              ctx2d.shadowBlur = 4;
+                'rgba(0, 0, 0, 0.4)';
+              ctx2d.shadowBlur = 2;
 
               let angleText = `${cutAngleDeg}° Cut`;
               if (cutAngleDeg < 3.5)
@@ -3128,10 +3004,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           ctx2d.lineTo(shadowTipX, shadowTipY);
           ctx2d.lineWidth = 5;
           ctx2d.strokeStyle =
-            'rgba(0, 0, 0, 0.35)';
+            'rgba(0, 0, 0, 0.15)';
           ctx2d.lineCap = 'round';
           ctx2d.shadowColor =
-            'rgba(0, 0, 0, 0.45)';
+            'rgba(0, 0, 0, 0.20)';
           ctx2d.shadowBlur = shadowBlurStrength;
           ctx2d.stroke();
           ctx2d.restore();
@@ -3583,7 +3459,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           );
         ctx2d.fillStyle = panelGrad;
         ctx2d.shadowColor = '#f59e0b';
-        ctx2d.shadowBlur = 28;
+        ctx2d.shadowBlur = 10;
         ctx2d.fill();
         ctx2d.strokeStyle = '#f59e0b';
         ctx2d.lineWidth = 1.5;
@@ -3594,7 +3470,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.translate(400, panelY + 30);
         ctx2d.fillStyle = '#fbbf24';
         ctx2d.shadowColor = '#f59e0b';
-        ctx2d.shadowBlur = 16;
+        ctx2d.shadowBlur = 6;
         ctx2d.font = '26px serif';
         ctx2d.textAlign = 'center';
         ctx2d.textBaseline = 'middle';
@@ -3620,7 +3496,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.shadowColor = isMyWin
           ? '#f59e0b'
           : '#dc2626';
-        ctx2d.shadowBlur = 10;
+        ctx2d.shadowBlur = 4;
         ctx2d.fillText(
           isMyWin
             ? '🎉 YOU WIN!'

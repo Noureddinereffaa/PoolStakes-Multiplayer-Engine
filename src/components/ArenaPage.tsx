@@ -237,6 +237,9 @@ export default function ArenaPage({
   const overlayTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
+  const [headerVisible, setHeaderVisible] = useState(true);
+
+  const toggleHeader = useCallback(() => setHeaderVisible(v => !v), []);
 
   useEffect(() => {
     let wasPortrait: boolean | null = null;
@@ -438,7 +441,8 @@ export default function ArenaPage({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       ref={containerRef} className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden overscroll-none"
-      onPointerMove={resetOverlayTimer} onClick={resetOverlayTimer}
+      onPointerMove={resetOverlayTimer}
+      {...(isMobile ? { onClick: toggleHeader } : { onClick: resetOverlayTimer })}
     >
       {/* Mobile overlay: only portrait rotation warning (auto-fullscreen on mount) */}
       {isMobile && isPortrait && (
@@ -456,7 +460,7 @@ export default function ArenaPage({
 
       {/* Header - Overlay on mobile, inline on desktop */}
       <header
-        className={`${isMobile ? 'absolute top-0 inset-x-0' : 'relative'} z-40 bg-gradient-to-b from-black/80 to-transparent px-2 md:px-4 shrink-0`}
+        className={`${isMobile ? `absolute top-0 inset-x-0 transition-opacity duration-300 ${headerVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}` : 'relative'} z-40 bg-gradient-to-b from-black/80 to-transparent px-2 md:px-4 shrink-0`}
         style={{ paddingTop: isMobile ? '2px' : 'calc(var(--sat) + 4px)', paddingBottom: isMobile ? '2px' : '6px' }}
       >
             <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
@@ -609,7 +613,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Cue Stick Power Slider (minimal vertical bar) ─── */
+/* ─── Mobile Cue Stick Power Slider with drag arrow ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -650,36 +654,48 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   };
 
   return (
-    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 z-20 flex items-center gap-1.5 pointer-events-none">
-      {/* Power bar */}
-      <div
-        className={`relative w-2.5 h-36 rounded-full overflow-hidden pointer-events-auto ${disabled ? 'opacity-25' : ''}`}
-        style={{ touchAction: 'none' }}
-      >
-        {/* Track background */}
-        <div className="absolute inset-0 bg-black/40 rounded-full border border-white/10" />
-        {/* Fill */}
+    <div className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 flex items-center gap-2 pointer-events-none select-none ${disabled ? 'opacity-30' : ''}`}>
+      {/* Track + arrow handle */}
+      <div className="relative flex flex-col items-center pointer-events-auto" style={{ touchAction: 'none' }}>
+        {/* Arrow handle - always visible as grab point */}
         <div
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
-          className="absolute bottom-0 w-full rounded-full transition-[height] duration-[30ms]"
-          style={{
-            height: `${shotPower}%`,
-            background: shotPower > 70
-              ? 'linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)'
-              : 'linear-gradient(to top, #22c55e, #eab308)',
-            boxShadow: shotPower > 0 ? '0 0 8px rgba(234,179,8,0.25)' : 'none',
-          }}
-        />
-      </div>
-      {/* Power % */}
-      {shotPower > 0 && (
-        <div className="pointer-events-auto bg-black/70 text-amber-400 text-[10px] font-bold px-1 rounded">
-          {shotPower}%
+          className="relative flex flex-col items-center cursor-pointer"
+        >
+          {/* Power bar track */}
+          <div className="relative w-4 h-44 rounded-full bg-black/50 border border-amber-500/20 overflow-hidden shadow-lg shadow-black/40">
+            {/* Fill */}
+            <div
+              className="absolute bottom-0 w-full rounded-full transition-[height] duration-[30ms]"
+              style={{
+                height: `${shotPower}%`,
+                background: shotPower > 70
+                  ? 'linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)'
+                  : 'linear-gradient(to top, #22c55e, #eab308)',
+                boxShadow: shotPower > 0 ? '0 0 10px rgba(234,179,8,0.3)' : 'none',
+              }}
+            />
+          </div>
+          {/* Drag arrow ▼ */}
+          {!disabled && (
+            <div className="mt-1 flex flex-col items-center gap-0.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-amber-400 animate-bounce" style={{ animationDuration: '1.5s' }}>
+                <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span className="text-[7px] font-mono text-amber-400/70 tracking-wider uppercase">Drag</span>
+            </div>
+          )}
         </div>
-      )}
+        {/* Power % badge */}
+        {shotPower > 0 && (
+          <div className="mt-1 px-1.5 py-0.5 rounded bg-black/80 border border-amber-500/30 text-amber-400 text-[10px] font-bold font-mono">
+            {shotPower}%
+          </div>
+        )}
+      </div>
     </div>
   );
 }
