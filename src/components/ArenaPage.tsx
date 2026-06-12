@@ -176,33 +176,33 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
             </div>
 
             {/* Direction labels */}
-            <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[7px] font-mono text-white/20 pointer-events-none">FOLLOW</span>
-            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[7px] font-mono text-white/20 pointer-events-none">DRAW</span>
-            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[7px] font-mono text-white/20 pointer-events-none">LEFT</span>
-            <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[7px] font-mono text-white/20 pointer-events-none">RIGHT</span>
+            <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">FOLLOW</span>
+            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">DRAW</span>
+            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">LEFT</span>
+            <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">RIGHT</span>
 
             {/* Spin indicator — inner cue ball with red contact dot */}
             <div className="absolute pointer-events-none"
               style={{
-                left: `calc(50% + ${spinX * (padSize / 2 - 14)}px)`,
-                top: `calc(50% + ${-spinY * (padSize / 2 - 14)}px)`,
-                width: 20, height: 20,
+                left: `calc(50% + ${spinX * (padSize / 2 - 16)}px)`,
+                top: `calc(50% + ${-spinY * (padSize / 2 - 16)}px)`,
+                width: 24, height: 24,
                 transform: 'translate(-50%, -50%)',
               }}
             >
               <div className="w-full h-full rounded-full"
                 style={{
                   background: 'radial-gradient(circle at 30% 30%, #ffffff, #f0e8dc 60%, #d4c8b4)',
-                  boxShadow: '0 0 10px rgba(245,158,11,0.4), inset -1px -1px 3px rgba(0,0,0,0.3)',
+                  boxShadow: '0 0 12px rgba(245,158,11,0.5), inset -1px -1px 3px rgba(0,0,0,0.3)',
                 }}
               />
               <div className="absolute rounded-full"
                 style={{
-                  width: 6, height: 6,
+                  width: 7, height: 7,
                   left: '50%', top: '50%',
                   transform: 'translate(-50%, -50%)',
                   background: 'radial-gradient(circle at 35% 35%, #ef4444, #b91c1c)',
-                  boxShadow: '0 0 6px rgba(239,68,68,0.6)',
+                  boxShadow: '0 0 8px rgba(239,68,68,0.7)',
                 }}
               />
             </div>
@@ -655,12 +655,12 @@ export default function ArenaPage({
           {/* Mobile: pocketed balls panel — compact, overlays table right edge */}
           {isMobile && (myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
             <div className="absolute right-0.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-              <div className="flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border border-[#2e0c04]/40 bg-gradient-to-b from-[#1a0702]/90 to-[#0d0301]/90 shadow-lg shadow-black/40 min-w-[26px]">
+              <div className="flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border border-[#2e0c04]/40 bg-gradient-to-b from-[#1a0702]/90 to-[#0d0301]/90 shadow-lg shadow-black/40 min-w-[30px]">
                 {myPocketed.length > 0 && (
                   <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[4px] font-mono text-amber-500/50 tracking-widest uppercase">You</span>
+                    <span className="text-[5px] font-mono font-bold text-amber-500/60 tracking-widest uppercase">You</span>
                     {myPocketed.map(b => (
-                      <BallIcon key={b.id} id={b.id} size={12} />
+                      <BallIcon key={b.id} id={b.id} size={16} />
                     ))}
                   </div>
                 )}
@@ -669,9 +669,9 @@ export default function ArenaPage({
                 )}
                 {opponentPocketed.length > 0 && (
                   <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[4px] font-mono text-blue-400/50 tracking-widest uppercase">Opp</span>
+                    <span className="text-[5px] font-mono font-bold text-blue-400/60 tracking-widest uppercase">Opp</span>
                     {opponentPocketed.map(b => (
-                      <BallIcon key={b.id} id={b.id} size={12} />
+                      <BallIcon key={b.id} id={b.id} size={16} />
                     ))}
                   </div>
                 )}
@@ -856,10 +856,10 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
             <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
               style={{
                 top: `${100 - shotPower}%`,
-                marginTop: -7,
+                marginTop: -9,
               }}
             >
-              <div className={`w-3.5 h-3.5 rounded-full border-2 ${
+              <div className={`relative w-[18px] h-[18px] rounded-full border-2 ${
                 shotPower > 70
                   ? 'bg-red-400 border-red-500'
                   : shotPower > 30
@@ -868,27 +868,34 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
               }`}
                 style={{
                   boxShadow: shotPower > 0
-                    ? `0 0 6px ${
+                    ? `0 0 8px ${
                         shotPower > 70
-                          ? 'rgba(239,68,68,0.4)'
+                          ? 'rgba(239,68,68,0.5)'
                           : shotPower > 30
-                          ? 'rgba(245,158,11,0.4)'
-                          : 'rgba(52,211,153,0.4)'
+                          ? 'rgba(245,158,11,0.5)'
+                          : 'rgba(52,211,153,0.5)'
                       }`
                     : 'none',
                 }}
               />
             </div>
 
+            {/* Percentage display */}
+            <div className="absolute -right-9 top-1/2 -translate-y-1/2 pointer-events-none">
+              <span className="font-mono font-bold text-[9px] text-white/40">
+                {shotPower}%
+              </span>
+            </div>
+
             {/* Tick marks (outside right edge) */}
             <div className="absolute inset-y-0 -right-4 flex flex-col justify-between py-0.5 pointer-events-none">
               {[100, 75, 50, 25, 0].map((val) => (
-                <div key={val} className="flex items-center gap-0.5">
-                  <div className={`h-px ${val <= shotPower ? 'bg-white/20 w-1.5' : 'bg-white/6 w-1'}`} />
+                <div key={val} className="flex items-center gap-1">
+                  <div className={`h-px ${val <= shotPower ? 'bg-white/25 w-2' : 'bg-white/8 w-1.5'}`} />
                   <span className={`font-mono font-bold leading-none ${
                     val <= shotPower
-                      ? 'text-white/30 text-[6px]'
-                      : 'text-white/10 text-[5px]'
+                      ? 'text-white/35 text-[7px]'
+                      : 'text-white/12 text-[6px]'
                   }`}>
                     {val > 0 ? val : ''}
                   </span>
@@ -898,7 +905,7 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
           </div>
 
           {/* Label */}
-          <span className="text-[6px] font-mono font-bold text-white/20 tracking-widest uppercase">Power</span>
+          <span className="text-[7px] font-mono font-bold text-white/25 tracking-widest uppercase">Power</span>
         </div>
       </div>
     </div>

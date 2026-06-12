@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 import { RoomState, MatchHistory } from '../types';
 import { getInitialBalls } from './physics';
 import { logger } from './logger';
-import { deleteRoomSnapshot } from './persist';
+import { deleteRoomSnapshot, lazyLoadRoom } from './persist';
 
 export const activeRooms = new Map<string, RoomState>();
 export const animatingRoomIds = new Set<string>();
@@ -25,6 +25,216 @@ const roomMutexQueues = new Map<string, Array<() => void>>();
 
 /** Track all setTimeout handles per room for cleanup on deletion */
 export const roomTimeouts = new Map<string, Set<NodeJS.Timeout>>();
+
+/** Maximum number of rooms allowed in memory simultaneously */
+const MAX_MEMORY_ROOMS = 500;
+
+/** Archived room time-to-live before DB deletion (30 minutes) */
+const ARCHIVED_ROOM_TTL_MS = 30 * 60 * 1000;
+
+/** Paused room time-to-live before auto-archive (10 minutes) */
+const PAUSED_ROOM_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Lightweight room metadata registry (for lazy loading).
+ * roomId → { status, updatedAt, playerIds[] }
+ * Kept in sync with DB index on startup.
+ */
+export const roomIndex = new Map<string, { status: string; updatedAt: Date; playerIds: string[] }>();
+
+/**
+ * Ensure a room is loaded into activeRooms.
+ * If already loaded, returns it. Otherwise tries lazy load from DB.
+ * Returns null if room not found anywhere.
+ */
+export async function ensureRoomLoaded(roomId: string): Promise<RoomState | null> {
+  const existing = activeRooms.get(roomId);
+  if (existing) return existing;
+
+  // Check room index first
+  const meta = roomIndex.get(roomId);
+  if (!meta) return null;
+
+  // Lazy load from DB
+  const room = await lazyLoadRoom(roomId);
+  if (!room) {
+    roomIndex.delete(roomId);
+    return null;
+  }
+
+  room.isRestored = true;
+  room.lastActiveAt = Date.now();
+  activeRooms.set(roomId, room);
+
+  // If restored with no players, mark as paused
+  if (room.status !== 'waiting' && !room.disconnectedPlayerIds?.length) {
+    // Check if any players are actually connected by looking at clientsByRoom
+    const clients = clientsByRoom.get(roomId);
+    if (!clients || clients.size === 0) {
+      room.status = 'paused';
+    }
+  }
+
+  logger.info('Lazy loaded room from snapshot', { roomId, status: room.status });
+  return room;
+}
+
+/**
+ * Auto-pause rooms with no connected clients.
+ * Called from disconnect handlers and periodic cleanup.
+ */
+export function pauseRoomIfInactive(roomId: string): void {
+  const room = activeRooms.get(roomId);
+  if (!room) return;
+  if (room.status === 'waiting' || room.status === 'gameover' || room.status === 'paused' || room.status === 'archived') return;
+
+  const clients = clientsByRoom.get(roomId);
+  const hasClients = clients && clients.size > 0;
+
+  if (!hasClients) {
+    room.status = 'paused';
+    room.lastActiveAt = Date.now();
+    pushEventLog('room_paused', { roomId });
+    logger.info('Room paused due to no connected clients', { roomId });
+  }
+}
+
+/**
+ * Try to resume a paused room when a client reconnects.
+ * Restores previous status (playing or ready).
+ */
+export function resumeRoom(roomId: string): RoomState | null {
+  const room = activeRooms.get(roomId);
+  if (!room) return null;
+  if (room.status !== 'paused') return room;
+
+  // Restore to previous state — if we have players, go back to last non-paused status
+  // Check the roomIndex or fallback to 'waiting'
+  const meta = roomIndex.get(roomId);
+  const previousStatus = meta?.status === 'playing' ? 'playing' : 'waiting';
+  room.status = previousStatus as RoomState['status'];
+  room.lastActiveAt = Date.now();
+  pushEventLog('room_resumed', { roomId, previousStatus });
+  logger.info('Room resumed', { roomId, status: previousStatus });
+  return room;
+}
+
+/**
+ * Mark a room as archived (removed from activeRooms, pending DB deletion).
+ */
+export async function archiveRoom(roomId: string): Promise<void> {
+  const room = activeRooms.get(roomId);
+  if (!room) return;
+
+  room.status = 'archived';
+
+  // Clear all timers
+  cancelForfeitTimer(roomId);
+  clearRoomTimeouts(roomId);
+  roomMutexQueues.delete(roomId);
+  roomLocksCurrently.delete(roomId);
+  animatingRoomIds.delete(roomId);
+
+  // Notify any lingering clients
+  const clients = clientsByRoom.get(roomId);
+  if (clients) {
+    const msg = JSON.stringify({ type: 'room_closed', message: 'Room has been archived.' });
+    for (const ws of clients) {
+      try { if (ws.readyState === WebSocket.OPEN) ws.send(msg); } catch { /* ignore */ }
+      playerRoomMap.delete(ws);
+    }
+  }
+
+  clientsByRoom.delete(roomId);
+  activeRooms.delete(roomId);
+  roomIndex.delete(roomId);
+
+  // Delete DB snapshot
+  await deleteRoomSnapshot(roomId).catch(() => {});
+
+  pushEventLog('room_archived', { roomId });
+  logger.info('Room archived and removed from memory', { roomId });
+}
+
+/**
+ * Get count of currently loaded rooms — used for memory pressure checks.
+ */
+export function getActiveRoomCount(): { total: number; playing: number; paused: number; waiting: number; archived: number } {
+  let playing = 0, paused = 0, waiting = 0, archived = 0;
+  for (const room of activeRooms.values()) {
+    if (room.status === 'playing') playing++;
+    else if (room.status === 'paused') paused++;
+    else if (room.status === 'waiting') waiting++;
+    else if (room.status === 'archived') archived++;
+  }
+  return { total: activeRooms.size, playing, paused, waiting, archived };
+}
+
+/**
+ * Periodic lifecycle maintenance — run every 30s.
+ * 1. Archive rooms that have been paused too long
+ * 2. Enforce maximum room count
+ * 3. Clean up finished rooms with no clients
+ */
+let lifecycleInterval: NodeJS.Timeout | null = null;
+
+export function startLifecycleMaintenance(): void {
+  if (lifecycleInterval) return;
+  lifecycleInterval = setInterval(() => {
+    const now = Date.now();
+    const toRemove: string[] = [];
+
+    for (const [roomId, room] of activeRooms) {
+      // Archive paused rooms past TTL
+      if (room.status === 'paused' && room.lastActiveAt) {
+        if (now - room.lastActiveAt > PAUSED_ROOM_TTL_MS) {
+          toRemove.push(roomId);
+        }
+        continue;
+      }
+
+      // Archive finished rooms with no clients past TTL
+      if (room.status === 'gameover' && room.lastActiveAt) {
+        const clients = clientsByRoom.get(roomId);
+        if ((!clients || clients.size === 0) && now - room.lastActiveAt > PAUSED_ROOM_TTL_MS) {
+          toRemove.push(roomId);
+        }
+        continue;
+      }
+    }
+
+    // Enforce max room count — evict oldest paused/finished rooms if over limit
+    if (activeRooms.size > MAX_MEMORY_ROOMS) {
+      const evictCandidates: Array<{ roomId: string; lastActive: number }> = [];
+      for (const [roomId, room] of activeRooms) {
+        if (room.status === 'paused' || room.status === 'gameover') {
+          evictCandidates.push({ roomId, lastActive: room.lastActiveAt || 0 });
+        }
+      }
+      evictCandidates.sort((a, b) => a.lastActive - b.lastActive);
+
+      while (activeRooms.size > MAX_MEMORY_ROOMS && evictCandidates.length > 0) {
+        const candidate = evictCandidates.shift()!;
+        if (!toRemove.includes(candidate.roomId)) {
+          toRemove.push(candidate.roomId);
+        }
+      }
+    }
+
+    for (const roomId of toRemove) {
+      archiveRoom(roomId).catch((err) => {
+        logger.error('Failed to archive room during lifecycle', { roomId, error: String(err) });
+      });
+    }
+  }, 30_000);
+}
+
+export function stopLifecycleMaintenance(): void {
+  if (lifecycleInterval) {
+    clearInterval(lifecycleInterval);
+    lifecycleInterval = null;
+  }
+}
 
 export async function withRoomLock<T>(roomId: string, fn: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -313,6 +523,9 @@ export function cleanupRoom(roomId: string): void {
   activeRooms.delete(roomId);
   clientsByRoom.delete(roomId);
   animatingRoomIds.delete(roomId);
+
+  // Clear from room index
+  roomIndex.delete(roomId);
 
   // Delete the DB snapshot so it doesn't accumulate
   deleteRoomSnapshot(roomId).catch(() => {});

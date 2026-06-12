@@ -38,7 +38,7 @@ export interface RoomState {
   roomId: string;
   name: string;
   stake: number;
-  status: 'waiting' | 'ready' | 'playing' | 'gameover';
+  status: 'waiting' | 'ready' | 'playing' | 'gameover' | 'paused' | 'archived';
   players: Player[];
   balls: Ball[];
   currentTurn: string; // active player ID
@@ -60,6 +60,10 @@ export interface RoomState {
   roomCode?: string; // short shareable code for private rooms
   isPublic?: boolean; // visible in public room listing
   createdAt?: number; // timestamp for room cleanup
+  /** Lifecycle: last time room had active clients. Used for PAUSED→ARCHIVED transition. */
+  lastActiveAt?: number;
+  /** Indicates this room was restored from DB snapshot (lazy loaded) */
+  isRestored?: boolean;
 }
 
 export interface GameConfig {

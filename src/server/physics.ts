@@ -24,19 +24,19 @@ export const MAX_Y = TABLE_H - CUSHION - BALL_R;
 // ═══════════════════════════════════════════════════════
 //  PHYSICS CONSTANTS (Calibrated to 8 Ball Pool feel)
 // ═══════════════════════════════════════════════════════
-const COR       = 0.90;   // ball-ball COR - softer for more realistic energy loss
-const COR_R     = 0.75;   // ball-rail COR - cushions absorb more energy → tighter banks
-const MU_B      = 0.14;   // ball-ball friction - smoother slide with less grab
+const COR       = 0.92;   // ball-ball COR - Miniclip match: bouncier, ~8% energy loss per collision
+const COR_R     = 0.75;   // ball-rail COR - Miniclip match: lively cushions for multi-bank shots
+const MU_B      = 0.01;   // ball-ball friction - Miniclip match: phenolic resin, near-zero surface grab
 const MU_RR     = 0.9982; // rolling friction/frame - longer, more natural rolls
 const MU_RS     = 0.9935; // sliding friction/frame - slide decays slightly faster
 const V_S       = 0.60;   // slide→roll transition speed threshold
-const MU_RT     = 0.14;   // rail tangential friction - more spin grab on cushions
+const MU_RT     = 0.10;   // rail tangential friction - smoother rail slides (Miniclip feel)
 const SUB       = 60;     // sub-steps - higher for smoother simulation
 const S_IT      = 10;     // solver iterations - more accurate collision resolution
 
-const K_CURVE   = 0.038;  // English curve (side spin) - more controlled masse
-const K_LONG    = 0.030;  // Draw/Follow (top/bottom spin) - smoother action
-const SPIN_DEC  = 0.996;  // spin decay/frame - spin persists longer
+const K_CURVE   = 0.035;  // English curve (side spin) - Miniclip match: controlled, not exaggerated
+const K_LONG    = 0.028;  // Draw/Follow (top/bottom spin) - Miniclip match: smooth action
+const SPIN_DEC  = 0.994;  // spin decay/frame - Miniclip match: spin fades naturally over shot travel
 
 // Ball-ball Coulomb impulse multiplier
 const COR_TERM  = -(1 + COR) * 0.5;
@@ -141,8 +141,8 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
 
     const spd = Math.sqrt(spdSq);
 
-    // Dead-ball stop
-    if (spd < 0.008) {
+    // Dead-ball stop (Miniclip match: crisper stop, no creeping)
+    if (spd < 0.010) {
       b.vx = 0;
       b.vy = 0;
       continue;
@@ -230,7 +230,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vy;
       const dt_t = MU_RT * Math.abs(vn);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vy -= sx * 0.9; b.spinX = -sx * 0.30;
+      b.vy -= sx * 0.5; b.spinX = -sx * 0.45;
       hit = true;
     } else if (rail === 'right') {
       b.x = MAX_X;
@@ -239,7 +239,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vy;
       const dt_t = MU_RT * Math.abs(vn);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vy += sx * 0.9; b.spinX = -sx * 0.30;
+      b.vy += sx * 0.5; b.spinX = -sx * 0.45;
       hit = true;
     } else if (rail === 'top') {
       b.y = MIN_Y;
@@ -248,7 +248,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vx;
       const dt_t = MU_RT * Math.abs(vn);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vx += sx * 0.9; b.spinX = -sx * 0.30;
+      b.vx += sx * 0.5; b.spinX = -sx * 0.45;
       hit = true;
     } else if (rail === 'bottom') {
       b.y = MAX_Y;
@@ -257,7 +257,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vx;
       const dt_t = MU_RT * Math.abs(vn);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vx -= sx * 0.9; b.spinX = -sx * 0.30;
+      b.vx -= sx * 0.5; b.spinX = -sx * 0.45;
       hit = true;
     }
 
@@ -370,9 +370,9 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
           const sy     = cue.spinY || 0;
           const spd    = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy + b2.vx * b2.vx + b2.vy * b2.vy);
 
-          // Spin → velocity transfer proportional to relative speed
+          // Spin → velocity transfer proportional to relative speed (Miniclip match: gradual curve, full at max power)
           if (spd > 0.1) {
-            const transfer = Math.min(1.0, spd * 0.08);
+            const transfer = Math.min(1.0, spd * 0.04);
             tgt.vx += rnx * (sy * 1.2 * dir * transfer);
             tgt.vy += rny * (sy * 1.2 * dir * transfer);
             tgt.vx += tx  * (sx * 0.8 * dir * transfer);

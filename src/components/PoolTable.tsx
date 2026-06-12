@@ -186,7 +186,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const DEAD_ZONE_PX = 3; // minimum drag distance before power registers
   const AIM_SENSITIVITY = 0.0010; // radians per pixel of ortho drag — smoother
   const SHIFT_MODIFIER = 0.25; // precision mode sensitivity multiplier
-  const SMOOTH_FACTOR = 0.45; // lerp factor for angle smoothing (higher = more responsive)
+  const SMOOTH_FACTOR = 0.10; // lerp factor for angle smoothing — more responsive, Miniclip feel
   const targetAimAngleRef = useRef(0);
   const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
   const dragStartXRef = useRef(0);
@@ -245,7 +245,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
-      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.6 : 1.95) : (isMobile.current ? 2.4 : 1.65);
+      const basePlayMultiplier = physicsFrames.length > 350 ? 2.0 : 2.0;
       let animationFrameId: number;
       const animStartTime = performance.now();
       const STRIKE_ACCEL = 0;
@@ -407,6 +407,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     impactFlashesRef, isFineAimRef, aimInertiaVelocityRef,
   });
 
+  const CANVAS_LOGICAL_W = 800;
+  const CANVAS_LOGICAL_H = 400;
+  const CANVAS_RATIO = CANVAS_LOGICAL_W / CANVAS_LOGICAL_H;
+  const coordCacheRef = useRef({ w: 0, h: 0, offsetX: 0, offsetY: 0, drawW: 800, drawH: 400 });
+
   const getPointerCoords = (e: any) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
@@ -416,23 +421,29 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     else if (e.changedTouches?.length) { clientXRaw = e.changedTouches[0].clientX; clientYRaw = e.changedTouches[0].clientY; }
     else { clientXRaw = e.clientX; clientYRaw = e.clientY; }
     
-    // Account for object-fit: contain letterboxing
-    const canvasRatio = canvas.width / canvas.height; // 800/400 = 2
-    const elementRatio = rect.width / rect.height;
-    let offsetX = 0, offsetY = 0, drawW = rect.width, drawH = rect.height;
-    if (elementRatio > canvasRatio) {
-      // Element is wider: black bars on left/right
-      drawH = rect.height;
-      drawW = drawH * canvasRatio;
-      offsetX = (rect.width - drawW) / 2;
-    } else {
-      // Element is taller: black bars on top/bottom
-      drawW = rect.width;
-      drawH = drawW / canvasRatio;
-      offsetY = (rect.height - drawH) / 2;
+    // Cache letterboxing computation — only recalculate on resize
+    const cache = coordCacheRef.current;
+    if (rect.width !== cache.w || rect.height !== cache.h) {
+      cache.w = rect.width;
+      cache.h = rect.height;
+      const elementRatio = rect.width / rect.height;
+      let offsetX = 0, offsetY = 0, drawW = rect.width, drawH = rect.height;
+      if (elementRatio > CANVAS_RATIO) {
+        drawH = rect.height;
+        drawW = drawH * CANVAS_RATIO;
+        offsetX = (rect.width - drawW) / 2;
+      } else {
+        drawW = rect.width;
+        drawH = drawW / CANVAS_RATIO;
+        offsetY = (rect.height - drawH) / 2;
+      }
+      cache.offsetX = offsetX;
+      cache.offsetY = offsetY;
+      cache.drawW = drawW;
+      cache.drawH = drawH;
     }
-    const screenX = ((clientXRaw - rect.left - offsetX) / drawW) * 800;
-    const screenY = ((clientYRaw - rect.top - offsetY) / drawH) * 400;
+    const screenX = ((clientXRaw - rect.left - cache.offsetX) / cache.drawW) * CANVAS_LOGICAL_W;
+    const screenY = ((clientYRaw - rect.top - cache.offsetY) / cache.drawH) * CANVAS_LOGICAL_H;
     
     return { x: screenX, y: screenY };
   };
@@ -522,8 +533,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             const adapt = base + t * (maxS - base);
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
             const newAngle = initialAimAngleRef.current + orthoDrag * adapt;
-            setAimAngle(newAngle);
-            aimAngleRef.current = newAngle;
+            const smoothed = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
+            setAimAngle(smoothed);
+            aimAngleRef.current = smoothed;
           }
         }
       }
@@ -556,7 +568,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const executeAuthorizedShot = (angle: number, power: number, sX: number, sY: number) => {
     if (!isMyTurnRef.current || isAnimatingRef.current) return;
     // Shot Stick Snap Animation: short delay before hit for visual impact
-    strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: isMobile.current ? 80 : 150 };
+    strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: 40 };
     setIsAnimating(true);
     if (isMobile.current) {
       poolAudio.playCueHit(power);

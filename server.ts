@@ -10,7 +10,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
 import { registerLaravelRoutes } from './src/server/laravel';
-import { broadcastToAllWebSockets, activeRooms, clientsByRoom, eventLogs } from './src/server/state';
+import { broadcastToAllWebSockets, activeRooms, clientsByRoom, eventLogs, startLifecycleMaintenance, stopLifecycleMaintenance } from './src/server/state';
 import { attachWebSocketHandlers } from './src/server/websocket';
 import { startTurnTimer } from './src/server/turnTimer';
 import { logger } from './src/server/logger';
@@ -163,6 +163,7 @@ async function startServer() {
   const serverPort = Number(process.env.PORT ?? 3000);
   const host = process.env.HOST ?? '0.0.0.0';
 
+  // Lightweight room index — no full state loaded into memory
   await restoreRoomSnapshots();
 
   if (isDev) {
@@ -184,6 +185,7 @@ async function startServer() {
   server.listen(serverPort, host, () => {
     logger.info(`Server started at http://${host === '0.0.0.0' ? 'localhost' : host}:${serverPort}`);
     startSnapshotInterval();
+    startLifecycleMaintenance();
   }).on('error', (err: any) => {
     if (err.code === 'EADDRINUSE') {
       logger.error(`Port ${serverPort} is already in use. Try a different PORT.`);
@@ -198,9 +200,12 @@ async function startServer() {
 async function gracefulShutdown() {
   logger.info('Shutting down...');
   stopSnapshotInterval();
+  stopLifecycleMaintenance();
+
+  // Save active (non-paused, non-archived) rooms on shutdown
   const saves = [];
   for (const room of activeRooms.values()) {
-    if (room.status === 'playing' || room.status === 'waiting') {
+    if (room.status === 'playing' || room.status === 'waiting' || room.status === 'paused') {
       saves.push(saveRoomSnapshot(room));
     }
   }

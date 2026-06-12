@@ -10,6 +10,7 @@ import {
 import { poolAudio } from '../utils/audio';
 import { getOptimalDPR } from '../utils/mobile';
 
+
 interface RenderContext {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   offscreenCanvasRef: RefObject<HTMLCanvasElement | null>;
@@ -120,27 +121,39 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     const ctx2d = canvas.getContext('2d', { willReadFrequently: false });
     if (!ctx2d) return;
 
-    const dpr = getOptimalDPR();
-    canvas.width = 800 * dpr;
-    canvas.height = 400 * dpr;
-    ctx2d.scale(dpr, dpr);
+    const currentDPR = getOptimalDPR();
+    canvas.width = 800 * currentDPR;
+    canvas.height = 400 * currentDPR;
+    ctx2d.scale(currentDPR, currentDPR);
     ctx2d.imageSmoothingEnabled = true;
 
-    // Render loop with idle stop
+    // Render loop
     let lastFrameTime = performance.now();
-    let idleFrames = 0;
-    const MAX_IDLE_FRAMES = 30;
 
     const BALL_R = 10;
+
+    // Pre-create static post-processing gradients (created once, reused every frame)
+    const gradVignette = ctx2d.createRadialGradient(400, 200, 150, 400, 200, 420);
+    gradVignette.addColorStop(0, 'rgba(0,0,0,0)');
+    gradVignette.addColorStop(0.5, 'rgba(0,0,0,0)');
+    gradVignette.addColorStop(0.75, 'rgba(0,0,0,0.08)');
+    gradVignette.addColorStop(0.9, 'rgba(0,0,0,0.25)');
+    gradVignette.addColorStop(1, 'rgba(0,0,0,0.55)');
+
+    const gradWarmGlow = ctx2d.createRadialGradient(400, 180, 5, 400, 180, 360);
+    gradWarmGlow.addColorStop(0, 'rgba(255,248,230,0.10)');
+    gradWarmGlow.addColorStop(0.2, 'rgba(255,240,210,0.05)');
+    gradWarmGlow.addColorStop(0.5, 'rgba(255,230,190,0.02)');
+    gradWarmGlow.addColorStop(1, 'rgba(0,0,0,0)');
 
     // Cache static background table graphics on offscreen canvas for extreme performance
     if (!ctx.offscreenCanvasRef.current) {
       const offCanvas = document.createElement('canvas');
-      offCanvas.width = 800 * dpr;
-      offCanvas.height = 400 * dpr;
+      offCanvas.width = 800 * currentDPR;
+      offCanvas.height = 400 * currentDPR;
       const offCtx = offCanvas.getContext('2d', { willReadFrequently: false });
       if (offCtx) {
-        offCtx.scale(dpr, dpr);
+        offCtx.scale(currentDPR, currentDPR);
         // ── Outer table frame (wood rails) ──
         const RAIL_W = 28;
         const INNER = RAIL_W;
@@ -762,25 +775,60 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       let lastDrawContactX: number | null = null;
       let lastDrawContactY: number | null = null;
 
+      // Cache time values once per frame
+      const framePerf = performance.now();
+      const frameDate = Date.now();
+
+      // Render snapshot — capture all refs once per frame for deterministic rendering
+      const snap = {
+        balls: ctx.animatedBallsRef.current,
+        aimAngle: ctx.aimAngleRef.current,
+        shotPower: ctx.shotPowerRef.current,
+        spinX: ctx.spinXRef.current,
+        spinY: ctx.spinYRef.current,
+        isMyTurn: ctx.isMyTurnRef.current,
+        isPulling: ctx.isPullingRef.current,
+        isScratchPlacing: ctx.isScratchPlacingRef.current,
+        placedPos: ctx.placedPosRef.current,
+        roomState: ctx.roomStateRef.current,
+        difficulty: ctx.difficultyRef.current,
+        myPlayerId: ctx.myPlayerIdRef.current,
+        strikeAnim: ctx.strikeAnimRef.current,
+        impactShake: ctx.impactShakeRef.current,
+        turnStartTimestamp: ctx.turnStartTimestampRef.current,
+        isMobile: ctx.isMobileRef.current,
+        opponentAim: ctx.opponentAim,
+        rot: ctx.ballRotationsRef.current,
+        sinkingBalls: ctx.sinkingBallsRef.current,
+        feltRipples: ctx.feltRipplesRef.current,
+        chalkParticles: ctx.chalkParticlesRef.current,
+        dustSpecks: ctx.dustSpecksRef.current,
+        impactFlashes: ctx.impactFlashesRef?.current || [],
+        isFineAim: ctx.isFineAimRef?.current || false,
+        aimVelocity: ctx.aimInertiaVelocityRef?.current || 0,
+      };
+
       // Decay impact camera shake based on real time (not frame rate dependent)
-      const now = performance.now();
+      const now = framePerf;
       const dtMs = now - lastFrameTime;
       lastFrameTime = now;
-      if (ctx.impactShakeRef.current > 0.05) {
-        ctx.impactShakeRef.current = Math.max(
+      if (snap.impactShake > 0.05) {
+        snap.impactShake = Math.max(
           0,
-          ctx.impactShakeRef.current * Math.pow(0.88, dtMs / 16.667)
+          snap.impactShake * Math.pow(0.92, dtMs / 16.667)
         );
       } else {
-        ctx.impactShakeRef.current = 0;
+        snap.impactShake = 0;
       }
 
       ctx2d.save();
-      if (ctx.impactShakeRef.current > 0.05) {
-        const sx = (Math.random() - 0.5) * ctx.impactShakeRef.current;
-        const sy = (Math.random() - 0.5) * ctx.impactShakeRef.current;
+      if (snap.impactShake > 0.05) {
+        const sx = (Math.random() - 0.5) * snap.impactShake;
+        const sy = (Math.random() - 0.5) * snap.impactShake;
         ctx2d.translate(sx, sy);
       }
+      // Persist decayed shake value for next frame
+      ctx.impactShakeRef.current = snap.impactShake;
 
       // Draw Cached Static Table Background
       if (ctx.offscreenCanvasRef.current) {
@@ -851,41 +899,21 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       // Motion Blur / Speed trails removed to make ball movement realistic and professional without artificial trails.
 
-      // Felt wear marks from rolling balls (subtle nap compression)
-      ctx2d.save();
-      ctx2d.globalAlpha = 0.06;
-      ctx2d.filter = 'blur(1px)';
-      for (const b of ctx.animatedBallsRef.current) {
-        if (b.isPocketed || b.id === 0) continue;
-        const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-        if (speed > 0.5) {
-          const wearAlpha = Math.min(0.08, speed * 0.003);
-          ctx2d.fillStyle = 'rgba(40,35,30,0.3)';
-          ctx2d.globalAlpha = wearAlpha;
-          ctx2d.beginPath();
-          ctx2d.arc(b.x - b.vx * 0.3, b.y - b.vy * 0.3, 10, 0, Math.PI * 2);
-          ctx2d.fill();
-        }
-      }
-      ctx2d.filter = 'none';
-      ctx2d.globalAlpha = 1;
-      ctx2d.restore();
-
       // 5. Render All Balls using Ultra-Realistic 3D Spherical Glistening Shaders
       const eligibleIds = getEligibleBallIds(
-        ctx.roomStateRef.current,
-        ctx.roomStateRef.current.currentTurn
+        snap.roomState,
+        snap.roomState.currentTurn
       );
-      ctx.animatedBallsRef.current.forEach((b) => {
+      snap.balls.forEach((b) => {
         if (b.isPocketed) return;
 
         const px =
-          ctx.isScratchPlacingRef.current && b.id === 0
-            ? ctx.placedPosRef.current.x
+          snap.isScratchPlacing && b.id === 0
+            ? snap.placedPos.x
             : b.x;
         const py =
-          ctx.isScratchPlacingRef.current && b.id === 0
-            ? ctx.placedPosRef.current.y
+          snap.isScratchPlacing && b.id === 0
+            ? snap.placedPos.y
             : b.y;
         const ballRadius = b.radius || 10;
 
@@ -901,18 +929,22 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const specOffX = -0.40 + dxCenter * 0.12;
         const specOffY = -0.38 + dyCenter * 0.10;
 
-        // Minimal ground contact dot (keeps balls from floating)
+        // Ground contact shadow (keeps balls grounded)
+        const shadowGrad = ctx2d.createRadialGradient(px, py + 2, 0, px, py + 2, ballRadius * 0.65);
+        shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
+        shadowGrad.addColorStop(0.4, 'rgba(0,0,0,0.06)');
+        shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
         ctx2d.beginPath();
-        ctx2d.ellipse(px + 1, py + 3, ballRadius * 0.35, ballRadius * 0.18, 0, 0, Math.PI * 2);
-        ctx2d.fillStyle = 'rgba(0, 0, 0, 0.08)';
+        ctx2d.ellipse(px + 0.5, py + 2.5, ballRadius * 0.55, ballRadius * 0.28, 0, 0, Math.PI * 2);
+        ctx2d.fillStyle = shadowGrad;
         ctx2d.fill();
 
         const isTarget = eligibleIds.includes(b.id);
 
         if (isTarget) {
-          const time = Date.now();
+          const time = frameDate;
           const elapsed =
-            time - ctx.turnStartTimestampRef.current;
+            time - snap.turnStartTimestamp;
           const visibleTime = 4000;
           const fadeTime = 1500;
           let baseAlphaScalar = 1.0;
@@ -925,7 +957,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
           if (baseAlphaScalar > 0) {
             const isMyTurnActive =
-              ctx.roomStateRef.current.currentTurn ===
+              snap.roomState.currentTurn ===
               ctx.myPlayerIdRef.current;
             const baseAlpha =
               (isMyTurnActive ? 0.75 : 0.5) * baseAlphaScalar;
@@ -936,7 +968,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ? '6, 182, 212'
               : '234, 140, 8';
 
-            ctx2d.save();
             const underGlow = ctx2d.createRadialGradient(
               px,
               py,
@@ -964,7 +995,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             );
             ctx2d.fillStyle = underGlow;
             ctx2d.fill();
-            ctx2d.restore();
 
             for (let rIndex = 0; rIndex < 2; rIndex++) {
               const wavePhase =
@@ -974,7 +1004,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               const rippleAlpha =
                 (1.0 - wavePhase) * 0.35 * baseAlpha;
 
-              ctx2d.save();
               ctx2d.beginPath();
               ctx2d.arc(
                 px,
@@ -986,7 +1015,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.strokeStyle = `rgba(${mainColor}, ${rippleAlpha})`;
               ctx2d.lineWidth = 0.8 + (1.0 - wavePhase) * 0.5;
               ctx2d.stroke();
-              ctx2d.restore();
             }
 
             ctx2d.save();
@@ -1014,16 +1042,16 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             const bDist = ballRadius + 3.8;
 
             for (let aCorner = 0; aCorner < 4; aCorner++) {
-              ctx2d.save();
-              ctx2d.rotate(
-                (aCorner * Math.PI) / 2 + Math.PI / 4
-              );
+              const rotAngle = (aCorner * Math.PI) / 2 + Math.PI / 4;
+              const cosA = Math.cos(rotAngle);
+              const sinA = Math.sin(rotAngle);
+              const rx = bDist * cosA;
+              const ry = bDist * sinA;
               ctx2d.beginPath();
-              ctx2d.moveTo(bDist - bLen, bDist);
-              ctx2d.lineTo(bDist, bDist);
-              ctx2d.lineTo(bDist, bDist - bLen);
+              ctx2d.moveTo(rx - bLen * cosA + bLen * sinA, ry - bLen * sinA - bLen * cosA);
+              ctx2d.lineTo(rx, ry);
+              ctx2d.lineTo(rx + bLen * cosA + bLen * sinA, ry + bLen * sinA - bLen * cosA);
               ctx2d.stroke();
-              ctx2d.restore();
             }
             ctx2d.restore();
           }
@@ -1543,22 +1571,22 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       // 6. Draw Glowing Trajectory Laser Guide Lines & Cue Stick Shadow
       const isStrikingNow =
-        ctx.strikeAnimRef.current &&
-        ctx.strikeAnimRef.current.active;
+        snap.strikeAnim &&
+        snap.strikeAnim.active;
       const isMyTurnActive =
-        ctx.isMyTurnRef.current &&
-        !ctx.roomStateRef.current.scratchOccurred &&
+        snap.isMyTurn &&
+        !snap.roomState.scratchOccurred &&
         (!ctx.isAnimatingRef.current || isStrikingNow);
       const showCueStickAndPaths =
         isMyTurnActive ||
-        (!ctx.isMyTurnRef.current &&
-          ctx.opponentAim &&
+        (!snap.isMyTurn &&
+          snap.opponentAim &&
           !ctx.isAnimatingRef.current &&
-          ctx.roomStateRef.current.status === 'playing');
+          snap.roomState.status === 'playing');
 
       if (showCueStickAndPaths) {
         const cueBall =
-          ctx.animatedBallsRef.current.find(
+          snap.balls.find(
             (b) => b.id === 0
           );
         if (cueBall && !cueBall.isPocketed) {
@@ -1568,26 +1596,26 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
           const activeAngle = isMyTurnActive
             ? isStrikingNow
-              ? ctx.strikeAnimRef.current!.angle
-              : ctx.aimAngleRef.current
-            : ctx.opponentAim
-              ? ctx.opponentAim.angle
+              ? snap.strikeAnim!.angle
+              : snap.aimAngle
+            : snap.opponentAim
+              ? snap.opponentAim.angle
               : 0;
 
           const activePower = isMyTurnActive
             ? isStrikingNow
-              ? ctx.strikeAnimRef.current!.power
-              : ctx.shotPowerRef.current
-            : ctx.opponentAim
-              ? ctx.opponentAim.power
+              ? snap.strikeAnim!.power
+              : snap.shotPower
+            : snap.opponentAim
+              ? snap.opponentAim.power
               : 40;
 
           const activeSpinX = isMyTurnActive
-            ? ctx.spinXRef.current
-            : ctx.opponentAim?.spinX || 0;
+            ? snap.spinX
+            : snap.opponentAim?.spinX || 0;
           const activeSpinY = isMyTurnActive
-            ? ctx.spinYRef.current
-            : ctx.opponentAim?.spinY || 0;
+            ? snap.spinY
+            : snap.opponentAim?.spinY || 0;
 
           let aimDx = Math.cos(activeAngle);
           let aimDy = Math.sin(activeAngle);
@@ -1643,11 +1671,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
             for (
               let idx = 0;
-              idx < ctx.animatedBallsRef.current.length;
+              idx < snap.balls.length;
               idx++
             ) {
               const b =
-                ctx.animatedBallsRef.current[idx];
+                snap.balls[idx];
               if (b.id === 0 || b.isPocketed) continue;
               const ocX = cueBall.x - b.x;
               const ocY = cueBall.y - b.y;
@@ -1772,7 +1800,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             // PRO MODE: Guides are ALWAYS visible, fully detailed, and high contrast
             {
               const pulseCycle =
-                (Date.now() % 1200) / 1200;
+                (frameDate % 1200) / 1200;
 
               // 1. Double pulse ring around contact point
               ctx2d.save();
@@ -1841,7 +1869,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 ctx2d.strokeStyle = isMyTurnActive ? 'rgba(255, 170, 0, 0.85)' : 'rgba(0, 229, 255, 0.85)';
                 ctx2d.lineWidth = 1.6;
                 ctx2d.setLineDash([4, 2]);
-                ctx2d.lineDashOffset = (Date.now() / 40) % 6;
+                ctx2d.lineDashOffset = (frameDate / 40) % 6;
                 ctx2d.stroke();
                 ctx2d.restore();
 
@@ -1916,7 +1944,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 ctx2d.strokeStyle = 'rgba(255, 255, 255, 0.6)';
                 ctx2d.lineWidth = 1.2;
                 ctx2d.setLineDash([3, 3]);
-                ctx2d.lineDashOffset = -(Date.now() / 30) % 6;
+                ctx2d.lineDashOffset = -(frameDate / 30) % 6;
                 ctx2d.stroke();
                 ctx2d.setLineDash([]);
                 ctx2d.restore();
@@ -2099,7 +2127,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               // Render high-tech bounce points
               for (let i = 1; i < bouncePoints.length; i++) {
                 const bp = bouncePoints[i];
-                const bpPulse = ((Date.now() + i * 200) % 1000) / 1000;
+                const bpPulse = ((frameDate + i * 200) % 1000) / 1000;
                 ctx2d.save();
                 ctx2d.beginPath();
                 ctx2d.arc(bp.x, bp.y, 3 + bpPulse * 4, 0, Math.PI * 2);
@@ -2190,10 +2218,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               }
 
               if (
-                ctx.difficultyRef.current === 'medium'
+                snap.difficulty === 'medium'
               ) {
                 tcMin = Math.min(tcMin, 120);
-              } else if (ctx.difficultyRef.current === 'hard') {
+              } else if (snap.difficulty === 'hard') {
                 tcMin = Math.min(tcMin, 200);
               }
 
@@ -2243,7 +2271,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               if (
                 !targetPocket &&
                 tcMin !== Infinity &&
-                ctx.difficultyRef.current === 'easy'
+                snap.difficulty === 'easy'
               ) {
                 const firstTargetRefDx =
                   phiNormX -
@@ -2557,7 +2585,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               }
 
               if (
-                ctx.difficultyRef.current === 'medium'
+                snap.difficulty === 'medium'
               ) {
                 tpMin = Math.min(tpMin, 55);
               }
@@ -2856,9 +2884,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           const stickLength = 260;
 
           const activePulling = isMyTurnActive
-            ? ctx.isPullingRef.current
-            : ctx.opponentAim &&
-              ctx.opponentAim.power > 5;
+            ? snap.isPulling
+            : snap.opponentAim &&
+              snap.opponentAim.power > 5;
           if (activePulling && activePower > 35) {
             const tensionRatio =
               (activePower - 35) / 65;
@@ -2872,15 +2900,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
           if (
             isStrikingNow &&
-            ctx.strikeAnimRef.current
+            snap.strikeAnim
           ) {
             if (
-              ctx.strikeAnimRef.current
+              snap.strikeAnim
                 .startTime === -1
             ) {
               stickDist =
                 18 +
-                (ctx.strikeAnimRef.current
+                (snap.strikeAnim
                   .power /
                   100) *
                   105;
@@ -2893,7 +2921,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
               const elapsed =
                 performance.now() -
-                ctx.strikeAnimRef.current
+                snap.strikeAnim
                   .startTime;
 
               if (elapsed < STRIKE_ACCEL) {
@@ -2903,7 +2931,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 );
                 const chargeDist =
                   18 +
-                  (ctx.strikeAnimRef.current
+                  (snap.strikeAnim
                     .power /
                     100) *
                     105;
@@ -2924,7 +2952,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 const baseFollowThrough = 6;
                 const maxFollowThrough =
                   baseFollowThrough +
-                  (ctx.strikeAnimRef.current
+                  (snap.strikeAnim
                     .power /
                     100) *
                     16;
@@ -2941,20 +2969,20 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 );
 
                 if (
-                  !ctx.strikeAnimRef.current
+                  !snap.strikeAnim
                     .hasStruck
                 ) {
-                  ctx.strikeAnimRef.current.hasStruck =
+                  snap.strikeAnim.hasStruck =
                     true;
                   poolAudio.playCueHit(
-                    ctx.strikeAnimRef.current
+                    snap.strikeAnim
                       .power
                   );
                 }
               } else {
-                ctx.strikeAnimRef.current.active =
+                snap.strikeAnim.active =
                   false;
-                ctx.strikeAnimRef.current.hasStruck =
+                snap.strikeAnim.hasStruck =
                   true;
                 stickOpacity = 0;
               }
@@ -3271,9 +3299,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           ctx2d.restore();
 
           const showPullHUD = isMyTurnActive
-            ? ctx.isPullingRef.current && showLasers
-            : ctx.opponentAim &&
-              ctx.opponentAim.power > 5;
+            ? snap.isPulling && showLasers
+            : snap.opponentAim &&
+              snap.opponentAim.power > 5;
           if (showPullHUD) {
             const progress = activePower / 100;
 
@@ -3337,16 +3365,16 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
 
       // 8. Render Placing ghost position in scratch mode
-      if (ctx.isScratchPlacingRef.current) {
+      if (snap.isScratchPlacing) {
         const isOverlapping =
-          ctx.roomStateRef.current.balls.some(
+          snap.roomState.balls.some(
             (b) => {
               if (b.id === 0 || b.isPocketed)
                 return false;
               const dx =
-                ctx.placedPosRef.current.x - b.x;
+                snap.placedPos.x - b.x;
               const dy =
-                ctx.placedPosRef.current.y - b.y;
+                snap.placedPos.y - b.y;
               const dist = Math.hypot(dx, dy);
               return dist < 20.0;
             }
@@ -3357,25 +3385,25 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const minY_ghost = 30 + 10;
         const maxY_ghost = 370 - 10;
         const isOutOfBounds =
-          ctx.placedPosRef.current.x <
+          snap.placedPos.x <
             minX_ghost ||
-          ctx.placedPosRef.current.x >
+          snap.placedPos.x >
             maxX_ghost ||
-          ctx.placedPosRef.current.y <
+          snap.placedPos.y <
             minY_ghost ||
-          ctx.placedPosRef.current.y >
+          snap.placedPos.y >
             maxY_ghost;
 
         const isInvalidPos =
           isOverlapping || isOutOfBounds;
         const behindHeadStringRestriction =
-          ctx.roomStateRef.current
+          snap.roomState
             .ballInHandRestriction ===
           'behind_head_string';
         const headStringLineX = 220;
         const isHeadStringOutOfBounds =
           behindHeadStringRestriction &&
-          ctx.placedPosRef.current.x >
+          snap.placedPos.x >
             headStringLineX - 10;
         const finalInvalid =
           isInvalidPos || isHeadStringOutOfBounds;
@@ -3430,11 +3458,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         }
 
         const pulseRatio =
-          (Date.now() % 800) / 800;
+          (frameDate % 800) / 800;
         ctx2d.beginPath();
         ctx2d.arc(
-          ctx.placedPosRef.current.x,
-          ctx.placedPosRef.current.y,
+          snap.placedPos.x,
+          snap.placedPos.y,
           BALL_R + pulseRatio * 4,
           0,
           Math.PI * 2
@@ -3447,8 +3475,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
         ctx2d.beginPath();
         ctx2d.arc(
-          ctx.placedPosRef.current.x,
-          ctx.placedPosRef.current.y,
+          snap.placedPos.x,
+          snap.placedPos.y,
           BALL_R,
           0,
           Math.PI * 2
@@ -3472,20 +3500,20 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         if (isInvalidPos) {
           ctx2d.fillText(
             'INVALID POSITION (Overlapping ball) | لا يمكن وضع الكرة هنا',
-            ctx.placedPosRef.current.x,
-            ctx.placedPosRef.current.y - 18
+            snap.placedPos.x,
+            snap.placedPos.y - 18
           );
         } else {
           ctx2d.fillText(
             'Drag to place, click Confirm | اسحب لوضع الكرة ثم اضغط تأكيد',
-            ctx.placedPosRef.current.x,
-            ctx.placedPosRef.current.y - 18
+            snap.placedPos.x,
+            snap.placedPos.y - 18
           );
         }
       }
 
       // ── GAME OVER OVERLAY ───────────────
-      const gsRoom = ctx.roomStateRef.current;
+      const gsRoom = snap.roomState;
       if (
         gsRoom.status === 'gameover' &&
         gsRoom.winnerId
@@ -3593,7 +3621,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.restore();
 
         if (isMyWin) {
-          const now = Date.now();
           const confettiColors = [
             '#fbbf24',
             '#f87171',
@@ -3604,21 +3631,21 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           ];
           for (let ci = 0; ci < 28; ci++) {
             const seed =
-              ci * 137.508 + now / 30;
+              ci * 137.508 + frameDate / 30;
             const cx =
               150 +
               ((ci * 23 +
                 Math.sin(seed * 0.012) *
                   300 +
-                300) %
+                 300) %
                 500);
             const cy =
               30 +
-              ((now / 5 + ci * 19) % 340);
+              ((frameDate / 5 + ci * 19) % 340);
             const cr =
               2.5 + (ci % 4) * 1.2;
             const angle =
-              (now / 800 + ci) * 0.8;
+              (frameDate / 800 + ci) * 0.8;
             ctx2d.save();
             ctx2d.translate(cx, cy);
             ctx2d.rotate(angle);
@@ -3642,25 +3669,14 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       // 9. Post-processing: cinematic vignette for depth and focus
       ctx2d.save();
-      const vigGrad = ctx2d.createRadialGradient(400, 200, 150, 400, 200, 420);
-      vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
-      vigGrad.addColorStop(0.5, 'rgba(0,0,0,0)');
-      vigGrad.addColorStop(0.75, 'rgba(0,0,0,0.08)');
-      vigGrad.addColorStop(0.9, 'rgba(0,0,0,0.25)');
-      vigGrad.addColorStop(1, 'rgba(0,0,0,0.55)');
-      ctx2d.fillStyle = vigGrad;
+      ctx2d.fillStyle = gradVignette;
       ctx2d.fillRect(0, 0, 800, 400);
       ctx2d.restore();
 
       // Warm light glow from overhead (dramatic spotlight - Miniclip style)
       ctx2d.save();
       ctx2d.globalCompositeOperation = 'screen';
-      const lightGlow = ctx2d.createRadialGradient(400, 180, 5, 400, 180, 360);
-      lightGlow.addColorStop(0, 'rgba(255,248,230,0.10)');
-      lightGlow.addColorStop(0.2, 'rgba(255,240,210,0.05)');
-      lightGlow.addColorStop(0.5, 'rgba(255,230,190,0.02)');
-      lightGlow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx2d.fillStyle = lightGlow;
+      ctx2d.fillStyle = gradWarmGlow;
       ctx2d.fillRect(0, 0, 800, 400);
       ctx2d.restore();
 
@@ -3676,15 +3692,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
 
       // === 9.5. Magnifier Zoom (Professional Aim Window) ===
-      const isFineAim = ctx.isFineAimRef?.current || false;
-      const velocity = Math.abs(ctx.aimInertiaVelocityRef?.current || 0);
-      const showMagnifier = isMyTurnActive && !isStrikingNow && ctx.isPullingRef.current === false && (isFineAim || (velocity > 0.0001 && velocity < 0.005));
+      const isFineAim = snap.isFineAim || false;
+      const velocity = Math.abs(snap.aimVelocity || 0);
+      const showMagnifier = isMyTurnActive && !isStrikingNow && snap.isPulling === false && (isFineAim || (velocity > 0.0001 && velocity < 0.005));
 
       if (showMagnifier && lastDrawContactX !== null && lastDrawContactY !== null) {
         ctx2d.save();
         ctx2d.resetTransform(); // Draw in pure screen space without camera pan
 
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = currentDPR;
         
         // Settings
         const magZoom = 2; // 2x Zoom

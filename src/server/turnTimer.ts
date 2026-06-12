@@ -1,4 +1,4 @@
-import { activeRooms, animatingRoomIds, broadcastRoom, clientsByRoom, pushRoomLog, pushEventLog, cleanupRoom } from './state';
+import { activeRooms, animatingRoomIds, broadcastRoom, clientsByRoom, pushRoomLog, pushEventLog, cleanupRoom, pauseRoomIfInactive } from './state';
 import { triggerAiShot, findValidCueBallPosition } from './gameLogic';
 import { prisma } from './db';
 
@@ -34,6 +34,15 @@ export function startTurnTimer(): void {
         return;
       }
       roomIdleTicks.delete(roomId);
+
+      // ── Skip paused rooms entirely (no timers, no physics) ──
+      if (room.status === 'paused' || room.status === 'archived') return;
+
+      // ── Auto-pause rooms with no clients during active game ──
+      if (room.status === 'playing' && !hasClients) {
+        pauseRoomIfInactive(roomId);
+        return;
+      }
 
       // ── Turn timer ──
       if (room.status !== 'playing') return;
