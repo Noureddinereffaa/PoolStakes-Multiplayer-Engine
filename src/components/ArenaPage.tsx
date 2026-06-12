@@ -521,8 +521,8 @@ export default function ArenaPage({
       </header>
 
       {/* Main - PoolTable fills everything */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className={`flex-1 relative flex items-center justify-center ${showSidebar && isMobile ? 'hidden' : ''} ${isMobile ? 'px-[80px] py-4' : ''}`}>
+      <div className="flex-1 flex overflow-hidden relative">
+        <div className={`flex-1 relative ${showSidebar && isMobile ? 'hidden' : ''}`}>
           <PoolTable ref={tableRef}
             roomState={roomState} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
             myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
@@ -553,7 +553,7 @@ export default function ArenaPage({
           )}
 
           {/* Spin control — bottom-right corner (both desktop & mobile) */}
-          <div className="absolute bottom-3 right-3 z-10">
+          <div className="absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 scale-[0.65] md:scale-100 origin-bottom-right">
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
           </div>
 
@@ -675,18 +675,18 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   const stickY = shotPower * 1.5;
 
   return (
-    <div className={`absolute left-4 top-1/2 -translate-y-1/2 z-20 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+    <div className={`absolute left-0 top-1/2 -translate-y-1/2 z-20 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <div 
         ref={containerRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className="relative w-16 h-[250px] bg-black/60 backdrop-blur-sm border border-white/10 rounded-full flex flex-col items-center justify-start overflow-visible touch-none select-none shadow-[0_0_20px_rgba(0,0,0,0.8)]"
+        className="relative w-12 h-[250px] flex flex-col items-center justify-start overflow-visible touch-none select-none"
       >
-        {/* Cue Stick Visual */}
+        {/* Cue Stick Visual (thinner) */}
         <div 
-          className="absolute top-2 w-4 h-[200px] rounded-full flex flex-col transition-transform duration-75"
+          className="absolute top-2 w-3 h-[200px] rounded-full flex flex-col transition-transform duration-75 drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]"
           style={{ transform: `translateY(${stickY}px)` }}
         >
           {/* Tip */}
@@ -702,8 +702,8 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
           </div>
         </div>
 
-        {/* Power Fill Indicator */}
-        <div className="absolute right-[-8px] top-4 bottom-4 w-1.5 bg-black/80 rounded-full overflow-hidden border border-white/5 pointer-events-none">
+        {/* Power Fill Indicator (thinner and closer to edge) */}
+        <div className="absolute left-1 top-4 bottom-4 w-1 bg-black/40 rounded-full overflow-hidden border border-white/10 pointer-events-none">
           <div 
             className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-emerald-500 via-amber-500 to-rose-500 transition-all duration-75"
             style={{ height: `${shotPower}%` }}
@@ -712,8 +712,8 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
 
         {/* Drag Hint Overlay */}
         {!dragging && shotPower === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 pointer-events-none opacity-60 animate-bounce">
-            <div className="text-[10px] font-black text-amber-500 tracking-wider">PULL</div>
+          <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 pointer-events-none opacity-80 animate-bounce drop-shadow-[0_0_4px_rgba(0,0,0,1)]">
+            <div className="text-[9px] font-black text-amber-400 tracking-wider">PULL</div>
             <svg className="w-5 h-5 text-amber-500 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
