@@ -265,11 +265,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             isBreakShotRef.current = roomStateRef.current.balls.filter(b => b.id !== 0 && b.isPocketed).length === 0;
             triggerShootParticles(strikeAnimRef.current.power, isBreakShotRef.current);
             if (isBreakShotRef.current) {
-              impactShakeRef.current = Math.min(24.0, 6.0 + (strikeAnimRef.current.power / 100) * 18.0);
+              impactShakeRef.current = Math.min(6.0, 1.5 + (strikeAnimRef.current.power / 100) * 4.5);
               setHudNotification('💥 BREAK!');
               setTimeout(() => setHudNotification(null), 2000);
             } else {
-              impactShakeRef.current = Math.min(14.0, 2.0 + (strikeAnimRef.current.power / 100) * 12.0);
+              impactShakeRef.current = Math.min(3.0, 0.5 + (strikeAnimRef.current.power / 100) * 2.5);
             }
           }
         }
@@ -316,7 +316,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                         const speed2 = Math.sqrt((b2.x - prevB2.x) ** 2 + (b2.y - prevB2.y) ** 2);
                         const totalSpeed = speed1 + speed2;
                         poolAudio.playBallCollision(Math.max(0.15, totalSpeed)); haptic(Math.min(20, Math.floor(5 + totalSpeed * 8)));
-                        if (totalSpeed > 0.8) impactShakeRef.current = Math.min(10.0, impactShakeRef.current + totalSpeed * 1.65);
+                        if (totalSpeed > 0.8) impactShakeRef.current = Math.min(2.0, impactShakeRef.current + totalSpeed * 0.4);
                         if (totalSpeed > 0.2) impactFlashesRef.current.push({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, startTime: performance.now() });
                         feltRipplesRef.current.push({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, radius: 3, maxRadius: Math.min(26, 11 + totalSpeed * 6), opacity: Math.min(0.75, 0.22 + totalSpeed * 0.12), color: 'rgba(255, 255, 255, 0.45)' });
                         const contactX = (b1.x + b2.x) / 2, contactY = (b1.y + b2.y) / 2;
@@ -339,7 +339,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                   if ((bf.y <= minY + 0.05 && prevBf.y > minY + 0.05) || (bf.y >= maxY - 0.05 && prevBf.y < maxY - 0.05)) hitCushion = true;
                   if (hitCushion) {
                     poolAudio.playCushionHit(speed); haptic(Math.min(15, Math.floor(3 + speed * 6)));
-                    if (speed > 0.4) impactShakeRef.current = Math.min(8.0, impactShakeRef.current + speed * 1.5);
+                    if (speed > 0.4) impactShakeRef.current = Math.min(2.0, impactShakeRef.current + speed * 0.3);
                     let contactX = bf.x, contactY = bf.y;
                     if (bf.x < minX + 1.0) contactX = 20; else if (bf.x > maxX - 1.0) contactX = 780;
                     if (bf.y < minY + 1.0) contactY = 20; else if (bf.y > maxY - 1.0) contactY = 380;

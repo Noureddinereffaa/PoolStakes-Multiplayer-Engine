@@ -41,7 +41,8 @@ export function triggerShootParticles(
   const hDx = Math.cos(bAngle);
   const hDy = Math.sin(bAngle);
 
-  const partCount = Math.min(25, Math.floor(10 + power * 0.25));
+  // Minimal chalk puff — just a few blue specks
+  const partCount = Math.min(8, Math.floor(4 + power * 0.08));
   for (let i = 0; i < partCount; i++) {
     const spreadAngle = bAngle + (Math.random() - 0.5) * 1.1;
     const speed = (Math.random() * 2.5 + 0.8) * (power / 100 + 0.5);
@@ -56,7 +57,8 @@ export function triggerShootParticles(
     });
   }
 
-  const sparkCount = Math.min(15, Math.floor(power * 0.15));
+  // Minimal sparks — only on hard shots
+  const sparkCount = power > 60 ? Math.min(5, Math.floor((power - 60) * 0.1)) : 0;
   for (let i = 0; i < sparkCount; i++) {
     const spreadAngle = bAngle + Math.PI + (Math.random() - 0.5) * 1.8;
     const speed = (Math.random() * 4.0 + 1.5) * (power / 100 + 0.3);

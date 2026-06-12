@@ -454,68 +454,56 @@ export default function ArenaPage({
         </div>
       )}
 
-      {/* Header - 8 Ball Pool Style */}
+      {/* Header - 8 Ball Pool Style - Ultra compact on mobile */}
       <header
-        className="relative z-40 bg-gradient-to-b from-black/90 via-black/50 to-transparent px-4 backdrop-blur-sm shrink-0"
-        style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
+        className="relative z-40 bg-gradient-to-b from-black/80 to-transparent px-2 md:px-4 shrink-0"
+        style={{ paddingTop: isMobile ? '2px' : 'calc(var(--sat) + 4px)', paddingBottom: isMobile ? '2px' : '6px' }}
       >
-            <div className="flex items-center justify-between gap-2 max-w-4xl mx-auto">
+            <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
               
               {/* Left Player (Me) */}
-              <div className={`flex items-center gap-2 min-w-0 flex-1 bg-black/40 rounded-full p-1 border ${isMyTurn ? 'border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border-white/10'}`}>
-                <div className="w-[clamp(24px,5vw,36px)] h-[clamp(24px,5vw,36px)] rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[clamp(10px,2vw,16px)] shadow-lg shrink-0">🎱</div>
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-1 bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
+                <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
                 <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[clamp(10px,2vw,14px)] font-bold text-amber-50 truncate max-w-[clamp(60px,15vw,120px)]">{myPlayer?.username || 'You'}</span>
-                  </div>
-                  {/* Pocketed Balls Track */}
-                  <div className="flex items-center gap-0.5 mt-0.5 min-h-[14px]">
-                    {myPocketed.length === 0 ? (
-                      <span className="text-[8px] text-amber-500/40 font-mono">NO BALLS</span>
-                    ) : (
-                      myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 12 : 14} />)
-                    )}
+                  <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{myPlayer?.username || 'You'}</span>
+                  <div className="flex items-center gap-px min-h-[10px]">
+                    {myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />)}
                   </div>
                 </div>
               </div>
 
               {/* Center Timer */}
-              <div className="flex flex-col items-center shrink-0 px-2">
-                <span className={`text-[clamp(14px,3vw,20px)] font-black font-mono leading-none tracking-wider ${timerVal <= 10 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
-                  0:{timerVal.toString().padStart(2, '0')}
+              <div className="flex flex-col items-center shrink-0 px-1 md:px-2">
+                <span className={`text-sm md:text-lg font-black font-mono leading-none ${timerVal <= 10 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
+                  {timerVal}
                 </span>
-                <div className="w-[clamp(40px,10vw,80px)] h-[2px] mt-1 rounded-full bg-black overflow-hidden shadow-inner border border-white/5">
+                <div className="w-8 md:w-16 h-[2px] mt-0.5 rounded-full bg-black overflow-hidden">
                   <div className={`h-full rounded-full bg-gradient-to-r ${timerColor} transition-all duration-1000`} style={{ width: `${timerPct}%` }} />
                 </div>
               </div>
 
               {/* Right Player (Opponent) */}
-              <div className={`flex items-center gap-2 min-w-0 flex-1 justify-end bg-black/40 rounded-full p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border-white/10'}`}>
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-1 justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="flex flex-col items-end min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[clamp(10px,2vw,14px)] font-bold text-amber-50 truncate max-w-[clamp(60px,15vw,120px)]">{opponent?.username || 'Waiting...'}</span>
-                  </div>
-                  {/* Pocketed Balls Track */}
-                  <div className="flex items-center gap-0.5 mt-0.5 min-h-[14px] justify-end">
-                    {opponentPocketed.length === 0 ? (
-                      <span className="text-[8px] text-amber-500/40 font-mono">NO BALLS</span>
-                    ) : (
-                      opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 12 : 14} />)
-                    )}
+                  <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
+                  <div className="flex items-center gap-px min-h-[10px] justify-end">
+                    {opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />)}
                   </div>
                 </div>
-                <div className="w-[clamp(24px,5vw,36px)] h-[clamp(24px,5vw,36px)] rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[clamp(10px,2vw,16px)] shadow-lg shrink-0">👤</div>
+                <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">👤</div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-1 ml-2">
-                <button onClick={() => setShowSidebar(prev => !prev)} className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition text-white/80 hover:text-white backdrop-blur-md">
-                  <Users className="w-4 h-4" />
-                </button>
-                <button onClick={onQuitRoom} className="hidden md:inline-flex px-3 py-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-bold transition shrink-0">
-                  {language === 'ar' ? 'مغادرة' : 'Quit'}
-                </button>
-              </div>
+              {/* Action Buttons - hide on mobile */}
+              {!isMobile && (
+                <div className="flex items-center gap-1 ml-2">
+                  <button onClick={() => setShowSidebar(prev => !prev)} className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition text-white/80">
+                    <Users className="w-4 h-4" />
+                  </button>
+                  <button onClick={onQuitRoom} className="px-3 py-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-bold transition shrink-0">
+                    {language === 'ar' ? 'مغادرة' : 'Quit'}
+                  </button>
+                </div>
+              )}
 
             </div>
       </header>
@@ -541,16 +529,6 @@ export default function ArenaPage({
           )}
 
 
-
-          {/* Notification toast */}
-          {hudNotification && (
-            <motion.div initial={{ opacity: 0, y: -10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-xl bg-black/60 backdrop-blur-md border border-amber-500/25 text-[10px] text-amber-200 font-mono shadow-[0_0_20px_rgba(245,158,11,0.15)] whitespace-nowrap pointer-events-none"
-            >
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-2 align-middle shadow-[0_0_4px_#f59e0b]" />
-              {hudNotification}
-            </motion.div>
-          )}
 
           {/* Spin control — bottom-right corner (both desktop & mobile) */}
           <div className="absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 scale-[0.65] md:scale-100 origin-bottom-right">
@@ -631,7 +609,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Cue Stick Power Slider (8 Ball Pool Style) ─── */
+/* ─── Mobile Cue Stick Power Slider (minimal vertical bar) ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -641,8 +619,7 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
-    const el = e.currentTarget;
-    el.setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     startYRef.current = e.clientY;
     setDragging(true);
   };
@@ -650,13 +627,9 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging || !containerRef.current) return;
     const dy = Math.max(0, e.clientY - startYRef.current);
-    const containerHeight = containerRef.current.getBoundingClientRect().height;
-    const maxDrag = containerHeight * 0.8; 
-    
+    const maxDrag = containerRef.current.getBoundingClientRect().height * 0.85;
     const rawPower = Math.min(100, (dy / maxDrag) * 100);
-    // Non-linear power curve for finer control at low speeds
-    const curvedPower = Math.floor(Math.pow(rawPower / 100, 0.85) * 100);
-    onPowerChange(Math.max(0, curvedPower));
+    onPowerChange(Math.max(0, Math.floor(Math.pow(rawPower / 100, 0.85) * 100)));
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -671,55 +644,34 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     }
   };
 
-  // Convert 0-100 power to a translation value (pixels)
-  const stickY = shotPower * 1.5;
+  const pct = shotPower / 100;
 
   return (
-    <div className={`absolute left-0 top-1/2 -translate-y-1/2 z-20 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
-      <div 
-        ref={containerRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className="relative w-12 h-[250px] flex flex-col items-center justify-start overflow-visible touch-none select-none"
-      >
-        {/* Cue Stick Visual (thinner) */}
-        <div 
-          className="absolute top-2 w-3 h-[200px] rounded-full flex flex-col transition-transform duration-75 drop-shadow-[0_0_8px_rgba(0,0,0,0.8)]"
-          style={{ transform: `translateY(${stickY}px)` }}
-        >
-          {/* Tip */}
-          <div className="w-full h-2 bg-blue-400 rounded-t-full shadow-[0_0_4px_#60a5fa] shrink-0" />
-          <div className="w-full h-1 bg-white shrink-0" />
-          {/* Shaft */}
-          <div className="w-full h-[100px] bg-gradient-to-b from-[#e6d5b8] to-[#cba365] shrink-0 border-x border-[#8b5a2b]/50" />
-          {/* Joint */}
-          <div className="w-full h-3 bg-gradient-to-b from-gray-400 to-gray-600 shrink-0 border border-gray-800" />
-          {/* Butt (Handle) */}
-          <div className="w-full flex-1 bg-gradient-to-b from-[#3a2010] to-[#1a0f08] rounded-b-full border-x border-b border-black/80 flex flex-col items-center justify-end pb-2">
-            <div className="w-2 h-8 bg-white/10 rounded-full" />
-          </div>
-        </div>
-
-        {/* Power Fill Indicator (thinner and closer to edge) */}
-        <div className="absolute left-1 top-4 bottom-4 w-1 bg-black/40 rounded-full overflow-hidden border border-white/10 pointer-events-none">
-          <div 
-            className="absolute bottom-0 w-full rounded-full bg-gradient-to-t from-emerald-500 via-amber-500 to-rose-500 transition-all duration-75"
-            style={{ height: `${shotPower}%` }}
-          />
-        </div>
-
-        {/* Drag Hint Overlay */}
-        {!dragging && shotPower === 0 && (
-          <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 pointer-events-none opacity-80 animate-bounce drop-shadow-[0_0_4px_rgba(0,0,0,1)]">
-            <div className="text-[9px] font-black text-amber-400 tracking-wider">PULL</div>
-            <svg className="w-5 h-5 text-amber-500 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-            </svg>
-          </div>
-        )}
+    <div
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className={`absolute left-0 top-[10%] bottom-[10%] w-8 z-20 touch-none select-none flex items-center justify-center ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
+    >
+      {/* Thin power bar */}
+      <div className="relative w-1.5 h-full rounded-full bg-black/40 overflow-hidden border border-white/10">
+        <div
+          className="absolute bottom-0 w-full rounded-full transition-all duration-75"
+          style={{
+            height: `${shotPower}%`,
+            background: `linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)`,
+          }}
+        />
       </div>
+      {/* Power percentage label when dragging */}
+      {dragging && shotPower > 0 && (
+        <div className="absolute left-10 top-1/2 -translate-y-1/2 bg-black/80 text-amber-400 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded pointer-events-none">
+          {shotPower}%
+        </div>
+      )}
     </div>
   );
 }
+
