@@ -261,24 +261,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             /* cue wind-up — physics is delayed by 40ms via physicsStartTime */
           } else if (!strikeAnimRef.current.hasStruck) {
             strikeAnimRef.current.hasStruck = true;
-            poolAudio.playCueHit(strikeAnimRef.current.power); haptic(30);
+            poolAudio.playCueHit(strikeAnimRef.current.power); haptic(20);
             isBreakShotRef.current = roomStateRef.current.balls.filter(b => b.id !== 0 && b.isPocketed).length === 0;
-            triggerShootParticles(strikeAnimRef.current.power, isBreakShotRef.current);
             if (isBreakShotRef.current) {
-              impactShakeRef.current = Math.min(10.0, 2.0 + (strikeAnimRef.current.power / 100) * 8.0);
-              setHudNotification('💥 BREAK!');
-              setTimeout(() => setHudNotification(null), 2000);
-              const cb = animatedBallsRef.current.find(b => b.id === 0);
-              if (cb) {
-                for (let k = 0; k < 30; k++) {
-                  const spread = Math.random() * Math.PI * 2;
-                  const spd = 1.5 + Math.random() * 5;
-                  chalkParticlesRef.current.push({ x: cb.x, y: cb.y, vx: Math.cos(spread) * spd, vy: Math.sin(spread) * spd, size: 1 + Math.random() * 2.5, opacity: 0.9, color: 'rgba(255, 220, 100, 0.8)' });
-                }
-                feltRipplesRef.current.push({ x: cb.x, y: cb.y, radius: 12, maxRadius: 80, opacity: 1.0, color: 'rgba(59, 130, 246, 0.4)' });
-              }
-            } else {
-              impactShakeRef.current = Math.min(4.0, 0.8 + (strikeAnimRef.current.power / 100) * 3.2);
+              setHudNotification('BREAK!');
+              setTimeout(() => setHudNotification(null), 1500);
             }
           }
         }
@@ -298,17 +285,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               if (!frame || !prevFrame) continue;
               frame.forEach((bf) => {
                 const prevBf = prevFrame.find((b) => b.id === bf.id);
-                if (bf.isPocketed && prevBf && !prevBf.isPocketed) {
-                  poolAudio.playPocketIn(); haptic(40);
-                  const pCenters = [{ x: 22, y: 22 }, { x: 400, y: 18 }, { x: 778, y: 22 }, { x: 22, y: 378 }, { x: 400, y: 382 }, { x: 778, y: 378 }];
-                  let closestP = pCenters[0]; let minDist = Infinity;
-                  pCenters.forEach(p => { const d = Math.hypot(bf.x - p.x, bf.y - p.y); if (d < minDist) { minDist = d; closestP = p; } });
-                  const origBall = initialBallsCopy.find(b => b.id === bf.id);
-                  sinkingBallsRef.current.push({ id: bf.id, ball: origBall ? { ...origBall, x: bf.x, y: bf.y } : { ...bf, color: '#34d399', type: 'solid', radius: 10 } as any, progress: 0, maxProgress: 40, pocketX: closestP.x, pocketY: closestP.y });
-                  feltRipplesRef.current.push({ x: bf.x, y: bf.y, radius: 5, maxRadius: 36, opacity: 0.9, color: 'rgba(52, 211, 153, 0.6)' });
-                  const ballColor = origBall?.color || '#34d399';
-                  for (let k = 0; k < 15; k++) chalkParticlesRef.current.push({ x: bf.x, y: bf.y, vx: (Math.random() - 0.5) * 4.5 + (closestP.x - bf.x) * 0.1, vy: (Math.random() - 0.5) * 4.5 + (closestP.y - bf.y) * 0.1, size: Math.random() * 2.8 + 0.8, opacity: 0.90, color: ballColor });
-                }
+                  if (bf.isPocketed && prevBf && !prevBf.isPocketed) {
+                    poolAudio.playPocketIn(); haptic(30);
+                    const pCenters = [{ x: 22, y: 22 }, { x: 400, y: 18 }, { x: 778, y: 22 }, { x: 22, y: 378 }, { x: 400, y: 382 }, { x: 778, y: 378 }];
+                    let closestP = pCenters[0]; let minDist = Infinity;
+                    pCenters.forEach(p => { const d = Math.hypot(bf.x - p.x, bf.y - p.y); if (d < minDist) { minDist = d; closestP = p; } });
+                    const origBall = initialBallsCopy.find(b => b.id === bf.id);
+                    sinkingBallsRef.current.push({ id: bf.id, ball: origBall ? { ...origBall, x: bf.x, y: bf.y } : { ...bf, color: '#34d399', type: 'solid', radius: 10 } as any, progress: 0, maxProgress: 40, pocketX: closestP.x, pocketY: closestP.y });
+                  }
               });
               for (let i = 0; i < frame.length; i++) {
                 const b1 = frame[i]; if (b1.isPocketed) continue;
@@ -324,13 +308,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                         const speed1 = Math.sqrt((b1.x - prevB1.x) ** 2 + (b1.y - prevB1.y) ** 2);
                         const speed2 = Math.sqrt((b2.x - prevB2.x) ** 2 + (b2.y - prevB2.y) ** 2);
                         const totalSpeed = speed1 + speed2;
-                        poolAudio.playBallCollision(Math.max(0.15, totalSpeed)); haptic(Math.min(20, Math.floor(5 + totalSpeed * 8)));
-                        if (totalSpeed > 0.8) impactShakeRef.current = Math.min(2.0, impactShakeRef.current + totalSpeed * 0.4);
-                        if (totalSpeed > 0.2) impactFlashesRef.current.push({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, startTime: performance.now() });
-                        feltRipplesRef.current.push({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, radius: 3, maxRadius: Math.min(26, 11 + totalSpeed * 6), opacity: Math.min(0.75, 0.22 + totalSpeed * 0.12), color: 'rgba(255, 255, 255, 0.45)' });
-                        const contactX = (b1.x + b2.x) / 2, contactY = (b1.y + b2.y) / 2;
-                        const partCount = Math.min(12, Math.floor(4 + totalSpeed * 1.8));
-                        for (let k = 0; k < partCount; k++) chalkParticlesRef.current.push({ x: contactX, y: contactY, vx: (Math.random() - 0.5) * (totalSpeed * 0.4 + 1.2), vy: (Math.random() - 0.5) * (totalSpeed * 0.4 + 1.2), size: Math.random() * 1.6 + 0.5, opacity: 0.8, color: 'rgba(254, 240, 138, 0.75)' });
+                        poolAudio.playBallCollision(Math.max(0.15, totalSpeed)); haptic(Math.min(15, Math.floor(3 + totalSpeed * 5)));
                       }
                     }
                   }
@@ -347,15 +325,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                   if ((bf.x <= minX + 0.05 && prevBf.x > minX + 0.05) || (bf.x >= maxX - 0.05 && prevBf.x < maxX - 0.05)) hitCushion = true;
                   if ((bf.y <= minY + 0.05 && prevBf.y > minY + 0.05) || (bf.y >= maxY - 0.05 && prevBf.y < maxY - 0.05)) hitCushion = true;
                   if (hitCushion) {
-                    poolAudio.playCushionHit(speed); haptic(Math.min(18, Math.floor(4 + speed * 7)));
-                    if (speed > 0.3) impactShakeRef.current = Math.min(3.0, impactShakeRef.current + speed * 0.4);
-                    let contactX = bf.x, contactY = bf.y;
-                    if (bf.x < minX + 1.0) contactX = 20; else if (bf.x > maxX - 1.0) contactX = 780;
-                    if (bf.y < minY + 1.0) contactY = 20; else if (bf.y > maxY - 1.0) contactY = 380;
-                    const sparkCount = Math.min(12, Math.floor(3 + speed * 4));
-                    for (let k = 0; k < sparkCount; k++) chalkParticlesRef.current.push({ x: contactX, y: contactY, vx: (Math.random() - 0.5) * (speed * 0.35 + 0.8), vy: (Math.random() - 0.5) * (speed * 0.35 + 0.8), size: Math.random() * 1.5 + 0.5, opacity: 0.85, color: 'rgba(245, 158, 11, 0.6)' });
-                    feltRipplesRef.current.push({ x: contactX, y: contactY, radius: 2, maxRadius: Math.min(14, 6 + speed * 2), opacity: Math.min(0.5, 0.15 + speed * 0.08), color: 'rgba(245, 158, 11, 0.25)' });
-                    if (speed > 0.3) impactFlashesRef.current.push({ x: contactX, y: contactY, startTime: performance.now() });
+                    poolAudio.playCushionHit(speed); haptic(Math.min(12, Math.floor(2 + speed * 5)));
                   }
                 }
               });
@@ -518,65 +488,18 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             aimAngleRef.current = smoothed;
           }
         } else {
-          // ================= MOBILE 8 BALL POOL STYLE =================
-          // Touch to aim, pull back to set power, release to shoot
+          // ================= MOBILE: AIM ONLY =================
+          // Touch anywhere to aim directly. Power & shoot via CueStickSlider on left.
           if (isInitialDown) {
-            dragStartXRef.current = coords.x;
-            dragStartAngleRef.current = aimAngleRef.current;
             pullStartPosRef.current = coords;
-            setDragMode('rotate');
-            dragModeRef.current = 'rotate';
-            setIsPulling(true);
-            isPullingRef.current = true;
-            aimInertiaVelocityRef.current = 0;
-          } else if (dragModeRef.current === 'rotate' && pullStartPosRef.current) {
+            targetAimAngleRef.current = aimAngleRef.current;
+          } else if (pullStartPosRef.current) {
             const cbX = cueBall.x, cbY = cueBall.y;
-            
-            // Vector from cue ball to touch point
             const dx = coords.x - cbX;
             const dy = coords.y - cbY;
-            const dist = Math.hypot(dx, dy);
-            
-            if (dist < 15) return; // dead zone
-            
-            // Direction from cue ball to touch
-            const touchAngle = Math.atan2(dy, dx);
-            
-            // Difference between aim direction and touch direction
-            let angleDiff = touchAngle - aimAngleRef.current;
-            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-            
-            // If dragging roughly in the aiming direction (within ±60°), it's a power pull
-            // If dragging perpendicular, it's an aim adjustment
-            if (Math.abs(angleDiff) < Math.PI / 3) {
-              // POWER PULL MODE: dragging along aim line
-              setDragMode('pull');
-              dragModeRef.current = 'pull';
-              
-              // Pull back from contact point to set power
-              const aimDx = Math.cos(aimAngleRef.current);
-              const aimDy = Math.sin(aimAngleRef.current);
-              const pullBack = -(dx * aimDx + dy * aimDy); // negative = pulling back
-              const maxPull = 300;
-              const rawPower = Math.max(0, Math.min(100, (pullBack / maxPull) * 100));
-              const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
-              const power = Math.min(100, Math.max(0, Math.floor(curvedPower)));
-              setShotPower(power);
-              shotPowerRef.current = power;
-            } else {
-              // AIM MODE: dragging perpendicular to aim line
-              const sens = isFineAimRef.current ? SHIFT_MODIFIER : 1;
-              // Use the perpendicular drag distance for fine aim
-              const aimDx = Math.cos(aimAngleRef.current);
-              const aimDy = Math.sin(aimAngleRef.current);
-              const orthoDrag = -dx * aimDy + dy * aimDx;
-              const adjAngle = dragStartAngleRef.current + orthoDrag * 0.003 * sens;
-              targetAimAngleRef.current = adjAngle;
-              const smoothed = aimAngleRef.current + (adjAngle - aimAngleRef.current) * SMOOTH_FACTOR;
-              setAimAngle(smoothed);
-              aimAngleRef.current = smoothed;
-            }
+            const rawAngle = Math.atan2(dy, dx);
+            setAimAngle(rawAngle);
+            aimAngleRef.current = rawAngle;
           }
         }
       }
@@ -607,26 +530,6 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     }
   };
 
-  const triggerShootParticles = (power: number, isBreak = false) => {
-    const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
-    if (cueBall && !cueBall.isPocketed) {
-      const bAngle = aimAngleRef.current + Math.PI;
-      const hDx = Math.cos(bAngle), hDy = Math.sin(bAngle);
-      const mult = isBreak ? 2.5 : 1;
-      for (let i = 0; i < Math.min(Math.floor(25 * mult), Math.floor((10 + power * 0.25) * mult)); i++) {
-        const sa = bAngle + (Math.random() - 0.5) * (isBreak ? 1.8 : 1.1);
-        const sp = (Math.random() * 2.5 + 0.8) * (power / 100 + 0.5) * (isBreak ? 2.0 : 1);
-        chalkParticlesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, vx: Math.cos(sa) * sp, vy: Math.sin(sa) * sp, size: (Math.random() * 2.0 + 0.6) * (isBreak ? 1.5 : 1), opacity: 0.9, color: 'rgba(59, 130, 246, 0.8)' });
-      }
-      for (let i = 0; i < Math.min(Math.floor(15 * mult), Math.floor(power * 0.15 * mult)); i++) {
-        const sa = bAngle + Math.PI + (Math.random() - 0.5) * (isBreak ? 2.5 : 1.8);
-        const sp = (Math.random() * 4.0 + 1.5) * (power / 100 + 0.3) * (isBreak ? 2.5 : 1);
-        chalkParticlesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, vx: Math.cos(sa) * sp, vy: Math.sin(sa) * sp, size: (Math.random() * 1.5 + 0.8) * (isBreak ? 1.5 : 1), opacity: 1.0, color: Math.random() > 0.4 ? 'rgba(245, 158, 11, 0.95)' : 'rgba(255, 230, 150, 0.95)' });
-      }
-      feltRipplesRef.current.push({ x: cueBall.x - hDx * 10, y: cueBall.y - hDy * 10, radius: isBreak ? 12 : 4, maxRadius: isBreak ? 60 : 28, opacity: isBreak ? 1.0 : 0.8, color: 'rgba(59, 130, 246, 0.5)' });
-    }
-  };
-
   const executeAuthorizedShot = (angle: number, power: number, sX: number, sY: number) => {
     if (!isMyTurnRef.current || isAnimatingRef.current) return;
     // Shot Stick Snap Animation: short delay before hit for visual impact
@@ -644,21 +547,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     setIsPointerActive(false);
 
     if (isMobile.current) {
-      // 8 Ball Pool style: release to shoot with current aim + power
-      const p = shotPowerRef.current;
-      const wasInPullMode = dragModeRef.current === 'pull';
       setIsPulling(false);
       isPullingRef.current = false;
       setDragMode(null);
       dragModeRef.current = null;
       pullStartPosRef.current = null;
-      if (wasInPullMode && p >= 5 && isMyTurnRef.current && !isAnimatingRef.current) {
-        executeAuthorizedShot(aimAngleRef.current, p, spinXRef.current, spinYRef.current);
-      } else if (!wasInPullMode) {
-        // Cancelled or just aimed - reset power
-        setShotPower(0);
-        shotPowerRef.current = 0;
-      }
       return;
     }
 

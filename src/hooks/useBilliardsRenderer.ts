@@ -2,7 +2,6 @@ import { useEffect, RefObject } from 'react';
 import { Ball, RoomState, Difficulty } from '../types';
 import { BallRotationData } from '../components/PoolTable/rotation';
 import {
-  triggerShootParticles as triggerShootParticlesFn,
   RippleData,
   ChalkParticle,
   DustSpeck,
@@ -111,18 +110,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     return [];
   };
 
-  const triggerLocalShootParticles = (power: number) => {
-    const cueBall = ctx.animatedBallsRef.current.find((b: Ball) => b.id === 0);
-    triggerShootParticlesFn(
-      power,
-      cueBall,
-      ctx.aimAngleRef.current,
-      ctx.chalkParticlesRef.current,
-      ctx.feltRipplesRef.current
-    );
-  };
-
-  // Main Canvas Rendering Loop with continuous micro-particle & ripple animations
+  // Main Canvas Rendering Loop
   useEffect(() => {
     let animationId: number;
 
@@ -3090,20 +3078,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                     ctx.strikeAnimRef.current
                       .power
                   );
-                  triggerLocalShootParticles(
-                    ctx.strikeAnimRef.current
-                      .power
-                  );
-
-                  ctx.impactShakeRef.current =
-                    Math.min(
-                      14.0,
-                      2.0 +
-                        (ctx.strikeAnimRef
-                          .current.power /
-                          100) *
-                          12.0
-                    );
                 }
               } else {
                 ctx.strikeAnimRef.current.active =
