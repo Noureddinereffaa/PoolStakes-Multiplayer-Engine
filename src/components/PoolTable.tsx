@@ -244,10 +244,10 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
-      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 3.5 : 1.95) : (isMobile.current ? 3.0 : 1.65);
+      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.2 : 1.95) : (isMobile.current ? 2.0 : 1.65);
       let animationFrameId: number;
       const animStartTime = performance.now();
-      const STRIKE_ACCEL = isMobile.current ? 3 : 8;
+      const STRIKE_ACCEL = isMobile.current ? 8 : 8;
       const physicsStartTime = animStartTime + STRIKE_ACCEL;
       animatedBallsRef.current = initialBallsCopy.map(b => {
         const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);
@@ -488,18 +488,24 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             aimAngleRef.current = smoothed;
           }
         } else {
-          // ================= MOBILE: AIM ONLY =================
-          // Touch anywhere to aim directly. Power & shoot via CueStickSlider on left.
+          // ================= MOBILE: PRO AIM =================
+          // Touch: absolute angle for instant response
+          // Drag: relative from initial touch with lower sensitivity for precision
           if (isInitialDown) {
             pullStartPosRef.current = coords;
-            targetAimAngleRef.current = aimAngleRef.current;
-          } else if (pullStartPosRef.current) {
             const cbX = cueBall.x, cbY = cueBall.y;
-            const dx = coords.x - cbX;
-            const dy = coords.y - cbY;
-            const rawAngle = Math.atan2(dy, dx);
-            setAimAngle(rawAngle);
-            aimAngleRef.current = rawAngle;
+            const newAngle = Math.atan2(coords.y - cbY, coords.x - cbX);
+            setAimAngle(newAngle);
+            aimAngleRef.current = newAngle;
+            initialAimAngleRef.current = newAngle;
+          } else if (pullStartPosRef.current) {
+            const dx = coords.x - pullStartPosRef.current.x;
+            const dy = coords.y - pullStartPosRef.current.y;
+            const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
+            const sensitivity = 0.005;
+            const newAngle = initialAimAngleRef.current + orthoDrag * sensitivity;
+            setAimAngle(newAngle);
+            aimAngleRef.current = newAngle;
           }
         }
       }

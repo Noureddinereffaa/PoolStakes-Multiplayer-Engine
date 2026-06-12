@@ -1374,7 +1374,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.restore();
 
         // Environment reflection (simulated room with warm ceiling and cool windows)
-        if (!ctx.isMobileRef.current) {
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         // Room ceiling light panel reflection (top area)
@@ -1422,7 +1421,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fillStyle = warmGrad;
         ctx2d.fill();
         ctx2d.restore();
-        } // end if !isMobile
 
         // Number Badges - improved 3D tracking
         if (b.id !== 0 && b.number) {
@@ -3611,7 +3609,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.save();
         ctx2d.resetTransform(); // Draw in pure screen space without camera pan
 
-        const dpr = ctx.isMobileRef.current ? Math.min(window.devicePixelRatio || 1, 1.25) : Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         
         // Settings
         const magZoom = 2; // 2x Zoom
