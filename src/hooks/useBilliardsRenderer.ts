@@ -162,40 +162,40 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         offCtx.fillRect(0, RAIL_W, RAIL_W, PLAY_H);
         offCtx.fillRect(800 - RAIL_W, RAIL_W, RAIL_W, PLAY_H);
 
-        // Enhanced wood grain lines on rails (multi-layer procedural)
-        // Layer 1: coarse grain
-        offCtx.strokeStyle = 'rgba(90, 35, 15, 0.12)';
-        offCtx.lineWidth = 0.8;
-        for (let i = 0; i < 30; i++) {
+        // Rich wood grain lines on rails (enhanced multi-layer procedural)
+        // Layer 1: coarse grain - deeper, richer
+        offCtx.strokeStyle = 'rgba(90, 35, 15, 0.14)';
+        offCtx.lineWidth = 1.0;
+        for (let i = 0; i < 40; i++) {
           const gY = 2 + Math.random() * (RAIL_W - 4);
           offCtx.beginPath();
           offCtx.moveTo(0, gY);
-          for (let x = 0; x <= 800; x += 4) {
-            const wave = Math.sin(x * 0.04 + i * 1.7) * 2 + Math.sin(x * 0.015 + i * 3.1) * 1.5;
+          for (let x = 0; x <= 800; x += 3) {
+            const wave = Math.sin(x * 0.04 + i * 1.7) * 2.5 + Math.sin(x * 0.015 + i * 3.1) * 1.8 + Math.cos(x * 0.01 + i * 5.3) * 1.0;
             offCtx.lineTo(x, gY + wave);
           }
           offCtx.stroke();
         }
-        for (let i = 0; i < 20; i++) {
+        for (let i = 0; i < 25; i++) {
           const gX = 2 + Math.random() * (RAIL_W - 4);
           offCtx.beginPath();
           offCtx.moveTo(gX, 0);
-          for (let y = 0; y <= 400; y += 4) {
-            const wave = Math.sin(y * 0.04 + i * 1.7) * 2 + Math.sin(y * 0.015 + i * 3.1) * 1.5;
+          for (let y = 0; y <= 400; y += 3) {
+            const wave = Math.sin(y * 0.04 + i * 1.7) * 2.5 + Math.sin(y * 0.015 + i * 3.1) * 1.8 + Math.cos(y * 0.01 + i * 5.3) * 1.0;
             offCtx.lineTo(gX + wave, y);
           }
           offCtx.stroke();
         }
 
         // Layer 2: fine grain detail
-        offCtx.strokeStyle = 'rgba(160, 80, 30, 0.08)';
+        offCtx.strokeStyle = 'rgba(160, 80, 30, 0.10)';
         offCtx.lineWidth = 0.3;
-        for (let i = 0; i < 50; i++) {
+        for (let i = 0; i < 60; i++) {
           const gY = Math.random() * RAIL_W;
           offCtx.beginPath();
           offCtx.moveTo(0, gY);
-          for (let x = 0; x <= 800; x += 3) {
-            offCtx.lineTo(x, gY + Math.sin(x * 0.08 + i * 5.3) * 0.8 + Math.cos(x * 0.03 + i * 2.7) * 0.5);
+          for (let x = 0; x <= 800; x += 2) {
+            offCtx.lineTo(x, gY + Math.sin(x * 0.08 + i * 5.3) * 0.8 + Math.cos(x * 0.03 + i * 2.7) * 0.5 + Math.sin(x * 0.02 + i * 8.1) * 0.3);
           }
           offCtx.stroke();
         }
@@ -331,17 +331,18 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         offCtx.closePath();
         offCtx.fill();
         
-        // Cushion top edge highlight (ball contact surface)
-        const edgeHL = offCtx.createLinearGradient(PX, PY, PX, PY + 3);
-        edgeHL.addColorStop(0, 'rgba(100,230,190,0.42)');
-        edgeHL.addColorStop(0.5, 'rgba(80,200,160,0.25)');
+        // Cushion top edge highlight (ball contact surface) - smoother, more realistic
+        const edgeHL = offCtx.createLinearGradient(PX, PY, PX, PY + 4);
+        edgeHL.addColorStop(0, 'rgba(100,230,190,0.48)');
+        edgeHL.addColorStop(0.3, 'rgba(80,200,160,0.30)');
+        edgeHL.addColorStop(0.6, 'rgba(60,180,140,0.15)');
         edgeHL.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeHL;
-        offCtx.fillRect(PX + 3, PY - 1, PLAY_W - 6, 3);
-        offCtx.fillRect(PX + 3, 400 - PY - 2, PLAY_W - 6, 3);
+        offCtx.fillRect(PX + 3, PY - 1, PLAY_W - 6, 4);
+        offCtx.fillRect(PX + 3, 400 - PY - 3, PLAY_W - 6, 4);
         offCtx.fillStyle = edgeHL;
-        offCtx.fillRect(PX - 1, PY + 3, 3, PLAY_H - 6);
-        offCtx.fillRect(800 - PX - 2, PY + 3, 3, PLAY_H - 6);
+        offCtx.fillRect(PX - 1, PY + 3, 4, PLAY_H - 6);
+        offCtx.fillRect(800 - PX - 3, PY + 3, 4, PLAY_H - 6);
         
         // Cushion rail bolts (screws along the cushion every ~70px)
         const boltGrad = offCtx.createRadialGradient(0, 0, 0.3, 0, 0, 1.8);
@@ -455,30 +456,38 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         offCtx.fillStyle = napGrad;
         offCtx.fillRect(PX + 8, PY + 8, PLAY_W - 16, PLAY_H - 16);
 
-        // Felt edge shadows (table depth effect)
-        const edgeShadowTop = offCtx.createLinearGradient(PX, PY + 6, PX, PY + 22);
-        edgeShadowTop.addColorStop(0, 'rgba(0,0,0,0.25)');
+        // Felt edge shadows (table depth effect) - smoother, more natural
+        const edgeShadowTop = offCtx.createLinearGradient(PX, PY + 6, PX, PY + 28);
+        edgeShadowTop.addColorStop(0, 'rgba(0,0,0,0.30)');
+        edgeShadowTop.addColorStop(0.2, 'rgba(0,0,0,0.18)');
+        edgeShadowTop.addColorStop(0.5, 'rgba(0,0,0,0.06)');
         edgeShadowTop.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeShadowTop;
-        offCtx.fillRect(PX + 8, PY + 6, PLAY_W - 16, 16);
+        offCtx.fillRect(PX + 8, PY + 6, PLAY_W - 16, 22);
 
-        const edgeShadowBot = offCtx.createLinearGradient(PX, 400 - PY - 6, PX, 400 - PY - 22);
+        const edgeShadowBot = offCtx.createLinearGradient(PX, 400 - PY - 6, PX, 400 - PY - 28);
         edgeShadowBot.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowBot.addColorStop(0.2, 'rgba(0,0,0,0.30)');
+        edgeShadowBot.addColorStop(0.5, 'rgba(0,0,0,0.10)');
         edgeShadowBot.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeShadowBot;
-        offCtx.fillRect(PX + 8, 400 - PY - 22, PLAY_W - 16, 16);
+        offCtx.fillRect(PX + 8, 400 - PY - 28, PLAY_W - 16, 22);
 
-        const edgeShadowL = offCtx.createLinearGradient(PX + 6, PY, PX + 22, PY);
+        const edgeShadowL = offCtx.createLinearGradient(PX + 6, PY, PX + 28, PY);
         edgeShadowL.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowL.addColorStop(0.2, 'rgba(0,0,0,0.30)');
+        edgeShadowL.addColorStop(0.5, 'rgba(0,0,0,0.10)');
         edgeShadowL.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeShadowL;
-        offCtx.fillRect(PX + 6, PY + 8, 16, PLAY_H - 16);
+        offCtx.fillRect(PX + 6, PY + 8, 22, PLAY_H - 16);
 
-        const edgeShadowR = offCtx.createLinearGradient(800 - PX - 6, PY, 800 - PX - 22, PY);
+        const edgeShadowR = offCtx.createLinearGradient(800 - PX - 6, PY, 800 - PX - 28, PY);
         edgeShadowR.addColorStop(0, 'rgba(0,0,0,0.55)');
+        edgeShadowR.addColorStop(0.2, 'rgba(0,0,0,0.30)');
+        edgeShadowR.addColorStop(0.5, 'rgba(0,0,0,0.10)');
         edgeShadowR.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeShadowR;
-        offCtx.fillRect(800 - PX - 22, PY + 8, 16, PLAY_H - 16);
+        offCtx.fillRect(800 - PX - 28, PY + 8, 22, PLAY_H - 16);
 
         // Head string & foot spot marks
         offCtx.strokeStyle = 'rgba(255,255,255,0.06)';
@@ -591,25 +600,31 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           offCtx.fillStyle = 'rgba(0,0,0,0.85)';
           offCtx.fill();
 
-          // Brass pocket rim (rich metallic ring)
+          // Brass pocket rim (rich metallic ring) - enhanced 3D depth
           const rimGrad = offCtx.createRadialGradient(p.x, p.y, s(21), p.x, p.y, s(27));
-          rimGrad.addColorStop(0, '#3a1a08');
+          rimGrad.addColorStop(0, '#2a1005');
+          rimGrad.addColorStop(0.10, '#4a2510');
           rimGrad.addColorStop(0.25, '#a07020');
-          rimGrad.addColorStop(0.5, '#f5d97a');
-          rimGrad.addColorStop(0.75, '#c9952e');
-          rimGrad.addColorStop(1, '#4a2008');
+          rimGrad.addColorStop(0.40, '#e8c550');
+          rimGrad.addColorStop(0.55, '#f5d97a');
+          rimGrad.addColorStop(0.70, '#d4a030');
+          rimGrad.addColorStop(0.85, '#8a6018');
+          rimGrad.addColorStop(1, '#3a1808');
+          rimGrad.addColorStop(1, '#3a1808');
           offCtx.beginPath();
           offCtx.arc(p.x, p.y, s(27), 0, Math.PI * 2);
           offCtx.strokeStyle = rimGrad;
-          offCtx.lineWidth = 3.5;
+          offCtx.lineWidth = 3.8;
           offCtx.stroke();
 
-          // Pocket inner darkness (deep void)
+          // Pocket inner darkness (deep void) - smoother depth
           const voidGrad = offCtx.createRadialGradient(p.x, p.y, 1, p.x, p.y, s(20));
           voidGrad.addColorStop(0, '#000000');
-          voidGrad.addColorStop(0.4, '#000002');
-          voidGrad.addColorStop(0.7, '#050810');
-          voidGrad.addColorStop(1, 'rgba(0,0,0,0.95)');
+          voidGrad.addColorStop(0.15, '#000001');
+          voidGrad.addColorStop(0.35, '#020408');
+          voidGrad.addColorStop(0.60, '#050810');
+          voidGrad.addColorStop(0.85, '#080c18');
+          voidGrad.addColorStop(1, 'rgba(5,8,16,0.92)');
           offCtx.beginPath();
           offCtx.arc(p.x, p.y, s(20), 0, Math.PI * 2);
           offCtx.fillStyle = voidGrad;
@@ -641,11 +656,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           offCtx.fill();
           offCtx.restore();
 
-          // Pocket rim highlight (inner bevel - brighter)
+          // Pocket rim highlight (inner bevel - subtle metallic gleam)
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 22, p.ang - 0.5, p.ang + 0.5);
-          offCtx.strokeStyle = 'rgba(255,230,170,0.45)';
-          offCtx.lineWidth = 2;
+          offCtx.arc(p.x, p.y, 22, p.ang - 0.6, p.ang + 0.6);
+          offCtx.strokeStyle = 'rgba(255,230,170,0.35)';
+          offCtx.lineWidth = 1.8;
           offCtx.stroke();
 
           // Screws on rim (brighter brass)
@@ -873,37 +888,54 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             : b.y;
         const ballRadius = b.radius || 10;
 
-        // Dynamic Lighting
+        // Dynamic Lighting: light direction varies by ball position
+        // Overhead lights at table center produce different look across the felt
+        const tableCenterX = 400, tableCenterY = 200;
+        const dxCenter = (px - tableCenterX) / 400;
+        const dyCenter = (py - tableCenterY) / 200;
+        const distFromCenter = Math.sqrt(dxCenter * dxCenter + dyCenter * dyCenter);
+        // Balls near edges get more grazing light
+        const edgeFactor = Math.min(1, distFromCenter * 0.8);
         const baseLightDir = -0.7;
-        const lightDir = baseLightDir;
+        // Tilt light direction toward center for balls near edges
+        const posAngle = Math.atan2(py - tableCenterY, px - tableCenterX);
+        const lightTilt = edgeFactor * 0.25 * Math.sin(posAngle);
+        const lightDir = baseLightDir + lightTilt;
         const lightDist = 6;
         const shadowOffX = Math.cos(lightDir) * lightDist;
         const shadowOffY = Math.sin(lightDir) * lightDist + 3;
+        // Specular position shifts per ball
+        const specOffX = -0.40 + dxCenter * 0.12;
+        const specOffY = -0.38 + dyCenter * 0.10;
 
         const castShadow = ctx2d.createRadialGradient(
           px + shadowOffX + 2, py + shadowOffY + 2, 0,
           px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 2.0
         );
-        castShadow.addColorStop(0, 'rgba(0, 0, 0, 0.40)');
-        castShadow.addColorStop(0.12, 'rgba(0, 0, 0, 0.25)');
-        castShadow.addColorStop(0.4, 'rgba(0, 0, 0, 0.08)');
+        // Softer shadows at edges, sharper near center
+        const shadowDensity = 0.32 + (1 - edgeFactor) * 0.12;
+        castShadow.addColorStop(0, `rgba(0, 0, 0, ${shadowDensity + 0.08})`);
+        castShadow.addColorStop(0.08, `rgba(0, 0, 0, ${shadowDensity * 0.65})`);
+        castShadow.addColorStop(0.25, `rgba(0, 0, 0, ${shadowDensity * 0.25})`);
+        castShadow.addColorStop(0.5, `rgba(0, 0, 0, ${shadowDensity * 0.06})`);
         castShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
-        ctx2d.ellipse(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 1.8, ballRadius * 1.2, lightDir, 0, Math.PI * 2);
+        ctx2d.ellipse(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * (1.8 + edgeFactor * 0.4), ballRadius * (1.2 + edgeFactor * 0.3), lightDir + edgeFactor * 0.15, 0, Math.PI * 2);
         ctx2d.fillStyle = castShadow;
         ctx2d.fill();
 
-        // Ambient soft shadow (contact shadow - darker, tighter)
+        // Ambient soft shadow (contact shadow - tighter, position-aware)
+        const contactDensity = 0.38 + (1 - edgeFactor) * 0.12;
         const contactShadow = ctx2d.createRadialGradient(
-          px + 1, py + 3, 0,
+          px + 1, py + 2, 0,
           px + 1, py + 3, ballRadius * 1.3
         );
-        contactShadow.addColorStop(0, 'rgba(0, 0, 0, 0.45)');
-        contactShadow.addColorStop(0.25, 'rgba(0, 0, 0, 0.20)');
-        contactShadow.addColorStop(0.6, 'rgba(0, 0, 0, 0.05)');
+        contactShadow.addColorStop(0, `rgba(0, 0, 0, ${contactDensity})`);
+        contactShadow.addColorStop(0.15, `rgba(0, 0, 0, ${contactDensity * 0.50})`);
+        contactShadow.addColorStop(0.4, `rgba(0, 0, 0, ${contactDensity * 0.12})`);
         contactShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
-        ctx2d.ellipse(px + 1, py + 3, ballRadius * 1.1, ballRadius * 0.85, lightDir, 0, Math.PI * 2);
+        ctx2d.ellipse(px + 1, py + 2, ballRadius * (1.05 + edgeFactor * 0.08), ballRadius * (0.82 + edgeFactor * 0.06), lightDir + edgeFactor * 0.1, 0, Math.PI * 2);
         ctx2d.fillStyle = contactShadow;
         ctx2d.fill();
 
@@ -1138,19 +1170,20 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           // Stripe band - use uy as the stripe axis
           // Project uy to screen space to determine stripe orientation
           const syx = uy[0], syy = uy[1], syz = uy[2];
-          const stripeView = Math.abs(syz);
+          const stripeDot = Math.abs(syz);
           
-          // The stripe is a band around the equator (perpendicular to uy)
-          // Calculate visible stripe band properties
-          const beltVisible = 0.1 + 0.55 * stripeView;
+          // Improved 3D spherical stripe projection
+          // The stripe band wraps around the equator perpendicular to uy
+          const beltVisible = 0.08 + 0.58 * stripeDot;
           const minorR = ballRadius * beltVisible;
+          const majorR = ballRadius * (1.0 - 0.04 * (1 - stripeDot));
           // Rotation angle of the stripe in screen space
           const stripeAngle = Math.atan2(syy, syx);
           
-          // Draw shadow/glow behind stripe
-          ctx2d.fillStyle = 'rgba(0,0,0,0.15)';
+          // Draw shadow/glow behind stripe (deeper shadow)
+          ctx2d.fillStyle = 'rgba(0,0,0,0.18)';
           ctx2d.beginPath();
-          ctx2d.ellipse(px + 0.5, py + 0.5, ballRadius + 1, minorR + stripeView * 1.8, stripeAngle, 0, Math.PI * 2);
+          ctx2d.ellipse(px + 0.8, py + 0.8, majorR + 1, minorR + stripeDot * 2.0 + 0.5, stripeAngle, 0, Math.PI * 2);
           ctx2d.fill();
           
           // Main colored stripe band
@@ -1159,38 +1192,41 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           const colDark = darkenColor(b.color, 35);
           
           const beltGrad = ctx2d.createLinearGradient(
-            px - Math.cos(stripeAngle) * ballRadius,
-            py - Math.sin(stripeAngle) * ballRadius,
-            px + Math.cos(stripeAngle) * ballRadius,
-            py + Math.sin(stripeAngle) * ballRadius
+            px - Math.cos(stripeAngle) * majorR,
+            py - Math.sin(stripeAngle) * majorR,
+            px + Math.cos(stripeAngle) * majorR,
+            py + Math.sin(stripeAngle) * majorR
           );
           beltGrad.addColorStop(0, colLight);
-          beltGrad.addColorStop(0.15, colMid);
+          beltGrad.addColorStop(0.08, colLight);
+          beltGrad.addColorStop(0.2, colMid);
           beltGrad.addColorStop(0.5, colMid);
-          beltGrad.addColorStop(0.85, colDark);
-          beltGrad.addColorStop(1, darkenColor(b.color, 50));
+          beltGrad.addColorStop(0.8, colDark);
+          beltGrad.addColorStop(0.92, darkenColor(b.color, 45));
+          beltGrad.addColorStop(1, darkenColor(b.color, 55));
           
           ctx2d.fillStyle = beltGrad;
           ctx2d.beginPath();
-          ctx2d.ellipse(px, py, ballRadius, minorR, stripeAngle, 0, Math.PI * 2);
+          ctx2d.ellipse(px, py, majorR, minorR, stripeAngle, 0, Math.PI * 2);
           ctx2d.fill();
           
-          // Stripe edge curvature - add spherical cap effect
-          // Darken stripe edges along the long axis
+          // Stripe edge curvature - spherical cap shading (smoother falloff)
           const edgeShade = ctx2d.createLinearGradient(
-            px - Math.cos(stripeAngle) * ballRadius * 0.9,
-            py - Math.sin(stripeAngle) * ballRadius * 0.9,
-            px + Math.cos(stripeAngle) * ballRadius * 0.9,
-            py + Math.sin(stripeAngle) * ballRadius * 0.9
+            px - Math.cos(stripeAngle) * majorR * 0.92,
+            py - Math.sin(stripeAngle) * majorR * 0.92,
+            px + Math.cos(stripeAngle) * majorR * 0.92,
+            py + Math.sin(stripeAngle) * majorR * 0.92
           );
-          edgeShade.addColorStop(0, 'rgba(0,0,0,0.3)');
-          edgeShade.addColorStop(0.15, 'rgba(0,0,0,0)');
+          edgeShade.addColorStop(0, 'rgba(0,0,0,0.35)');
+          edgeShade.addColorStop(0.10, 'rgba(0,0,0,0.08)');
+          edgeShade.addColorStop(0.25, 'rgba(0,0,0,0)');
           edgeShade.addColorStop(0.5, 'rgba(0,0,0,0)');
-          edgeShade.addColorStop(0.85, 'rgba(0,0,0,0)');
-          edgeShade.addColorStop(1, 'rgba(0,0,0,0.35)');
+          edgeShade.addColorStop(0.75, 'rgba(0,0,0,0)');
+          edgeShade.addColorStop(0.90, 'rgba(0,0,0,0.08)');
+          edgeShade.addColorStop(1, 'rgba(0,0,0,0.40)');
           ctx2d.fillStyle = edgeShade;
           ctx2d.beginPath();
-          ctx2d.ellipse(px, py, ballRadius * 1.02, minorR + 1, stripeAngle, 0, Math.PI * 2);
+          ctx2d.ellipse(px, py, majorR * 1.02, minorR + 1.2, stripeAngle, 0, Math.PI * 2);
           ctx2d.fill();
 
           // Subsurface glow
@@ -1225,28 +1261,30 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
           // Main color gradient with rich 3D shading
           const solidGrad = ctx2d.createRadialGradient(
-            px - ballRadius * 0.35,
-            py - ballRadius * 0.35,
+            px - ballRadius * (0.35 + dxCenter * 0.06),
+            py - ballRadius * (0.35 + dyCenter * 0.05),
             0,
-            px + ballRadius * 0.1,
-            py + ballRadius * 0.1,
+            px + ballRadius * (0.1 + dxCenter * 0.04),
+            py + ballRadius * (0.1 + dyCenter * 0.03),
             ballRadius * 1.3
           );
           if (isBlack) {
             solidGrad.addColorStop(0, '#3a3a3a');
-            solidGrad.addColorStop(0.15, '#222222');
-            solidGrad.addColorStop(0.4, '#151515');
-            solidGrad.addColorStop(0.7, '#0a0a0a');
+            solidGrad.addColorStop(0.10, '#282828');
+            solidGrad.addColorStop(0.30, '#1a1a1a');
+            solidGrad.addColorStop(0.55, '#0e0e0e');
+            solidGrad.addColorStop(0.80, '#060606');
             solidGrad.addColorStop(1, '#000000');
           } else {
-            const brightColor = lightenColor(c, 40);
+            const brightColor = lightenColor(c, 42);
             const midColor = c;
             const darkColor = darkenColor(c, 35);
             solidGrad.addColorStop(0, brightColor);
-            solidGrad.addColorStop(0.12, midColor);
-            solidGrad.addColorStop(0.45, midColor);
-            solidGrad.addColorStop(0.7, darkColor);
-            solidGrad.addColorStop(0.88, '#111111');
+            solidGrad.addColorStop(0.10, midColor);
+            solidGrad.addColorStop(0.35, midColor);
+            solidGrad.addColorStop(0.60, darkColor);
+            solidGrad.addColorStop(0.82, darkenColor(c, 50));
+            solidGrad.addColorStop(0.95, '#0a0a0a');
             solidGrad.addColorStop(1, '#000000');
           }
           ctx2d.fillStyle = solidGrad;
@@ -1304,25 +1342,27 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fillStyle = tableReflect;
         ctx2d.fill();
 
-        // Fresnel edge glow (rim light)
+        // Fresnel edge glow (rim light) - stronger at glancing angles
         const fresnelGrad = ctx2d.createRadialGradient(
           px, py, 0,
           px, py, ballRadius
         );
         fresnelGrad.addColorStop(0, 'rgba(255,255,255,0)');
-        fresnelGrad.addColorStop(0.6, 'rgba(255,255,255,0)');
-        fresnelGrad.addColorStop(0.82, 'rgba(255,255,255,0.03)');
-        fresnelGrad.addColorStop(0.93, 'rgba(255,255,255,0.10)');
-        fresnelGrad.addColorStop(1, 'rgba(255,255,255,0.22)');
+        fresnelGrad.addColorStop(0.55, 'rgba(255,255,255,0)');
+        fresnelGrad.addColorStop(0.78, 'rgba(255,255,255,0.02)');
+        fresnelGrad.addColorStop(0.88, 'rgba(255,255,255,0.07)');
+        fresnelGrad.addColorStop(0.95, 'rgba(255,255,255,0.14)');
+        fresnelGrad.addColorStop(1, 'rgba(255,255,255,0.28)');
         ctx2d.fillStyle = fresnelGrad;
         ctx2d.fill();
 
-        // Bottom rim light (bounce light from table)
+        // Bottom rim light (bounce light from table) - stronger near center
+        const bounceIntensity = 0.06 + (1 - edgeFactor) * 0.04;
         const rimLight = ctx2d.createRadialGradient(
           px, py + ballRadius * 0.6, 0,
           px, py + ballRadius * 0.4, ballRadius * 0.6
         );
-        rimLight.addColorStop(0, 'rgba(80,180,140,0.08)');
+        rimLight.addColorStop(0, `rgba(80,180,140,${bounceIntensity})`);
         rimLight.addColorStop(1, 'rgba(0,0,0,0)');
         ctx2d.fillStyle = rimLight;
         ctx2d.beginPath();
@@ -1331,21 +1371,22 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
         ctx2d.restore();
 
-        // Primary specular highlight (sharp, high-gloss)
+        // Primary specular highlight (sharp, high-gloss, position-aware)
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         const specGrad = ctx2d.createRadialGradient(
-          px - ballRadius * 0.40,
-          py - ballRadius * 0.38,
+          px + specOffX * ballRadius,
+          py + specOffY * ballRadius,
           0,
-          px - ballRadius * 0.22,
-          py - ballRadius * 0.20,
+          px + (specOffX + 0.18) * ballRadius,
+          py + (specOffY + 0.18) * ballRadius,
           ballRadius * 0.32
         );
         specGrad.addColorStop(0, 'rgba(255,255,255,1.0)');
-        specGrad.addColorStop(0.05, 'rgba(255,255,255,0.85)');
-        specGrad.addColorStop(0.12, 'rgba(255,255,255,0.30)');
-        specGrad.addColorStop(0.25, 'rgba(255,255,255,0.08)');
+        specGrad.addColorStop(0.04, 'rgba(255,255,255,0.90)');
+        specGrad.addColorStop(0.10, 'rgba(255,255,255,0.35)');
+        specGrad.addColorStop(0.20, 'rgba(255,255,255,0.10)');
+        specGrad.addColorStop(0.35, 'rgba(255,255,255,0.02)');
         specGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1353,20 +1394,21 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fill();
         ctx2d.restore();
 
-        // Secondary soft highlight (wider spread, glossy sheen)
+        // Secondary soft highlight (wider spread, glossy sheen, position-aware)
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         const softSpecGrad = ctx2d.createRadialGradient(
-          px - ballRadius * 0.32,
-          py - ballRadius * 0.32,
+          px + specOffX * ballRadius * 0.85,
+          py + specOffY * ballRadius * 0.85,
           0,
-          px,
-          py,
+          px + specOffX * ballRadius * 0.1,
+          py + specOffY * ballRadius * 0.1,
           ballRadius * 0.85
         );
-        softSpecGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
-        softSpecGrad.addColorStop(0.2, 'rgba(255,255,255,0.10)');
-        softSpecGrad.addColorStop(0.5, 'rgba(255,255,255,0.03)');
+        softSpecGrad.addColorStop(0, 'rgba(255,255,255,0.28)');
+        softSpecGrad.addColorStop(0.15, 'rgba(255,255,255,0.12)');
+        softSpecGrad.addColorStop(0.35, 'rgba(255,255,255,0.04)');
+        softSpecGrad.addColorStop(0.6, 'rgba(255,255,255,0.01)');
         softSpecGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1375,28 +1417,35 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.restore();
 
         // Environment reflection (simulated room with warm ceiling and cool windows)
+        // Position-aware: balls near edges see more of the room
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
-        // Room ceiling light panel reflection (top area)
+        const envIntensity = 0.18 + edgeFactor * 0.06;
+        // Room ceiling light panel reflection (top area) - brighter near center
         const ceilingRefl = ctx2d.createRadialGradient(
-          px - ballRadius * 0.05, py - ballRadius * 0.45, 0,
-          px - ballRadius * 0.05, py - ballRadius * 0.35, ballRadius * 0.35
+          px + dxCenter * 0.5, py - ballRadius * (0.45 - dyCenter * 0.1), 0,
+          px + dxCenter * 0.3, py - ballRadius * (0.35 - dyCenter * 0.08), ballRadius * (0.35 + edgeFactor * 0.08)
         );
-        ceilingRefl.addColorStop(0, 'rgba(255,245,220,0.18)');
-        ceilingRefl.addColorStop(0.4, 'rgba(255,235,200,0.08)');
+        ceilingRefl.addColorStop(0, `rgba(255,245,220,${envIntensity})`);
+        ceilingRefl.addColorStop(0.35, `rgba(255,235,200,${envIntensity * 0.45})`);
         ceilingRefl.addColorStop(1, 'rgba(200,200,180,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
         ctx2d.fillStyle = ceilingRefl;
         ctx2d.fill();
 
-        // Cool window reflection (left side)
+        // Cool window reflection (left/right side based on position)
+        const winSide = px < tableCenterX ? -1 : 1;
         const windowRefl = ctx2d.createRadialGradient(
-          px - ballRadius * 0.45, py - ballRadius * 0.15, 0,
-          px - ballRadius * 0.25, py - ballRadius * 0.05, ballRadius * 0.3
+          px + winSide * ballRadius * (0.42 + edgeFactor * 0.05),
+          py - ballRadius * (0.12 - dyCenter * 0.04),
+          0,
+          px + winSide * ballRadius * (0.22 + edgeFactor * 0.03),
+          py - ballRadius * (0.04 - dyCenter * 0.02),
+          ballRadius * (0.28 + edgeFactor * 0.06)
         );
-        windowRefl.addColorStop(0, 'rgba(180,210,255,0.12)');
-        windowRefl.addColorStop(0.5, 'rgba(160,200,240,0.04)');
+        windowRefl.addColorStop(0, `rgba(180,210,255,${0.12 + edgeFactor * 0.04})`);
+        windowRefl.addColorStop(0.4, `rgba(160,200,240,${0.04 + edgeFactor * 0.02})`);
         windowRefl.addColorStop(1, 'rgba(100,150,200,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1404,18 +1453,16 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fill();
         ctx2d.restore();
 
-        // Warm caustic highlight
+        // Warm caustic highlight - position-aware
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         const warmGrad = ctx2d.createRadialGradient(
-          px - ballRadius * 0.1,
-          py - ballRadius * 0.5,
+          px + dxCenter * 0.3, py - ballRadius * (0.50 - dyCenter * 0.08),
           0,
-          px - ballRadius * 0.05,
-          py - ballRadius * 0.3,
-          ballRadius * 0.22
+          px + dxCenter * 0.15, py - ballRadius * (0.30 - dyCenter * 0.05),
+          ballRadius * (0.20 + edgeFactor * 0.04)
         );
-        warmGrad.addColorStop(0, 'rgba(255,230,190,0.08)');
+        warmGrad.addColorStop(0, `rgba(255,230,190,${0.08 + edgeFactor * 0.03})`);
         warmGrad.addColorStop(1, 'rgba(255,210,160,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
