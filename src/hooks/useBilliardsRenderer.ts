@@ -897,47 +897,14 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const distFromCenter = Math.sqrt(dxCenter * dxCenter + dyCenter * dyCenter);
         // Balls near edges get more grazing light
         const edgeFactor = Math.min(1, distFromCenter * 0.8);
-        const baseLightDir = -0.7;
-        // Tilt light direction toward center for balls near edges
-        const posAngle = Math.atan2(py - tableCenterY, px - tableCenterX);
-        const lightTilt = edgeFactor * 0.25 * Math.sin(posAngle);
-        const lightDir = baseLightDir + lightTilt;
-        const lightDist = 6;
-        const shadowOffX = Math.cos(lightDir) * lightDist;
-        const shadowOffY = Math.sin(lightDir) * lightDist + 3;
         // Specular position shifts per ball
         const specOffX = -0.40 + dxCenter * 0.12;
         const specOffY = -0.38 + dyCenter * 0.10;
 
-        const castShadow = ctx2d.createRadialGradient(
-          px + shadowOffX + 2, py + shadowOffY + 2, 0,
-          px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 2.0
-        );
-        // Softer shadows at edges, sharper near center
-        const shadowDensity = 0.32 + (1 - edgeFactor) * 0.12;
-        castShadow.addColorStop(0, `rgba(0, 0, 0, ${shadowDensity + 0.08})`);
-        castShadow.addColorStop(0.08, `rgba(0, 0, 0, ${shadowDensity * 0.65})`);
-        castShadow.addColorStop(0.25, `rgba(0, 0, 0, ${shadowDensity * 0.25})`);
-        castShadow.addColorStop(0.5, `rgba(0, 0, 0, ${shadowDensity * 0.06})`);
-        castShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        // Minimal ground contact dot (keeps balls from floating)
         ctx2d.beginPath();
-        ctx2d.ellipse(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * (1.8 + edgeFactor * 0.4), ballRadius * (1.2 + edgeFactor * 0.3), lightDir + edgeFactor * 0.15, 0, Math.PI * 2);
-        ctx2d.fillStyle = castShadow;
-        ctx2d.fill();
-
-        // Ambient soft shadow (contact shadow - tighter, position-aware)
-        const contactDensity = 0.38 + (1 - edgeFactor) * 0.12;
-        const contactShadow = ctx2d.createRadialGradient(
-          px + 1, py + 2, 0,
-          px + 1, py + 3, ballRadius * 1.3
-        );
-        contactShadow.addColorStop(0, `rgba(0, 0, 0, ${contactDensity})`);
-        contactShadow.addColorStop(0.15, `rgba(0, 0, 0, ${contactDensity * 0.50})`);
-        contactShadow.addColorStop(0.4, `rgba(0, 0, 0, ${contactDensity * 0.12})`);
-        contactShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        ctx2d.beginPath();
-        ctx2d.ellipse(px + 1, py + 2, ballRadius * (1.05 + edgeFactor * 0.08), ballRadius * (0.82 + edgeFactor * 0.06), lightDir + edgeFactor * 0.1, 0, Math.PI * 2);
-        ctx2d.fillStyle = contactShadow;
+        ctx2d.ellipse(px + 1, py + 3, ballRadius * 0.35, ballRadius * 0.18, 0, 0, Math.PI * 2);
+        ctx2d.fillStyle = 'rgba(0, 0, 0, 0.08)';
         ctx2d.fill();
 
         const isTarget = eligibleIds.includes(b.id);
@@ -1800,76 +1767,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               drawArrowhead(ctx2d, contactX, contactY, Math.atan2(aimDy, aimDx), 5, mainLaserColor);
 
 
-            }
-
-            if (Math.abs(activeSpinX) > 0.05 || Math.abs(activeSpinY) > 0.05) {
-              const isMobile = ctx.isMobileRef.current;
-              const SIR = isMobile ? 36 : 28;
-              const siCX = isMobile ? 56 : 760;
-              const siCY = isMobile ? 56 : 50;
-              const spinLen = Math.sqrt(activeSpinX * activeSpinX + activeSpinY * activeSpinY);
-
-              ctx2d.save();
-
-              ctx2d.fillStyle = 'rgba(0,0,0,0.65)';
-              ctx2d.beginPath();
-              ctx2d.arc(siCX, siCY, SIR + 3, 0, Math.PI * 2);
-              ctx2d.fill();
-
-              const ballGrad = ctx2d.createRadialGradient(siCX - 4, siCY - 4, 1, siCX, siCY, SIR);
-              ballGrad.addColorStop(0, '#ffffff');
-              ballGrad.addColorStop(0.5, '#f8f4ec');
-              ballGrad.addColorStop(0.85, '#e8dcc8');
-              ballGrad.addColorStop(1, '#c8b8a4');
-              ctx2d.fillStyle = ballGrad;
-              ctx2d.beginPath();
-              ctx2d.arc(siCX, siCY, SIR, 0, Math.PI * 2);
-              ctx2d.fill();
-
-              ctx2d.strokeStyle = 'rgba(100,100,100,0.25)';
-              ctx2d.lineWidth = 0.5;
-              ctx2d.beginPath();
-              ctx2d.moveTo(siCX - SIR + 4, siCY); ctx2d.lineTo(siCX + SIR - 4, siCY);
-              ctx2d.moveTo(siCX, siCY - SIR + 4); ctx2d.lineTo(siCX, siCY + SIR - 4);
-              ctx2d.stroke();
-
-              const dotRadius = 4;
-              const maxDist = SIR - dotRadius - 2;
-              let dx = -activeSpinX * 30;
-              let dy = -activeSpinY * 30;
-              const dLen = Math.sqrt(dx * dx + dy * dy);
-              if (dLen > maxDist) { dx = (dx / dLen) * maxDist; dy = (dy / dLen) * maxDist; }
-
-              ctx2d.beginPath();
-              ctx2d.arc(siCX + dx, siCY + dy, dotRadius + 3, 0, Math.PI * 2);
-              ctx2d.fillStyle = 'rgba(239, 68, 68, 0.2)';
-              ctx2d.fill();
-
-              ctx2d.beginPath();
-              ctx2d.arc(siCX + dx, siCY + dy, dotRadius, 0, Math.PI * 2);
-              ctx2d.fillStyle = '#ef4444';
-              ctx2d.fill();
-
-              ctx2d.beginPath();
-              ctx2d.arc(siCX + dx - 1, siCY + dy - 1, 1.5, 0, Math.PI * 2);
-              ctx2d.fillStyle = 'rgba(255,255,255,0.4)';
-              ctx2d.fill();
-
-              ctx2d.font = '500 7px sans-serif';
-              ctx2d.fillStyle = 'rgba(255,255,255,0.5)';
-              ctx2d.textAlign = 'center';
-              let label = 'CENTER';
-              if (activeSpinY > 0.05 && activeSpinX > 0.05) label = 'FOL+R';
-              else if (activeSpinY > 0.05 && activeSpinX < -0.05) label = 'FOL+L';
-              else if (activeSpinY < -0.05 && activeSpinX > 0.05) label = 'DRAW+R';
-              else if (activeSpinY < -0.05 && activeSpinX < -0.05) label = 'DRAW+L';
-              else if (activeSpinY > 0.05) label = 'FOLLOW';
-              else if (activeSpinY < -0.05) label = 'DRAW';
-              else if (activeSpinX > 0.05) label = 'R.ENG';
-              else if (activeSpinX < -0.05) label = 'L.ENG';
-              ctx2d.fillText(label, siCX, siCY + SIR + 10);
-
-              ctx2d.restore();
             }
 
             // PRO MODE: Guides are ALWAYS visible, fully detailed, and high contrast

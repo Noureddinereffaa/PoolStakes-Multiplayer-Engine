@@ -92,11 +92,10 @@ function BallIcon({ id, size = 20 }: { id: number; size?: number }) {
 function SpinControl({ spinX, spinY, onChange, disabled }: {
   spinX: number; spinY: number; onChange: (x: number, y: number) => void; disabled: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
   const padRef = useRef<HTMLDivElement>(null);
   const isMobile = window.innerWidth < 768;
-  const compactSize = isMobile ? 36 : 44;
-  const expandedSize = isMobile ? 180 : 150;
+  const padSize = isMobile ? 220 : 200;
 
   const spinLabel = () => {
     if (Math.abs(spinX) < 0.05 && Math.abs(spinY) < 0.05) return 'CENTER';
@@ -109,21 +108,7 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
     return 'CENTER';
   };
 
-  const handlePadDown = (e: React.PointerEvent) => {
-    if (disabled) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    updateSpinFromEvent(e);
-  };
-
-  const handlePadMove = (e: React.PointerEvent) => {
-    updateSpinFromEvent(e);
-  };
-
-  const handlePadUp = () => {
-    setExpanded(false);
-  };
-
-  const updateSpinFromEvent = (e: React.PointerEvent) => {
+  const updateFromEvent = (e: React.PointerEvent) => {
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -132,84 +117,133 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
     onChange(dist > 1 ? x / dist : x, dist > 1 ? y / dist : y);
   };
 
-  // Expanded overlay: fullscreen, touch = close, pad = spin
-  if (expanded) {
+  const handleDown = (e: React.PointerEvent) => {
+    if (disabled) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    updateFromEvent(e);
+  };
+
+  const handleMove = (e: React.PointerEvent) => {
+    updateFromEvent(e);
+  };
+
+  const handleUp = () => {
+    setOpen(false);
+  };
+
+  const hasSpin = Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05;
+
+  // Overlay
+  if (open) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-        onPointerDown={() => setExpanded(false)}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        onPointerDown={() => setOpen(false)}
       >
-        <div className="flex flex-col items-center gap-3"
+        <div className="flex flex-col items-center gap-4"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <span className="text-[10px] font-mono font-bold text-amber-400/70 tracking-widest">SPIN</span>
+          {/* Title */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-mono font-bold text-amber-400/80 tracking-[0.2em] uppercase">Cue Ball Spin</span>
+            {hasSpin && (
+              <button onClick={() => { onChange(0, 0); setOpen(false); }}
+                className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition"
+              >CENTER</button>
+            )}
+          </div>
+
+          {/* Spin pad */}
           <div
             ref={padRef}
-            onPointerDown={handlePadDown}
-            onPointerMove={handlePadMove}
-            onPointerUp={handlePadUp}
-            onPointerCancel={handlePadUp}
+            onPointerDown={handleDown}
+            onPointerMove={handleMove}
+            onPointerUp={handleUp}
+            onPointerCancel={handleUp}
             className="rounded-full cursor-crosshair select-none touch-none relative"
             style={{
-              width: expandedSize, height: expandedSize,
+              width: padSize, height: padSize,
               background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
-              boxShadow: 'inset -3px -4px 10px rgba(0,0,0,0.8), inset 3px 3px 8px rgba(245,158,11,0.15), 0 0 40px rgba(0,0,0,0.5), 0 0 0 2px rgba(217,119,6,0.3)',
+              boxShadow: 'inset -4px -5px 14px rgba(0,0,0,0.85), inset 4px 4px 10px rgba(245,158,11,0.12), 0 0 50px rgba(0,0,0,0.5), 0 0 0 2px rgba(217,119,6,0.25)',
               touchAction: 'none',
             }}
           >
+            {/* Crosshair lines */}
             <div className="absolute inset-[18%] flex items-center justify-center pointer-events-none">
-              <div className="w-full h-px bg-white/10" />
+              <div className="w-full h-px bg-white/8" />
             </div>
             <div className="absolute inset-[18%] flex items-center justify-center pointer-events-none">
-              <div className="h-full w-px bg-white/10" />
+              <div className="h-full w-px bg-white/8" />
             </div>
+
+            {/* Direction labels */}
+            <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[7px] font-mono text-white/20 pointer-events-none">FOLLOW</span>
+            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[7px] font-mono text-white/20 pointer-events-none">DRAW</span>
+            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[7px] font-mono text-white/20 pointer-events-none">LEFT</span>
+            <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[7px] font-mono text-white/20 pointer-events-none">RIGHT</span>
+
+            {/* Spin indicator — inner cue ball with red contact dot */}
             <div className="absolute pointer-events-none"
               style={{
-                left: `calc(50% + ${spinX * (expandedSize / 2 - 12)}px)`,
-                top: `calc(50% + ${-spinY * (expandedSize / 2 - 12)}px)`,
-                width: 16, height: 16,
+                left: `calc(50% + ${spinX * (padSize / 2 - 14)}px)`,
+                top: `calc(50% + ${-spinY * (padSize / 2 - 14)}px)`,
+                width: 20, height: 20,
                 transform: 'translate(-50%, -50%)',
-                background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
-                boxShadow: '0 0 12px #f59e0b, 0 0 30px rgba(245,158,11,0.3)',
-                borderRadius: '50%',
-                border: '2px solid rgba(255,255,200,0.4)',
               }}
-            />
+            >
+              <div className="w-full h-full rounded-full"
+                style={{
+                  background: 'radial-gradient(circle at 30% 30%, #ffffff, #f0e8dc 60%, #d4c8b4)',
+                  boxShadow: '0 0 10px rgba(245,158,11,0.4), inset -1px -1px 3px rgba(0,0,0,0.3)',
+                }}
+              />
+              <div className="absolute rounded-full"
+                style={{
+                  width: 6, height: 6,
+                  left: '50%', top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'radial-gradient(circle at 35% 35%, #ef4444, #b91c1c)',
+                  boxShadow: '0 0 6px rgba(239,68,68,0.6)',
+                }}
+              />
+            </div>
           </div>
-          <span className="text-[11px] font-mono font-bold text-amber-500">{spinLabel()}</span>
+
+          {/* Label */}
+          <span className="text-sm font-mono font-bold text-amber-500 min-h-[1.2em]">{spinLabel()}</span>
         </div>
       </div>
     );
   }
 
-  // Compact view: tap to open expanded overlay
+  // Closed — small toggle button
   return (
-    <div
-      onPointerDown={() => { if (!disabled) setExpanded(true); }}
-      className="relative rounded-full cursor-pointer select-none touch-none"
+    <button
+      onClick={() => { if (!disabled) setOpen(true); }}
+      disabled={disabled}
+      className="rounded-full flex items-center justify-center cursor-pointer select-none touch-none transition hover:scale-110 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
       style={{
-        width: compactSize, height: compactSize,
-        background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
-        boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.7), inset 2px 2px 5px rgba(245,158,11,0.15), 0 0 15px rgba(0,0,0,0.4), 0 0 0 1px rgba(217,119,6,0.2)',
-        touchAction: 'none',
+        width: 32, height: 32,
+        background: hasSpin
+          ? 'radial-gradient(circle at 40% 35%, #92400e, #78350f 60%, #451a03)'
+          : 'radial-gradient(circle at 40% 35%, #292524, #1c1917 60%, #0a0a0a)',
+        boxShadow: hasSpin
+          ? '0 0 12px rgba(245,158,11,0.25), inset 0 1px 0 rgba(255,255,255,0.06)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.05)',
       }}
+      title="Adjust spin"
     >
-      <div className="absolute rounded-full pointer-events-none"
-        style={{
-          width: 8, height: 8,
-          left: `calc(50% + ${spinX * (compactSize / 2 - 8)}px)`,
-          top: `calc(50% + ${-spinY * (compactSize / 2 - 8)}px)`,
-          transform: 'translate(-50%, -50%)',
-          background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
-          boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3)',
-          border: '1px solid rgba(255,255,200,0.3)',
-        }}
-      />
-      {(Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05) && (
-        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[6px] text-amber-500/60 font-mono pointer-events-none whitespace-nowrap">
-          {spinLabel()}
-        </div>
+      {hasSpin ? (
+        <div className="rounded-full"
+          style={{
+            width: 8, height: 8,
+            background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
+            boxShadow: '0 0 6px rgba(245,158,11,0.5)',
+          }}
+        />
+      ) : (
+        <span className="text-[10px] font-mono font-bold text-white/40">S</span>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -753,29 +787,37 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Power Slider: simple ladder, drag down, release to shoot ─── */
+/* ─── Mobile Power Slider: clean track + handle, drag down to shoot ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const startYRef = useRef(0);
   const powerRef = useRef(0);
+  const trackRef = useRef<HTMLDivElement>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     startYRef.current = e.clientY;
-    powerRef.current = 0;
-    onPowerChange(0);
+    // Jump to position on tap
+    if (trackRef.current) {
+      const rect = trackRef.current.getBoundingClientRect();
+      const relY = e.clientY - rect.top;
+      const rawPct = Math.max(0, Math.min(100, (relY / rect.height) * 100));
+      const curved = Math.round(Math.pow(rawPct / 100, 0.85) * 100);
+      powerRef.current = curved;
+      onPowerChange(curved);
+    }
     setDragging(true);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragging) return;
-    const dy = Math.max(0, e.clientY - startYRef.current);
-    const maxDrag = 300;
-    const power = Math.min(100, Math.round((dy / maxDrag) * 100));
-    const curved = Math.round(Math.pow(power / 100, 0.85) * 100);
+    if (!dragging || !trackRef.current) return;
+    const rect = trackRef.current.getBoundingClientRect();
+    const relY = e.clientY - rect.top;
+    const rawPct = Math.max(0, Math.min(100, (relY / rect.height) * 100));
+    const curved = Math.round(Math.pow(rawPct / 100, 0.85) * 100);
     powerRef.current = curved;
     onPowerChange(curved);
   };
@@ -792,35 +834,71 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   };
 
   return (
-    <div className="absolute left-1 top-1/2 -translate-y-1/2 z-30 pointer-events-none select-none h-52">
+    <div className="absolute left-1 top-1/2 -translate-y-1/2 z-30 pointer-events-none select-none">
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className={`pointer-events-auto flex flex-col items-center h-full px-2 py-1 ${disabled ? 'opacity-15' : ''}`}
-        style={{ touchAction: 'none', width: 48 }}
+        className={`pointer-events-auto relative ${disabled ? 'opacity-20' : ''}`}
+        style={{ touchAction: 'none' }}
       >
-        {/* Ladder scale */}
-        <div className="relative flex-1 w-full flex flex-col justify-between py-1">
-          {[100, 75, 50, 25, 0].map((val) => (
-            <div key={val} className="flex items-center gap-1 pointer-events-none">
-              <div className={`h-px ${val <= shotPower ? 'bg-amber-400/60' : 'bg-white/8'}`} style={{ width: val <= shotPower ? 14 : 8 }} />
-              <span className={`font-mono font-bold ${val <= shotPower ? 'text-amber-400 text-[9px]' : 'text-white/15 text-[6px]'}`}
-                style={{ lineHeight: '10px' }}
-              >
-                {val > 0 ? val : ''}
-              </span>
+        {/* Solid background panel */}
+        <div className="rounded-xl bg-[#14100c] border border-[#2a1a0e]/60 px-3 py-3 flex flex-col items-center gap-1"
+          style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 4px 12px rgba(0,0,0,0.5)' }}
+        >
+          {/* Track */}
+          <div ref={trackRef} className="relative w-6 h-40 flex flex-col items-center">
+            {/* Track line */}
+            <div className="absolute inset-y-0 w-0.5 rounded-full bg-white/8" />
+
+            {/* Handle */}
+            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
+              style={{
+                top: `${100 - shotPower}%`,
+                marginTop: -7,
+              }}
+            >
+              <div className={`w-3.5 h-3.5 rounded-full border-2 ${
+                shotPower > 70
+                  ? 'bg-red-400 border-red-500'
+                  : shotPower > 30
+                  ? 'bg-amber-400 border-amber-500'
+                  : 'bg-emerald-400 border-emerald-500'
+              }`}
+                style={{
+                  boxShadow: shotPower > 0
+                    ? `0 0 6px ${
+                        shotPower > 70
+                          ? 'rgba(239,68,68,0.4)'
+                          : shotPower > 30
+                          ? 'rgba(245,158,11,0.4)'
+                          : 'rgba(52,211,153,0.4)'
+                      }`
+                    : 'none',
+                }}
+              />
             </div>
-          ))}
-          {/* Power fill indicator (no transition = instant) */}
-          <div
-            className="absolute left-0 bottom-0 w-full rounded-sm pointer-events-none"
-            style={{
-              height: `${shotPower}%`,
-              background: shotPower > 70 ? 'rgba(239,68,68,0.15)' : shotPower > 30 ? 'rgba(234,179,8,0.12)' : 'rgba(34,197,94,0.12)',
-            }}
-          />
+
+            {/* Tick marks (outside right edge) */}
+            <div className="absolute inset-y-0 -right-4 flex flex-col justify-between py-0.5 pointer-events-none">
+              {[100, 75, 50, 25, 0].map((val) => (
+                <div key={val} className="flex items-center gap-0.5">
+                  <div className={`h-px ${val <= shotPower ? 'bg-white/20 w-1.5' : 'bg-white/6 w-1'}`} />
+                  <span className={`font-mono font-bold leading-none ${
+                    val <= shotPower
+                      ? 'text-white/30 text-[6px]'
+                      : 'text-white/10 text-[5px]'
+                  }`}>
+                    {val > 0 ? val : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Label */}
+          <span className="text-[6px] font-mono font-bold text-white/20 tracking-widest uppercase">Power</span>
         </div>
       </div>
     </div>
