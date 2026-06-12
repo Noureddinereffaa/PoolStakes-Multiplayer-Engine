@@ -522,7 +522,7 @@ export default function ArenaPage({
 
       {/* Main - PoolTable fills everything */}
       <div className="flex-1 flex overflow-hidden">
-        <div className={`flex-1 relative ${showSidebar && isMobile ? 'hidden' : ''}`}>
+        <div className={`flex-1 relative flex items-center justify-center ${showSidebar && isMobile ? 'hidden' : ''} ${isMobile ? 'px-[80px] py-4' : ''}`}>
           <PoolTable ref={tableRef}
             roomState={roomState} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
             myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
