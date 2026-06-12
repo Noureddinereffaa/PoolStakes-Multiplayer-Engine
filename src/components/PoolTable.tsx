@@ -245,10 +245,10 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
-      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.2 : 1.95) : (isMobile.current ? 2.0 : 1.65);
+      const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.6 : 1.95) : (isMobile.current ? 2.4 : 1.65);
       let animationFrameId: number;
       const animStartTime = performance.now();
-      const STRIKE_ACCEL = isMobile.current ? 8 : 8;
+      const STRIKE_ACCEL = isMobile.current ? 4 : 8;
       const physicsStartTime = animStartTime + STRIKE_ACCEL;
       animatedBallsRef.current = initialBallsCopy.map(b => {
         const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);

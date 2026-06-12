@@ -739,8 +739,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx.offscreenCanvasRef.current = offCanvas;
     }
 
-    // Atmospheric dust specks (only on desktop — subtle ambient effect)
-    if (!ctx.isMobileRef.current && ctx.dustSpecksRef.current.length === 0) {
+    // Atmospheric dust specks (ambient effect)
+    if (ctx.dustSpecksRef.current.length === 0) {
       for (let i = 0; i < 15; i++) {
         ctx.dustSpecksRef.current.push({
           x: Math.random() * 760 + 20,
@@ -3661,8 +3661,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       {
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
-        ctx2d.globalAlpha = ctx.isMobileRef.current ? 0.03 : 0.06;
-        ctx2d.filter = ctx.isMobileRef.current ? 'blur(2px)' : 'blur(3px)';
+        ctx2d.globalAlpha = 0.06;
+        ctx2d.filter = 'blur(3px)';
         ctx2d.drawImage(canvas, 0, 0);
         ctx2d.filter = 'none';
         ctx2d.restore();
