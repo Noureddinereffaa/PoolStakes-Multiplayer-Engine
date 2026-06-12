@@ -143,7 +143,7 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
     const spd = Math.sqrt(spdSq);
 
     // Dead-ball stop
-    if (spd < 0.005) {
+    if (spd < 0.008) {
       b.vx = 0;
       b.vy = 0;
       continue;

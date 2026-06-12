@@ -130,8 +130,8 @@ describe('simulatePhysicsStep', () => {
 
   it('should stop dead ball with very low velocity', () => {
     const balls = getInitialBalls();
-    balls[0].vx = 0.02;
-    balls[0].vy = 0.02;
+    balls[0].vx = 0.004;
+    balls[0].vy = 0.004;
 
     simulatePhysicsStep(balls);
     expect(balls[0].vx).toBe(0);

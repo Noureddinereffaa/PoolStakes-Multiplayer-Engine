@@ -27,24 +27,74 @@ class SoundSynth {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(140, now);
-    osc.frequency.exponentialRampToValueAtTime(45, now + 0.1);
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(35, now + 0.15);
 
     const snap = ctx.createOscillator();
     const snapGain = ctx.createGain();
     snap.type = 'sine';
-    snap.frequency.setValueAtTime(1200, now);
-    snap.frequency.exponentialRampToValueAtTime(300, now + 0.02);
+    snap.frequency.setValueAtTime(1800, now);
+    snap.frequency.exponentialRampToValueAtTime(250, now + 0.025);
 
-    gain.gain.setValueAtTime(0.4 * vol, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-    snapGain.gain.setValueAtTime(0.6 * vol, now);
-    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+    const noise = ctx.createOscillator();
+    const noiseGain = ctx.createGain();
+    noise.type = 'sawtooth';
+    noise.frequency.setValueAtTime(3200, now);
+    noise.frequency.exponentialRampToValueAtTime(400, now + 0.01);
+
+    gain.gain.setValueAtTime(0.45 * vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    snapGain.gain.setValueAtTime(0.7 * vol, now);
+    snapGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+    noiseGain.gain.setValueAtTime(0.15 * vol, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.008);
 
     osc.connect(gain).connect(ctx.destination);
     snap.connect(snapGain).connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.15);
-    snap.start(now); snap.stop(now + 0.03);
+    noise.connect(noiseGain).connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.2);
+    snap.start(now); snap.stop(now + 0.035);
+    noise.start(now); noise.stop(now + 0.01);
+  }
+
+  public playBreakShot(powerPercent: number) {
+    if (this._muted) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const vol = Math.min(1, Math.max(0.15, powerPercent / 100)) * this._volume;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(20, now + 0.35);
+    gain.gain.setValueAtTime(0.5 * vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+
+    const crack = ctx.createOscillator();
+    const crackGain = ctx.createGain();
+    crack.type = 'triangle';
+    crack.frequency.setValueAtTime(2400, now);
+    crack.frequency.exponentialRampToValueAtTime(800, now + 0.03);
+    crackGain.gain.setValueAtTime(0.8 * vol, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+
+    const boom = ctx.createOscillator();
+    const boomGain = ctx.createGain();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(60, now);
+    boom.frequency.exponentialRampToValueAtTime(20, now + 0.3);
+    boomGain.gain.setValueAtTime(0.35 * vol, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(gain).connect(ctx.destination);
+    crack.connect(crackGain).connect(ctx.destination);
+    boom.connect(boomGain).connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.45);
+    crack.start(now); crack.stop(now + 0.05);
+    boom.start(now); boom.stop(now + 0.4);
   }
 
   public playBallCollision(speedFactor = 1) {
@@ -53,28 +103,28 @@ class SoundSynth {
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const vol = Math.min(0.8, Math.max(0.1, speedFactor)) * this._volume;
+    const vol = Math.min(0.85, Math.max(0.08, speedFactor)) * this._volume;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(1600, now);
-    osc.frequency.exponentialRampToValueAtTime(600, now + 0.008);
-    gain.gain.setValueAtTime(0.55 * vol, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.015);
+    osc.frequency.setValueAtTime(2000, now);
+    osc.frequency.exponentialRampToValueAtTime(500, now + 0.006);
+    gain.gain.setValueAtTime(0.6 * vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.012);
 
     const thud = ctx.createOscillator();
     const thudGain = ctx.createGain();
     thud.type = 'triangle';
-    thud.frequency.setValueAtTime(180, now);
-    thud.frequency.exponentialRampToValueAtTime(90, now + 0.016);
-    thudGain.gain.setValueAtTime(0.18 * vol, now);
-    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+    thud.frequency.setValueAtTime(200, now);
+    thud.frequency.exponentialRampToValueAtTime(80, now + 0.02);
+    thudGain.gain.setValueAtTime(0.2 * vol, now);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
 
     osc.connect(gain).connect(ctx.destination);
     thud.connect(thudGain).connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.02);
-    thud.start(now); thud.stop(now + 0.025);
+    osc.start(now); osc.stop(now + 0.015);
+    thud.start(now); thud.stop(now + 0.03);
   }
 
   public playCushionHit(speedFactor = 1) {
@@ -83,18 +133,28 @@ class SoundSynth {
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const vol = Math.min(0.7, Math.max(0.1, speedFactor * 0.45)) * this._volume;
+    const vol = Math.min(0.8, Math.max(0.08, speedFactor * 0.5)) * this._volume;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(105, now);
-    osc.frequency.exponentialRampToValueAtTime(32, now + 0.12);
-    gain.gain.setValueAtTime(0.42 * vol, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    osc.frequency.setValueAtTime(110, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + 0.15);
+    gain.gain.setValueAtTime(0.45 * vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+    const thud = ctx.createOscillator();
+    const thudG = ctx.createGain();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(50, now);
+    thud.frequency.exponentialRampToValueAtTime(20, now + 0.12);
+    thudG.gain.setValueAtTime(0.25 * vol, now);
+    thudG.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
 
     osc.connect(gain).connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.15);
+    thud.connect(thudG).connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.2);
+    thud.start(now); thud.stop(now + 0.15);
   }
 
   public playPocketIn() {
@@ -103,29 +163,39 @@ class SoundSynth {
     if (!ctx) return;
 
     const now = ctx.currentTime;
-    const s = 1.0;
 
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'triangle';
-    osc1.frequency.setValueAtTime(190 * s, now);
-    osc1.frequency.exponentialRampToValueAtTime(80 * s, now + 0.18);
-    gain1.gain.setValueAtTime(0.3 * this._volume, now);
-    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+    osc1.frequency.setValueAtTime(220, now);
+    osc1.frequency.exponentialRampToValueAtTime(70, now + 0.2);
+    gain1.gain.setValueAtTime(0.35 * this._volume, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
 
     const thud = ctx.createOscillator();
     const thudG = ctx.createGain();
     thud.type = 'sine';
-    thud.frequency.setValueAtTime(90 * s, now + 0.08);
-    thud.frequency.exponentialRampToValueAtTime(40 * s, now + 0.25);
+    thud.frequency.setValueAtTime(80, now + 0.06);
+    thud.frequency.exponentialRampToValueAtTime(25, now + 0.3);
     thudG.gain.setValueAtTime(0, now);
-    thudG.gain.setValueAtTime(0.45 * this._volume, now + 0.07);
-    thudG.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    thudG.gain.setValueAtTime(0.55 * this._volume, now + 0.06);
+    thudG.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    const jingle = ctx.createOscillator();
+    const jingleG = ctx.createGain();
+    jingle.type = 'sine';
+    jingle.frequency.setValueAtTime(1400, now + 0.1);
+    jingle.frequency.exponentialRampToValueAtTime(600, now + 0.25);
+    jingleG.gain.setValueAtTime(0, now);
+    jingleG.gain.setValueAtTime(0.12 * this._volume, now + 0.1);
+    jingleG.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
 
     osc1.connect(gain1).connect(ctx.destination);
     thud.connect(thudG).connect(ctx.destination);
-    osc1.start(now); osc1.stop(now + 0.2);
-    thud.start(now + 0.06); thud.stop(now + 0.3);
+    jingle.connect(jingleG).connect(ctx.destination);
+    osc1.start(now); osc1.stop(now + 0.25);
+    thud.start(now + 0.05); thud.stop(now + 0.35);
+    jingle.start(now + 0.08); jingle.stop(now + 0.3);
   }
 
   public playFoul() {

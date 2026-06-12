@@ -265,11 +265,20 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             isBreakShotRef.current = roomStateRef.current.balls.filter(b => b.id !== 0 && b.isPocketed).length === 0;
             triggerShootParticles(strikeAnimRef.current.power, isBreakShotRef.current);
             if (isBreakShotRef.current) {
-              impactShakeRef.current = Math.min(6.0, 1.5 + (strikeAnimRef.current.power / 100) * 4.5);
+              impactShakeRef.current = Math.min(10.0, 2.0 + (strikeAnimRef.current.power / 100) * 8.0);
               setHudNotification('💥 BREAK!');
               setTimeout(() => setHudNotification(null), 2000);
+              const cb = animatedBallsRef.current.find(b => b.id === 0);
+              if (cb) {
+                for (let k = 0; k < 30; k++) {
+                  const spread = Math.random() * Math.PI * 2;
+                  const spd = 1.5 + Math.random() * 5;
+                  chalkParticlesRef.current.push({ x: cb.x, y: cb.y, vx: Math.cos(spread) * spd, vy: Math.sin(spread) * spd, size: 1 + Math.random() * 2.5, opacity: 0.9, color: 'rgba(255, 220, 100, 0.8)' });
+                }
+                feltRipplesRef.current.push({ x: cb.x, y: cb.y, radius: 12, maxRadius: 80, opacity: 1.0, color: 'rgba(59, 130, 246, 0.4)' });
+              }
             } else {
-              impactShakeRef.current = Math.min(3.0, 0.5 + (strikeAnimRef.current.power / 100) * 2.5);
+              impactShakeRef.current = Math.min(4.0, 0.8 + (strikeAnimRef.current.power / 100) * 3.2);
             }
           }
         }
@@ -338,13 +347,15 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                   if ((bf.x <= minX + 0.05 && prevBf.x > minX + 0.05) || (bf.x >= maxX - 0.05 && prevBf.x < maxX - 0.05)) hitCushion = true;
                   if ((bf.y <= minY + 0.05 && prevBf.y > minY + 0.05) || (bf.y >= maxY - 0.05 && prevBf.y < maxY - 0.05)) hitCushion = true;
                   if (hitCushion) {
-                    poolAudio.playCushionHit(speed); haptic(Math.min(15, Math.floor(3 + speed * 6)));
-                    if (speed > 0.4) impactShakeRef.current = Math.min(2.0, impactShakeRef.current + speed * 0.3);
+                    poolAudio.playCushionHit(speed); haptic(Math.min(18, Math.floor(4 + speed * 7)));
+                    if (speed > 0.3) impactShakeRef.current = Math.min(3.0, impactShakeRef.current + speed * 0.4);
                     let contactX = bf.x, contactY = bf.y;
                     if (bf.x < minX + 1.0) contactX = 20; else if (bf.x > maxX - 1.0) contactX = 780;
                     if (bf.y < minY + 1.0) contactY = 20; else if (bf.y > maxY - 1.0) contactY = 380;
-                    const sparkCount = Math.min(8, Math.floor(2 + speed * 3));
-                    for (let k = 0; k < sparkCount; k++) chalkParticlesRef.current.push({ x: contactX, y: contactY, vx: (Math.random() - 0.5) * (speed * 0.3 + 0.5), vy: (Math.random() - 0.5) * (speed * 0.3 + 0.5), size: Math.random() * 1.3 + 0.4, opacity: 0.75, color: 'rgba(245, 158, 11, 0.45)' });
+                    const sparkCount = Math.min(12, Math.floor(3 + speed * 4));
+                    for (let k = 0; k < sparkCount; k++) chalkParticlesRef.current.push({ x: contactX, y: contactY, vx: (Math.random() - 0.5) * (speed * 0.35 + 0.8), vy: (Math.random() - 0.5) * (speed * 0.35 + 0.8), size: Math.random() * 1.5 + 0.5, opacity: 0.85, color: 'rgba(245, 158, 11, 0.6)' });
+                    feltRipplesRef.current.push({ x: contactX, y: contactY, radius: 2, maxRadius: Math.min(14, 6 + speed * 2), opacity: Math.min(0.5, 0.15 + speed * 0.08), color: 'rgba(245, 158, 11, 0.25)' });
+                    if (speed > 0.3) impactFlashesRef.current.push({ x: contactX, y: contactY, startTime: performance.now() });
                   }
                 }
               });
@@ -507,27 +518,62 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             aimAngleRef.current = smoothed;
           }
         } else {
-          // ================= MOBILE SMART ZONES =================
+          // ================= MOBILE 8 BALL POOL STYLE =================
+          // Touch to aim, pull back to set power, release to shoot
           if (isInitialDown) {
             dragStartXRef.current = coords.x;
+            dragStartAngleRef.current = aimAngleRef.current;
             pullStartPosRef.current = coords;
-            aimInertiaVelocityRef.current = 0;
-            
-            // On mobile, touching the canvas ALWAYS rotates the aim.
-            // Power and shooting are handled by the CueStickSlider on the left.
             setDragMode('rotate');
             dragModeRef.current = 'rotate';
-          } else {
-            // pointer move logic
-            if (dragModeRef.current === 'pan' && pullStartPosRef.current) {
-              // Pan camera removed
-              pullStartPosRef.current = coords;
-            } 
-            else if (dragModeRef.current === 'rotate') {
-              const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-              targetAimAngleRef.current = rawAngle;
+            setIsPulling(true);
+            isPullingRef.current = true;
+            aimInertiaVelocityRef.current = 0;
+          } else if (dragModeRef.current === 'rotate' && pullStartPosRef.current) {
+            const cbX = cueBall.x, cbY = cueBall.y;
+            
+            // Vector from cue ball to touch point
+            const dx = coords.x - cbX;
+            const dy = coords.y - cbY;
+            const dist = Math.hypot(dx, dy);
+            
+            if (dist < 15) return; // dead zone
+            
+            // Direction from cue ball to touch
+            const touchAngle = Math.atan2(dy, dx);
+            
+            // Difference between aim direction and touch direction
+            let angleDiff = touchAngle - aimAngleRef.current;
+            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+            
+            // If dragging roughly in the aiming direction (within ±60°), it's a power pull
+            // If dragging perpendicular, it's an aim adjustment
+            if (Math.abs(angleDiff) < Math.PI / 3) {
+              // POWER PULL MODE: dragging along aim line
+              setDragMode('pull');
+              dragModeRef.current = 'pull';
+              
+              // Pull back from contact point to set power
+              const aimDx = Math.cos(aimAngleRef.current);
+              const aimDy = Math.sin(aimAngleRef.current);
+              const pullBack = -(dx * aimDx + dy * aimDy); // negative = pulling back
+              const maxPull = 300;
+              const rawPower = Math.max(0, Math.min(100, (pullBack / maxPull) * 100));
+              const curvedPower = Math.pow(rawPower / 100, 0.85) * 100;
+              const power = Math.min(100, Math.max(0, Math.floor(curvedPower)));
+              setShotPower(power);
+              shotPowerRef.current = power;
+            } else {
+              // AIM MODE: dragging perpendicular to aim line
               const sens = isFineAimRef.current ? SHIFT_MODIFIER : 1;
-              const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+              // Use the perpendicular drag distance for fine aim
+              const aimDx = Math.cos(aimAngleRef.current);
+              const aimDy = Math.sin(aimAngleRef.current);
+              const orthoDrag = -dx * aimDy + dy * aimDx;
+              const adjAngle = dragStartAngleRef.current + orthoDrag * 0.003 * sens;
+              targetAimAngleRef.current = adjAngle;
+              const smoothed = aimAngleRef.current + (adjAngle - aimAngleRef.current) * SMOOTH_FACTOR;
               setAimAngle(smoothed);
               aimAngleRef.current = smoothed;
             }
@@ -598,10 +644,21 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     setIsPointerActive(false);
 
     if (isMobile.current) {
-      // Mobile rotate/other: just clear drag state (shoot is via CueStickSlider)
+      // 8 Ball Pool style: release to shoot with current aim + power
+      const p = shotPowerRef.current;
+      const wasInPullMode = dragModeRef.current === 'pull';
+      setIsPulling(false);
+      isPullingRef.current = false;
       setDragMode(null);
       dragModeRef.current = null;
       pullStartPosRef.current = null;
+      if (wasInPullMode && p >= 5 && isMyTurnRef.current && !isAnimatingRef.current) {
+        executeAuthorizedShot(aimAngleRef.current, p, spinXRef.current, spinYRef.current);
+      } else if (!wasInPullMode) {
+        // Cancelled or just aimed - reset power
+        setShotPower(0);
+        shotPowerRef.current = 0;
+      }
       return;
     }
 

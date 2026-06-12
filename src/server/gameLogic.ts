@@ -620,12 +620,19 @@ export function triggerAiShot(room: RoomState, opts?: {
   const diff = room.aiDifficulty || 'medium';
   const isHard = diff === 'hard';
 
-  // تأخير بشري: محترف يفكر أسرع، المبتدئ أبطأ
-  const thinkTime = isHard ? 600 + Math.random() * 800
-    : diff === 'medium' ? 1000 + Math.random() * 1200
-    : 1500 + Math.random() * 2000;
+  // AI personality: aggressive (0) or cautious (1)
+  const personality = Math.random();
+  const isAggressive = personality > 0.55;
 
-  logFn(room, `AI (${diff}) is reading the table...`);
+  // Human-like thinking time with occasional "quick" or "hesitation" shots
+  const clutchFactor = room.balls.filter(b => b.id !== 0 && !b.isPocketed).length <= 3 ? 0.7 : 1.0;
+  const thinkTime = isHard
+    ? (400 + Math.random() * 600) * clutchFactor
+    : diff === 'medium'
+      ? (800 + Math.random() * 1000) * clutchFactor
+      : (1200 + Math.random() * 1500) * clutchFactor;
+
+  logFn(room, `AI (${diff}) is ${isAggressive ? 'playing aggressively' : 'playing cautiously'}...`);
 
   setTimeout(() => {
     if ((room.animVersion || 0) !== currentAnimVersion) return;
@@ -660,7 +667,6 @@ export function triggerAiShot(room: RoomState, opts?: {
     let bestScore = Infinity;
     let usedSafety = false;
 
-    // تصنيف الأهداف: نفضل السهلة أولاً
     const scoredTargets: Array<{
       target: Ball;
       pocket: { x: number; y: number };
@@ -668,6 +674,7 @@ export function triggerAiShot(room: RoomState, opts?: {
       power: number;
       cutAngle: number;
       totalScore: number;
+      distToPocket: number;
     }> = [];
 
     const nextTargets = targets.length > 1
@@ -675,24 +682,20 @@ export function triggerAiShot(room: RoomState, opts?: {
       : targets;
 
     for (const ball of targets) {
-      // جرب كل الحفر
       for (const pocket of POCKET_POSITIONS) {
         const distToPocket = aiDist(ball.x, ball.y, pocket.x, pocket.y);
         const distCueToTarget = aiDist(cb.x, cb.y, ball.x, ball.y);
         const ghostAngle = ghostBallAngle(cb.x, cb.y, ball.x, ball.y, pocket.x, pocket.y);
         const cutAngle = calcCutAngle(cb.x, cb.y, ball.x, ball.y, pocket.x, pocket.y);
 
-        // تجاهل الحفر البعيدة جداً أو الزوايا المستحيلة (> 60°)
         if (cutAngle > Math.PI * 0.55) continue;
         if (distToPocket > 350 && cutAngle > Math.PI * 0.3) continue;
 
-        // فحص مسار الكرة البيضاء إلى الهدف
         if (!isPathClear(cb.x, cb.y, ball.x, ball.y, room.balls)) continue;
 
         const rawPower = calcIdealPower(distCueToTarget, distToPocket, cutAngle, isHard);
         const power = humanizePower(rawPower, diff);
 
-        // حساب موقع الكرة البيضاء المتوقع بعد الضربة
         const ghostDx = ball.x - pocket.x;
         const ghostDy = ball.y - pocket.y;
         const ghostLen = Math.hypot(ghostDx, ghostDy) || 1;
@@ -700,25 +703,22 @@ export function triggerAiShot(room: RoomState, opts?: {
         const gy = ball.y + (ghostDy / ghostLen) * (AI_BALL_R * 2);
         const cueEnd = estimateCueBallEndPos(cb.x, cb.y, ball.x, ball.y, gx, gy, room.balls);
 
-        // position score
         const posScore = evaluatePositionScore(cueEnd.x, cueEnd.y, nextTargets.filter(t => t.id !== ball.id), diff);
 
-        // المسافة الكلية: قرب الهدف من الحفرة + سهولة الوصول
         const easeOfShot = distToPocket * 0.4 + distCueToTarget * 0.1;
         const cutPenalty = cutAngle * 80;
         const totalScore = easeOfShot + cutPenalty + posScore;
 
         scoredTargets.push({
           target: ball, pocket, angle: ghostAngle, power,
-          cutAngle, totalScore,
+          cutAngle, totalScore, distToPocket,
         });
       }
     }
 
-    // ترتيب حسب الجودة (أقل score أفضل)
     scoredTargets.sort((a, b) => a.totalScore - b.totalScore);
 
-    // AI Lookahead: محاكاة فيزيائية مبسطة لأفضل 3 خيارات في المستوى الصعب
+    // AI Lookahead for hard difficulty
     if (diff === 'hard' && scoredTargets.length > 0) {
       const topCandidates = scoredTargets.slice(0, 3);
       for (const cand of topCandidates) {
@@ -743,19 +743,16 @@ export function triggerAiShot(room: RoomState, opts?: {
         const endTarget = simBalls.find(b => b.id === cand.target.id);
         if (endTarget && endTarget.isPocketed) pocketedTarget = true;
         
-        if (scratch) cand.totalScore += 2000; // تجنب الـ scratch تماماً
-        if (pocketedTarget) cand.totalScore -= 500; // كافئ الهدف المضمون
+        if (scratch) cand.totalScore += 2000;
+        if (pocketedTarget) cand.totalScore -= 500;
       }
-      // إعادة الترتيب بعد المحاكاة
       scoredTargets.sort((a, b) => a.totalScore - b.totalScore);
     }
 
-    // هل هناك أهداف ممكنة؟
-    const isClutch = targets.length <= 2; // ضغط: كرات قليلة متبقية
-    const shouldUseSafety = scoredTargets.length === 0 && isHard;
+    const isClutch = targets.length <= 2;
+    const shouldUseSafety = scoredTargets.length === 0 && (isHard || (!isAggressive && diff === 'medium'));
 
     if (shouldUseSafety) {
-      // ── تسديدة دفاعية ──
       const safety = findSafetyShot(cb, targets, room.balls);
       if (safety) {
         const rawPower = 20 + Math.random() * 15;
@@ -770,39 +767,52 @@ export function triggerAiShot(room: RoomState, opts?: {
         usedSafety = true;
         logFn(room, `AI plays SAFETY — hiding cue ball behind Ball #${safety.target.id}`);
       } else {
-        // لا يوجد أي أمل — ارتطام عشوائي
         bestTarget = targets[0];
         bestPocket = POCKET_POSITIONS[Math.floor(Math.random() * POCKET_POSITIONS.length)];
         bestAngle = ghostBallAngle(cb.x, cb.y, bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y);
         bestPower = humanizePower(30 + Math.random() * 20, diff);
       }
     } else if (scoredTargets.length > 0) {
-      // اختر أفضل تسديدة
       const pick = scoredTargets[0];
       bestTarget = pick.target;
       bestPocket = pick.pocket;
       bestPower = humanizePower(pick.power, diff);
 
-      // هل هناك كرة سهلة جداً؟ (قريبة من الحفرة + زاوية صغيرة)
-      const isEasyShot = pick.cutAngle < 0.15 && aiDist(pick.target.x, pick.target.y, pick.pocket.x, pick.pocket.y) < 80;
+      // AI personality: aggressive players go for harder shots, cautious players prefer easy ones
+      const isEasyShot = pick.cutAngle < 0.15 && pick.distToPocket < 80;
       if (isEasyShot && scoredTargets.length > 1 && diff !== 'hard') {
-        // أحياناً يختار AI المبتدئ كرة أصعب
-        const altPick = scoredTargets[Math.min(scoredTargets.length - 1, 1 + Math.floor(Math.random() * 2))];
-        if (altPick && Math.random() < 0.3) {
-          bestTarget = altPick.target;
-          bestPocket = altPick.pocket;
-          bestPower = humanizePower(altPick.power, diff);
+        if (!isAggressive && Math.random() < 0.35) {
+          // Cautious AI still picks the easy shot
+        } else if (isAggressive && Math.random() < 0.4) {
+          // Aggressive AI: go for a harder but potentially more rewarding shot
+          const altPick = scoredTargets[Math.min(scoredTargets.length - 1, 1 + Math.floor(Math.random() * 2))];
+          if (altPick) {
+            bestTarget = altPick.target;
+            bestPocket = altPick.pocket;
+            bestPower = humanizePower(altPick.power, diff);
+          }
         }
       }
 
-      bestAngle = humanizeAngle(
-        ghostBallAngle(cb.x, cb.y, bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y),
-        pick.cutAngle,
-        aiDist(bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y),
-        diff, isClutch
-      );
+      // Medium AI: occasional "human" mistake on easy shots
+      if (diff === 'medium' && isEasyShot && Math.random() < 0.08) {
+        // Oops, misread the angle
+        const errorAngle = (Math.random() - 0.5) * 0.04;
+        bestAngle = humanizeAngle(
+          ghostBallAngle(cb.x, cb.y, bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y),
+          pick.cutAngle,
+          aiDist(bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y),
+          diff, isClutch
+        ) + errorAngle;
+      } else {
+        bestAngle = humanizeAngle(
+          ghostBallAngle(cb.x, cb.y, bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y),
+          pick.cutAngle,
+          aiDist(bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y),
+          diff, isClutch
+        );
+      }
     } else {
-      // لم يجد أي هدف — تصويب عشوائي
       bestTarget = targets[0];
       bestPocket = POCKET_POSITIONS[Math.floor(Math.random() * POCKET_POSITIONS.length)];
       bestAngle = ghostBallAngle(cb.x, cb.y, bestTarget.x, bestTarget.y, bestPocket.x, bestPocket.y);

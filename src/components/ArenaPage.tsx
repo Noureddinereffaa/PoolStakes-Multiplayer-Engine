@@ -646,31 +646,49 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
 
   const pct = shotPower / 100;
 
+  const handleQuickSet = (level: number) => {
+    if (disabled) return;
+    onPowerChange(level);
+  };
+
   return (
     <div
       ref={containerRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      className={`absolute left-0 top-[10%] bottom-[10%] w-8 z-20 touch-none select-none flex items-center justify-center ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
+      className={`absolute left-0 top-[8%] bottom-[8%] w-10 z-20 touch-none select-none flex flex-col items-center justify-center gap-0.5 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}
     >
-      {/* Thin power bar */}
-      <div className="relative w-1.5 h-full rounded-full bg-black/40 overflow-hidden border border-white/10">
+      {/* Power percentage label */}
+      {shotPower > 0 && (
+        <div className="mb-0.5 bg-black/80 text-amber-400 text-[9px] font-mono font-bold px-1 py-0.5 rounded pointer-events-none">
+          {shotPower}%
+        </div>
+      )}
+
+      {/* Power bar */}
+      <div
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="relative w-3 flex-1 rounded-full bg-black/50 overflow-hidden border border-white/10"
+        style={{ touchAction: 'none' }}
+      >
         <div
           className="absolute bottom-0 w-full rounded-full transition-all duration-75"
           style={{
             height: `${shotPower}%`,
-            background: `linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)`,
+            background: `linear-gradient(to top, #22c55e, #84cc16 20%, #eab308 50%, #f97316 75%, #ef4444)`,
+            boxShadow: shotPower > 0 ? '0 0 6px rgba(234,179,8,0.3)' : 'none',
           }}
         />
       </div>
-      {/* Power percentage label when dragging */}
-      {dragging && shotPower > 0 && (
-        <div className="absolute left-10 top-1/2 -translate-y-1/2 bg-black/80 text-amber-400 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded pointer-events-none">
-          {shotPower}%
-        </div>
-      )}
+
+      {/* Quick power taps */}
+      <div className="flex flex-col items-center gap-0.5 mt-1">
+        <button onPointerDown={() => handleQuickSet(25)} className="w-5 h-3 rounded-sm bg-black/40 text-[6px] text-white/60 hover:bg-white/10 border border-white/5">25</button>
+        <button onPointerDown={() => handleQuickSet(50)} className="w-5 h-3 rounded-sm bg-black/40 text-[6px] text-white/60 hover:bg-white/10 border border-white/5">50</button>
+        <button onPointerDown={() => handleQuickSet(75)} className="w-5 h-3 rounded-sm bg-black/40 text-[6px] text-white/60 hover:bg-white/10 border border-white/5">75</button>
+        <button onPointerDown={() => handleQuickSet(100)} className="w-5 h-3 rounded-sm bg-black/40 text-[6px] text-white/60 hover:bg-white/10 border border-white/5">MAX</button>
+      </div>
     </div>
   );
 }
