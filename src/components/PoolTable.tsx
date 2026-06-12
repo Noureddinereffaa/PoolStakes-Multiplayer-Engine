@@ -513,37 +513,13 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             pullStartPosRef.current = coords;
             aimInertiaVelocityRef.current = 0;
             
-            const dx = coords.x - cueBall.x;
-            const dy = coords.y - cueBall.y;
-            const dist = Math.hypot(dx, dy);
-            
-            // Two zones:
-            // < 45px from cue ball center = Pull-back (power control like real pool)
-            // Anywhere else = Rotate Aim
-            if (dist < 45) {
-              setDragMode('pull');
-              dragModeRef.current = 'pull';
-              pullStartPosRef.current = coords;
-              setIsPulling(true);
-              isPullingRef.current = true;
-            } else {
-              setDragMode('rotate');
-              dragModeRef.current = 'rotate';
-            }
+            // On mobile, touching the canvas ALWAYS rotates the aim.
+            // Power and shooting are handled by the CueStickSlider on the left.
+            setDragMode('rotate');
+            dragModeRef.current = 'rotate';
           } else {
             // pointer move logic
-            if (dragModeRef.current === 'pull' && pullStartPosRef.current) {
-              // Pull-back power: drag away from cue ball direction
-              const pullDx = coords.x - pullStartPosRef.current.x;
-              const pullDy = coords.y - pullStartPosRef.current.y;
-              const dragDist = Math.hypot(pullDx, pullDy);
-              // 180px for full power — better for medium phones
-              const rawPower = Math.min(100, Math.round((dragDist / 180) * 100));
-              const curvedPower = Math.floor(Math.pow(rawPower / 100, 0.85) * 100);
-              const power = Math.min(100, Math.max(5, curvedPower));
-              setShotPower(power);
-              shotPowerRef.current = power;
-            } else if (dragModeRef.current === 'pan' && pullStartPosRef.current) {
+            if (dragModeRef.current === 'pan' && pullStartPosRef.current) {
               // Pan camera removed
               pullStartPosRef.current = coords;
             } 
@@ -620,26 +596,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const handlePointerUp = () => {
     setIsPointerActive(false);
-    
-    // Mobile pull-back shoot: release after dragging from cue ball zone
-    if (isMobile.current && dragModeRef.current === 'pull' && isPullingRef.current) {
-      const p = shotPowerRef.current;
-      setIsPulling(false);
-      isPullingRef.current = false;
-      setDragMode(null);
-      dragModeRef.current = null;
-      pullStartPosRef.current = null;
-      if (p >= 5 && isMyTurnRef.current && !isAnimatingRef.current) {
-        executeAuthorizedShot(aimAngleRef.current, p, spinXRef.current, spinYRef.current);
-      } else {
-        setShotPower(0);
-        shotPowerRef.current = 0;
-      }
-      return;
-    }
 
-    if (isMobile.current && dragModeRef.current !== 'pan') {
-      // Mobile rotate/other: just clear drag state (shoot is via button)
+    if (isMobile.current) {
+      // Mobile rotate/other: just clear drag state (shoot is via CueStickSlider)
       setDragMode(null);
       dragModeRef.current = null;
       pullStartPosRef.current = null;
