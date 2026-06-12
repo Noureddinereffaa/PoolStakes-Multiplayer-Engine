@@ -48,7 +48,7 @@ const COR_TERM  = -(1 + COR) * 0.5;
 // Any ball whose center is within a pocket's radius (>50% of ball over the hole)
 // is immediately pocketed — no speed or angle gate required.
 // Design goal: "ball with more than half its body over the hole must enter."
-const POCKET_RADII        = [22, 26, 22, 22, 26, 22];
+const POCKET_RADII        = [22, 21, 22, 22, 21, 22];
 
 const POCKET_POS = [
   { x: CUSHION + 3,           y: CUSHION + 3           },
@@ -89,10 +89,18 @@ export function getInitialBalls(): Ball[] {
 
   let idx = 0;
   for (let col = 0; col < 5; col++) {
-    const rx = RACK_APEX_X + col * RACK_COL_SPACING;
     for (let row = 0; row <= col; row++) {
       const id = rackIds[idx++];
-      const ry = RACK_APEX_Y + (row - col * 0.5) * (BALL_R * 2);
+      
+      // Add a microscopic random variation (jitter) to simulate real-world physical imperfections.
+      // This ensures that break shots are non-deterministic and realistic, breaking the perfect symmetry.
+      // We keep the apex ball (id=1) exact to guarantee a solid first contact.
+      const jitterX = id === 1 ? 0 : (Math.random() - 0.5) * 0.04;
+      const jitterY = id === 1 ? 0 : (Math.random() - 0.5) * 0.04;
+
+      const rx = RACK_APEX_X + col * RACK_COL_SPACING + jitterX;
+      const ry = RACK_APEX_Y + (row - col * 0.5) * (BALL_R * 2) + jitterY;
+      
       balls.push({
         id, x: rx, y: ry,
         vx: 0, vy: 0, radius: BALL_R,

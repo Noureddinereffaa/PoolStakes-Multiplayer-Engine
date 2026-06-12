@@ -455,13 +455,10 @@ export default function ArenaPage({
       )}
 
       {/* Header - 8 Ball Pool Style */}
-      <AnimatePresence>
-        {showOverlay && (
-          <motion.header initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
-            transition={{ duration: 0.15 }}
-            className="absolute top-0 inset-x-0 z-40 bg-gradient-to-b from-black/90 via-black/50 to-transparent px-4 backdrop-blur-sm"
-            style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
-          >
+      <header
+        className="relative z-40 bg-gradient-to-b from-black/90 via-black/50 to-transparent px-4 backdrop-blur-sm shrink-0"
+        style={{ paddingTop: 'calc(var(--sat) + 8px)', paddingBottom: '8px' }}
+      >
             <div className="flex items-center justify-between gap-2 max-w-4xl mx-auto">
               
               {/* Left Player (Me) */}
@@ -521,9 +518,7 @@ export default function ArenaPage({
               </div>
 
             </div>
-          </motion.header>
-        )}
-      </AnimatePresence>
+      </header>
 
       {/* Main - PoolTable fills everything */}
       <div className="flex-1 flex overflow-hidden">

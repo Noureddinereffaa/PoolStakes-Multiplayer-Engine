@@ -582,67 +582,70 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           { x: 800 - PX, y: 400 - PY, ang: -Math.PI * 0.75 },
         ];
 
-        pockets.forEach((p) => {
+        pockets.forEach((p, idx) => {
+          const isMiddle = idx === 1 || idx === 4;
+          const s = (val: number) => isMiddle ? val * 0.82 : val; // Scale down middle pockets 18%
+
           // Outer shadow ring (dramatic falloff)
-          const outerRing = offCtx.createRadialGradient(p.x, p.y, 18, p.x, p.y, 34);
+          const outerRing = offCtx.createRadialGradient(p.x, p.y, s(18), p.x, p.y, s(34));
           outerRing.addColorStop(0, 'rgba(0,0,0,0)');
           outerRing.addColorStop(0.4, 'rgba(0,0,0,0.20)');
           outerRing.addColorStop(0.7, 'rgba(0,0,0,0.08)');
           outerRing.addColorStop(1, 'rgba(0,0,0,0)');
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 34, 0, Math.PI * 2);
+          offCtx.arc(p.x, p.y, s(34), 0, Math.PI * 2);
           offCtx.fillStyle = outerRing;
           offCtx.fill();
 
           // Dark pocket hole with more depth
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 28, 0, Math.PI * 2);
+          offCtx.arc(p.x, p.y, s(28), 0, Math.PI * 2);
           offCtx.fillStyle = 'rgba(0,0,0,0.85)';
           offCtx.fill();
 
           // Brass pocket rim (rich metallic ring)
-          const rimGrad = offCtx.createRadialGradient(p.x, p.y, 21, p.x, p.y, 27);
+          const rimGrad = offCtx.createRadialGradient(p.x, p.y, s(21), p.x, p.y, s(27));
           rimGrad.addColorStop(0, '#3a1a08');
           rimGrad.addColorStop(0.25, '#a07020');
           rimGrad.addColorStop(0.5, '#f5d97a');
           rimGrad.addColorStop(0.75, '#c9952e');
           rimGrad.addColorStop(1, '#4a2008');
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 27, 0, Math.PI * 2);
+          offCtx.arc(p.x, p.y, s(27), 0, Math.PI * 2);
           offCtx.strokeStyle = rimGrad;
           offCtx.lineWidth = 3.5;
           offCtx.stroke();
 
           // Pocket inner darkness (deep void)
-          const voidGrad = offCtx.createRadialGradient(p.x, p.y, 1, p.x, p.y, 20);
+          const voidGrad = offCtx.createRadialGradient(p.x, p.y, 1, p.x, p.y, s(20));
           voidGrad.addColorStop(0, '#000000');
           voidGrad.addColorStop(0.4, '#000002');
           voidGrad.addColorStop(0.7, '#050810');
           voidGrad.addColorStop(1, 'rgba(0,0,0,0.95)');
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 20, 0, Math.PI * 2);
+          offCtx.arc(p.x, p.y, s(20), 0, Math.PI * 2);
           offCtx.fillStyle = voidGrad;
           offCtx.fill();
 
           // Pocket Net (Crosshatch inside the void)
           offCtx.save();
           offCtx.beginPath();
-          offCtx.arc(p.x, p.y, 20, 0, Math.PI * 2);
+          offCtx.arc(p.x, p.y, s(20), 0, Math.PI * 2);
           offCtx.clip();
           offCtx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
           offCtx.lineWidth = 0.5;
           for (let i = -20; i <= 20; i += 3) {
             offCtx.beginPath();
-            offCtx.moveTo(p.x - 20, p.y + i);
-            offCtx.lineTo(p.x + 20, p.y + i);
+            offCtx.moveTo(p.x - s(20), p.y + s(i));
+            offCtx.lineTo(p.x + s(20), p.y + s(i));
             offCtx.stroke();
             offCtx.beginPath();
-            offCtx.moveTo(p.x + i, p.y - 20);
-            offCtx.lineTo(p.x + i, p.y + 20);
+            offCtx.moveTo(p.x + s(i), p.y - s(20));
+            offCtx.lineTo(p.x + s(i), p.y + s(20));
             offCtx.stroke();
           }
           // Inner drop shadow to give depth to the net
-          const innerShadow = offCtx.createRadialGradient(p.x, p.y, 10, p.x, p.y, 20);
+          const innerShadow = offCtx.createRadialGradient(p.x, p.y, s(10), p.x, p.y, s(20));
           innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
           innerShadow.addColorStop(1, 'rgba(0,0,0,0.8)');
           offCtx.fillStyle = innerShadow;
