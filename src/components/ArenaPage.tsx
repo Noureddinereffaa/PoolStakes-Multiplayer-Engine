@@ -109,46 +109,46 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
     return 'CENTER';
   };
 
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handlePadDown = (e: React.PointerEvent) => {
     if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    setExpanded(true);
-    updateSpin(e.clientX, e.clientY, e.currentTarget);
+    updateSpinFromEvent(e);
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!expanded) return;
-    updateSpin(e.clientX, e.clientY, e.currentTarget);
+  const handlePadMove = (e: React.PointerEvent) => {
+    updateSpinFromEvent(e);
   };
 
-  const handlePointerUp = () => {
+  const handlePadUp = () => {
     setExpanded(false);
   };
 
-  const updateSpin = (cx: number, cy: number, el: EventTarget) => {
-    const rect = (el as HTMLElement).getBoundingClientRect();
-    const x = ((cx - rect.left) / rect.width) * 2 - 1;
-    const y = -((cy - rect.top) / rect.height) * 2 - 1;
+  const updateSpinFromEvent = (e: React.PointerEvent) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((e.clientY - rect.top) / rect.height) * 2 - 1;
     const dist = Math.sqrt(x * x + y * y);
     onChange(dist > 1 ? x / dist : x, dist > 1 ? y / dist : y);
   };
 
+  // Expanded overlay: fullscreen, touch = close, pad = spin
   if (expanded) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         onPointerDown={() => setExpanded(false)}
       >
-        <div className="flex flex-col items-center gap-2"
+        <div className="flex flex-col items-center gap-3"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <span className="text-[9px] font-mono font-bold text-amber-400/70 tracking-widest">SPIN</span>
+          <span className="text-[10px] font-mono font-bold text-amber-400/70 tracking-widest">SPIN</span>
           <div
             ref={padRef}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            className="rounded-full cursor-crosshair select-none touch-none"
+            onPointerDown={handlePadDown}
+            onPointerMove={handlePadMove}
+            onPointerUp={handlePadUp}
+            onPointerCancel={handlePadUp}
+            className="rounded-full cursor-crosshair select-none touch-none relative"
             style={{
               width: expandedSize, height: expandedSize,
               background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
@@ -156,14 +156,12 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
               touchAction: 'none',
             }}
           >
-            {/* Crosshair */}
-            <div className="absolute inset-[20%] flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-[18%] flex items-center justify-center pointer-events-none">
               <div className="w-full h-px bg-white/10" />
             </div>
-            <div className="absolute inset-[20%] flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-[18%] flex items-center justify-center pointer-events-none">
               <div className="h-full w-px bg-white/10" />
             </div>
-            {/* Dot */}
             <div className="absolute pointer-events-none"
               style={{
                 left: `calc(50% + ${spinX * (expandedSize / 2 - 12)}px)`,
@@ -177,19 +175,17 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
               }}
             />
           </div>
-          <span className="text-[10px] font-mono font-bold text-amber-500">{spinLabel()}</span>
+          <span className="text-[11px] font-mono font-bold text-amber-500">{spinLabel()}</span>
         </div>
       </div>
     );
   }
 
-  // Compact view
+  // Compact view: tap to open expanded overlay
   return (
     <div
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      className="relative rounded-full cursor-crosshair select-none touch-none"
+      onPointerDown={() => { if (!disabled) setExpanded(true); }}
+      className="relative rounded-full cursor-pointer select-none touch-none"
       style={{
         width: compactSize, height: compactSize,
         background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
@@ -204,7 +200,7 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
           top: `calc(50% + ${-spinY * (compactSize / 2 - 8)}px)`,
           transform: 'translate(-50%, -50%)',
           background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
-          boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.3)',
+          boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3)',
           border: '1px solid rgba(255,255,200,0.3)',
         }}
       />
@@ -598,35 +594,6 @@ export default function ArenaPage({
             isFineAim={isFineAim}
           />
 
-          {/* Pocketed Balls Panel - integrated into table right side */}
-          {(myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-            <div className="absolute right-1 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-              <div className="flex flex-col gap-2 rounded-xl border border-[#2e0c04]/60 bg-gradient-to-b from-[#1a0702] to-[#0d0301] px-2 py-2 shadow-lg shadow-black/40 min-w-[36px]">
-                {/* My pocketed (top) */}
-                {myPocketed.length > 0 && (
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-[5px] font-mono text-amber-600/60 tracking-widest">YOU</span>
-                    {myPocketed.map(b => (
-                      <BallIcon key={b.id} id={b.id} size={isMobile ? 14 : 16} />
-                    ))}
-                  </div>
-                )}
-                {/* Divider */}
-                {myPocketed.length > 0 && opponentPocketed.length > 0 && (
-                  <div className="w-full h-px bg-amber-900/20" />
-                )}
-                {/* Opponent pocketed (bottom) */}
-                {opponentPocketed.length > 0 && (
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-[5px] font-mono text-blue-400/60 tracking-widest">OPP</span>
-                    {opponentPocketed.map(b => (
-                      <BallIcon key={b.id} id={b.id} size={isMobile ? 14 : 16} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
           {/* AI summon centered overlay */}
           {roomState.players.length === 1 && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
@@ -635,8 +602,6 @@ export default function ArenaPage({
               ><Bot className="w-4 h-4" />Summon AI</button>
             </div>
           )}
-
-
 
           {/* Spin control — bottom-right corner */}
           <div className="absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right">
@@ -652,7 +617,78 @@ export default function ArenaPage({
               onShoot={handleShootClick}
             />
           )}
+
+          {/* Mobile: pocketed balls panel — compact, overlays table right edge */}
+          {isMobile && (myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+            <div className="absolute right-0.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+              <div className="flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border border-[#2e0c04]/40 bg-gradient-to-b from-[#1a0702]/90 to-[#0d0301]/90 shadow-lg shadow-black/40 min-w-[26px]">
+                {myPocketed.length > 0 && (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[4px] font-mono text-amber-500/50 tracking-widest uppercase">You</span>
+                    {myPocketed.map(b => (
+                      <BallIcon key={b.id} id={b.id} size={12} />
+                    ))}
+                  </div>
+                )}
+                {myPocketed.length > 0 && opponentPocketed.length > 0 && (
+                  <div className="w-3 h-px bg-amber-900/20" />
+                )}
+                {opponentPocketed.length > 0 && (
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className="text-[4px] font-mono text-blue-400/50 tracking-widest uppercase">Opp</span>
+                    {opponentPocketed.map(b => (
+                      <BallIcon key={b.id} id={b.id} size={12} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Desktop: Pocketed Balls Panel — vertical wood panel on the right side */}
+        {!isMobile && (
+          <div className="shrink-0 flex items-center ml-0 z-10">
+            {(myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+              <div className="flex flex-col items-center gap-2 py-4 px-1.5 rounded-r-xl border-l-0 border border-[#2e0c04]/80 bg-gradient-to-b from-[#1a0702] via-[#2a0c04] to-[#0d0301] shadow-lg shadow-black/50 min-w-[38px]"
+                style={{
+                  boxShadow: 'inset 2px 0 8px rgba(0,0,0,0.4), inset -1px 0 4px rgba(90,35,15,0.15), 3px 0 12px rgba(0,0,0,0.3)',
+                  borderTopRightRadius: '10px',
+                  borderBottomRightRadius: '10px',
+                }}
+              >
+                {/* My pocketed (top section) */}
+                <div className="flex flex-col items-center gap-1.5">
+                  {myPocketed.length > 0 && (
+                    <>
+                      <span className="text-[5px] font-mono font-bold text-amber-500/70 tracking-[0.15em] uppercase">You</span>
+                      {myPocketed.map(b => (
+                        <BallIcon key={b.id} id={b.id} size={16} />
+                      ))}
+                    </>
+                  )}
+                </div>
+
+                {/* Divider */}
+                {(myPocketed.length > 0 && opponentPocketed.length > 0) && (
+                  <div className="w-5 h-px bg-amber-900/30 my-1" />
+                )}
+
+                {/* Opponent pocketed (bottom section) */}
+                <div className="flex flex-col items-center gap-1.5">
+                  {opponentPocketed.length > 0 && (
+                    <>
+                      <span className="text-[5px] font-mono font-bold text-blue-400/70 tracking-[0.15em] uppercase">Opp</span>
+                      {opponentPocketed.map(b => (
+                        <BallIcon key={b.id} id={b.id} size={16} />
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Sidebar */}
         <AnimatePresence>
@@ -717,7 +753,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Power Slider: simple pull-box ─── */
+/* ─── Mobile Power Slider: simple ladder, drag down, release to shoot ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -737,12 +773,11 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging) return;
     const dy = Math.max(0, e.clientY - startYRef.current);
-    const maxDrag = 280;
-    const rawPower = Math.min(100, (dy / maxDrag) * 100);
-    const curved = Math.pow(rawPower / 100, 0.85) * 100;
-    const power = Math.floor(curved);
-    powerRef.current = power;
-    onPowerChange(power);
+    const maxDrag = 300;
+    const power = Math.min(100, Math.round((dy / maxDrag) * 100));
+    const curved = Math.round(Math.pow(power / 100, 0.85) * 100);
+    powerRef.current = curved;
+    onPowerChange(curved);
   };
 
   const handlePointerUp = () => {
@@ -750,47 +785,42 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     setDragging(false);
     const p = powerRef.current;
     if (!disabled && p >= 5) {
-      try { navigator.vibrate?.(15); } catch (_) {}
+      try { navigator.vibrate?.(10); } catch (_) {}
       onShoot();
     }
     onPowerChange(0);
   };
 
   return (
-    <div className="absolute left-0 inset-y-0 z-30 flex items-center pointer-events-none select-none">
+    <div className="absolute left-1 top-1/2 -translate-y-1/2 z-30 pointer-events-none select-none h-52">
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        className={`pointer-events-auto flex flex-col items-center transition-opacity ${disabled ? 'opacity-15' : ''}`}
-        style={{ touchAction: 'none', width: 56, paddingTop: 4, paddingBottom: 4 }}
+        className={`pointer-events-auto flex flex-col items-center h-full px-2 py-1 ${disabled ? 'opacity-15' : ''}`}
+        style={{ touchAction: 'none', width: 48 }}
       >
-        {/* Main pull-box: power bar + arrow */}
-        <div className="flex flex-col items-center rounded-2xl border border-white/5 bg-black/40 px-3 py-4 pb-2">
-          {/* Power bar */}
-          <div className="relative w-5 h-44 rounded-full bg-black/70 overflow-hidden shadow-inner shadow-black/50">
-            <div
-              className="absolute bottom-0 w-full rounded-full transition-[height] duration-[15ms]"
-              style={{
-                height: `${shotPower}%`,
-                background: shotPower > 70 ? '#ef4444' : shotPower > 30 ? '#eab308' : '#22c55e',
-              }}
-            />
-          </div>
-          {/* Pull handle */}
-          {!disabled && (
-            <div className="flex flex-col items-center mt-2 pointer-events-none">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/25 flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-amber-400">
-                  <path d="M12 2v18M5 13l7 7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              {shotPower > 0 && (
-                <div className="text-[9px] font-mono font-bold text-amber-400 mt-1">{shotPower}</div>
-              )}
+        {/* Ladder scale */}
+        <div className="relative flex-1 w-full flex flex-col justify-between py-1">
+          {[100, 75, 50, 25, 0].map((val) => (
+            <div key={val} className="flex items-center gap-1 pointer-events-none">
+              <div className={`h-px ${val <= shotPower ? 'bg-amber-400/60' : 'bg-white/8'}`} style={{ width: val <= shotPower ? 14 : 8 }} />
+              <span className={`font-mono font-bold ${val <= shotPower ? 'text-amber-400 text-[9px]' : 'text-white/15 text-[6px]'}`}
+                style={{ lineHeight: '10px' }}
+              >
+                {val > 0 ? val : ''}
+              </span>
             </div>
-          )}
+          ))}
+          {/* Power fill indicator (no transition = instant) */}
+          <div
+            className="absolute left-0 bottom-0 w-full rounded-sm pointer-events-none"
+            style={{
+              height: `${shotPower}%`,
+              background: shotPower > 70 ? 'rgba(239,68,68,0.15)' : shotPower > 30 ? 'rgba(234,179,8,0.12)' : 'rgba(34,197,94,0.12)',
+            }}
+          />
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ import {
   SinkingBall,
 } from '../components/PoolTable/effects';
 import { poolAudio } from '../utils/audio';
+import { getOptimalDPR } from '../utils/mobile';
 
 interface RenderContext {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -116,10 +117,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
     const canvas = ctx.canvasRef.current;
     if (!canvas) return;
-    const ctx2d = canvas.getContext('2d');
+    const ctx2d = canvas.getContext('2d', { willReadFrequently: false });
     if (!ctx2d) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getOptimalDPR();
     canvas.width = 800 * dpr;
     canvas.height = 400 * dpr;
     ctx2d.scale(dpr, dpr);
@@ -137,7 +138,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       const offCanvas = document.createElement('canvas');
       offCanvas.width = 800 * dpr;
       offCanvas.height = 400 * dpr;
-      const offCtx = offCanvas.getContext('2d');
+      const offCtx = offCanvas.getContext('2d', { willReadFrequently: false });
       if (offCtx) {
         offCtx.scale(dpr, dpr);
         // ── Outer table frame (wood rails) ──
@@ -1088,13 +1089,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             0,
             px + ballRadius * 0.1,
             py + ballRadius * 0.1,
-            ballRadius * 1.3
+            ballRadius * 1.4
           );
           cueGrad.addColorStop(0, '#ffffff');
-          cueGrad.addColorStop(0.15, '#fffefa');
-          cueGrad.addColorStop(0.4, '#f8f4ec');
-          cueGrad.addColorStop(0.65, '#f0e8dc');
-          cueGrad.addColorStop(0.85, '#e0d4c4');
+          cueGrad.addColorStop(0.08, '#ffffff');
+          cueGrad.addColorStop(0.18, '#fffefa');
+          cueGrad.addColorStop(0.35, '#f8f4ec');
+          cueGrad.addColorStop(0.55, '#f0e8dc');
+          cueGrad.addColorStop(0.75, '#e0d4c4');
+          cueGrad.addColorStop(0.9, '#d4c8b4');
           cueGrad.addColorStop(1, '#c8b8a4');
           ctx2d.fillStyle = cueGrad;
           ctx2d.fill();
@@ -1102,10 +1105,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           // Subsurface glow (brighter)
           const sssCue = ctx2d.createRadialGradient(
             px - ballRadius * 0.25, py - ballRadius * 0.25, 0,
-            px, py, ballRadius * 0.8
+            px, py, ballRadius * 0.75
           );
-          sssCue.addColorStop(0, 'rgba(255,255,255,0.20)');
-          sssCue.addColorStop(0.4, 'rgba(255,242,230,0.08)');
+          sssCue.addColorStop(0, 'rgba(255,255,255,0.25)');
+          sssCue.addColorStop(0.3, 'rgba(255,245,235,0.10)');
+          sssCue.addColorStop(0.6, 'rgba(255,235,220,0.03)');
           sssCue.addColorStop(1, 'rgba(0,0,0,0)');
           ctx2d.fillStyle = sssCue;
           ctx2d.beginPath();
@@ -1143,6 +1147,20 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             }
           });
           ctx2d.restore();
+
+          // Cue ball outline
+          ctx2d.beginPath();
+          ctx2d.arc(px, py, ballRadius - 0.2, 0, Math.PI * 2);
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.20)';
+          ctx2d.lineWidth = 0.7;
+          ctx2d.stroke();
+
+          // Subtle rim light
+          ctx2d.beginPath();
+          ctx2d.arc(px, py, ballRadius - 0.5, -Math.PI * 0.85, -Math.PI * 0.15);
+          ctx2d.strokeStyle = 'rgba(255,255,255,0.20)';
+          ctx2d.lineWidth = 0.5;
+          ctx2d.stroke();
         } else if (b.type === 'stripe') {
           ctx2d.save();
           ctx2d.beginPath();
@@ -1247,8 +1265,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           // Ball outline
           ctx2d.beginPath();
           ctx2d.arc(px, py, ballRadius - 0.2, 0, Math.PI * 2);
-          ctx2d.strokeStyle = 'rgba(0,0,0,0.2)';
-          ctx2d.lineWidth = 0.6;
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.25)';
+          ctx2d.lineWidth = 0.7;
+          ctx2d.stroke();
+
+          // Subtle rim light - thin bright arc on top edge for 3D definition
+          ctx2d.beginPath();
+          ctx2d.arc(px, py, ballRadius - 0.5, -Math.PI * 0.85, -Math.PI * 0.15);
+          ctx2d.strokeStyle = 'rgba(255,255,255,0.18)';
+          ctx2d.lineWidth = 0.5;
           ctx2d.stroke();
         } else {
           ctx2d.save();
@@ -1314,8 +1339,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
           ctx2d.beginPath();
           ctx2d.arc(px, py, ballRadius - 0.3, 0, Math.PI * 2);
-          ctx2d.strokeStyle = isBlack ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.2)';
-          ctx2d.lineWidth = 0.6;
+          ctx2d.strokeStyle = isBlack ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.25)';
+          ctx2d.lineWidth = 0.7;
+          ctx2d.stroke();
+
+          // Subtle rim light - thin bright arc on top edge for 3D definition
+          ctx2d.beginPath();
+          ctx2d.arc(px, py, ballRadius - 0.6, -Math.PI * 0.85, -Math.PI * 0.15);
+          ctx2d.strokeStyle = 'rgba(255,255,255,0.15)';
+          ctx2d.lineWidth = 0.5;
           ctx2d.stroke();
         }
 
@@ -1378,15 +1410,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           px + specOffX * ballRadius,
           py + specOffY * ballRadius,
           0,
-          px + (specOffX + 0.18) * ballRadius,
-          py + (specOffY + 0.18) * ballRadius,
-          ballRadius * 0.32
+          px + (specOffX + 0.15) * ballRadius,
+          py + (specOffY + 0.15) * ballRadius,
+          ballRadius * 0.28
         );
         specGrad.addColorStop(0, 'rgba(255,255,255,1.0)');
-        specGrad.addColorStop(0.04, 'rgba(255,255,255,0.90)');
-        specGrad.addColorStop(0.10, 'rgba(255,255,255,0.35)');
-        specGrad.addColorStop(0.20, 'rgba(255,255,255,0.10)');
-        specGrad.addColorStop(0.35, 'rgba(255,255,255,0.02)');
+        specGrad.addColorStop(0.03, 'rgba(255,255,255,0.95)');
+        specGrad.addColorStop(0.08, 'rgba(255,255,255,0.40)');
+        specGrad.addColorStop(0.15, 'rgba(255,255,255,0.12)');
+        specGrad.addColorStop(0.25, 'rgba(255,255,255,0.03)');
         specGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1398,17 +1430,17 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
         const softSpecGrad = ctx2d.createRadialGradient(
-          px + specOffX * ballRadius * 0.85,
-          py + specOffY * ballRadius * 0.85,
+          px + specOffX * ballRadius * 0.8,
+          py + specOffY * ballRadius * 0.8,
           0,
-          px + specOffX * ballRadius * 0.1,
-          py + specOffY * ballRadius * 0.1,
-          ballRadius * 0.85
+          px + specOffX * ballRadius * 0.05,
+          py + specOffY * ballRadius * 0.05,
+          ballRadius * 0.75
         );
-        softSpecGrad.addColorStop(0, 'rgba(255,255,255,0.28)');
-        softSpecGrad.addColorStop(0.15, 'rgba(255,255,255,0.12)');
-        softSpecGrad.addColorStop(0.35, 'rgba(255,255,255,0.04)');
-        softSpecGrad.addColorStop(0.6, 'rgba(255,255,255,0.01)');
+        softSpecGrad.addColorStop(0, 'rgba(255,255,255,0.35)');
+        softSpecGrad.addColorStop(0.08, 'rgba(255,255,255,0.18)');
+        softSpecGrad.addColorStop(0.20, 'rgba(255,255,255,0.06)');
+        softSpecGrad.addColorStop(0.40, 'rgba(255,255,255,0.02)');
         softSpecGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -1715,9 +1747,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             if (showSpinCurve) {
               const perpX = -aimDy / aimLen;
               const perpY = aimDx / aimLen;
-              const curveAmt = Math.min(aimLen * 0.15, 40);
-              ctrlX = (cueBall.x + contactX) / 2 + perpX * activeSpinX * curveAmt - aimDx / aimLen * activeSpinY * curveAmt * 0.3;
-              ctrlY = (cueBall.y + contactY) / 2 + perpY * activeSpinX * curveAmt - aimDy / aimLen * activeSpinY * curveAmt * 0.3;
+              const curveAmt = Math.min(aimLen * 0.20, 55);
+              ctrlX = (cueBall.x + contactX) / 2 + perpX * activeSpinX * curveAmt - aimDx / aimLen * activeSpinY * curveAmt * 0.4;
+              ctrlY = (cueBall.y + contactY) / 2 + perpY * activeSpinX * curveAmt - aimDy / aimLen * activeSpinY * curveAmt * 0.4;
             }
 
             // Aiming line: beam + precision center
@@ -2656,7 +2688,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 const midY =
                   (realContactY + tangentContactY) /
                   2;
-                const bendAmt = activeSpinY * 40;
+                const bendAmt = activeSpinY * 50;
                 const ctrlX =
                   midX + aimDx * bendAmt;
                 const ctrlY =
@@ -2924,7 +2956,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           let stickOpacity = 1.0;
           let stickDist =
             18 + (activePower / 100) * 105;
-          const stickLength = 250;
+          const stickLength = 260;
 
           const activePulling = isMyTurnActive
             ? ctx.isPullingRef.current
@@ -2957,8 +2989,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                   105;
               stickOpacity = 1.0;
             } else {
-              const STRIKE_ACCEL = 40;
-              const FOLLOW_FADE = 320;
+              const STRIKE_ACCEL = 20;
+              const FOLLOW_FADE = 280;
               const totalDuration =
                 STRIKE_ACCEL + FOLLOW_FADE;
 
@@ -2978,10 +3010,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                     .power /
                     100) *
                     105;
-                const easeT = t * t * t;
+                const easeT = t * t * (3 - 2 * t); // smoothstep
                 stickDist =
                   chargeDist -
-                  easeT * (chargeDist - 9.0);
+                  easeT * (chargeDist - 8.0);
                 stickOpacity = 1.0;
               } else if (
                 elapsed < totalDuration
@@ -2992,22 +3024,23 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                     FOLLOW_FADE
                 );
 
-                const baseFollowThrough = 8;
+                const baseFollowThrough = 6;
                 const maxFollowThrough =
                   baseFollowThrough +
                   (ctx.strikeAnimRef.current
                     .power /
                     100) *
-                    20;
+                    16;
+                const followT = tFade * tFade;
                 stickDist =
-                  9.0 -
+                  8.0 -
                   Math.sin(
                     tFade * Math.PI * 0.5
                   ) * maxFollowThrough;
 
                 stickOpacity = Math.max(
                   0,
-                  Math.pow(1.0 - tFade, 2.0)
+                  Math.pow(1.0 - tFade, 1.6)
                 );
 
                 if (
@@ -3045,38 +3078,87 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           const stickTipY =
             cueBall.y - aimDy * stickDist;
 
-          const shadowOffsetDistance = 15;
-          const shadowBlurStrength = 6;
+          // Shadow — wider, softer, with perspective
+          const shadowOff = 18;
+          const shadowBlur = 10;
           const shadowTipX =
-            stickTipX +
-            aimDy * shadowOffsetDistance +
-            2;
+            stickTipX + aimDy * shadowOff + 3;
           const shadowTipY =
-            stickTipY -
-            aimDx * shadowOffsetDistance +
-            3;
+            stickTipY - aimDx * shadowOff + 4;
           const shadowBackX =
-            stickBackX +
-            aimDy * shadowOffsetDistance +
-            2;
+            stickBackX + aimDy * shadowOff + 3;
           const shadowBackY =
-            stickBackY -
-            aimDx * shadowOffsetDistance +
-            3;
+            stickBackY - aimDx * shadowOff + 4;
 
           ctx2d.save();
+          ctx2d.shadowColor = 'rgba(0,0,0,0.35)';
+          ctx2d.shadowBlur = shadowBlur;
           ctx2d.beginPath();
           ctx2d.moveTo(shadowBackX, shadowBackY);
           ctx2d.lineTo(shadowTipX, shadowTipY);
-          ctx2d.lineWidth = 5;
-          ctx2d.strokeStyle =
-            'rgba(0, 0, 0, 0.15)';
+          ctx2d.lineWidth = 6;
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.12)';
           ctx2d.lineCap = 'round';
-          ctx2d.shadowColor =
-            'rgba(0, 0, 0, 0.20)';
-          ctx2d.shadowBlur = shadowBlurStrength;
           ctx2d.stroke();
           ctx2d.restore();
+
+          // Spin visual glow near tip
+          const sx = activeSpinX || 0;
+          const sy = activeSpinY || 0;
+          const hasSpin = !isStrikingNow && (Math.abs(sx) > 0.05 || Math.abs(sy) > 0.05);
+          if (hasSpin && !isStrikingNow) {
+            const spinMag = Math.sqrt(
+              sx * sx + sy * sy
+            );
+            const spinGlowR = Math.min(
+              1,
+              spinMag * 1.2
+            );
+            const r =
+              sx > 0.05
+                ? 255 * spinGlowR
+                : 0;
+            const g =
+              sy > 0.05
+                ? 200 * spinGlowR
+                : sy < -0.05
+                ? 80 * spinGlowR
+                : 0;
+            const b =
+              sx < -0.05
+                ? 255 * spinGlowR
+                : sy < -0.05
+                ? 200 * spinGlowR
+                : 0;
+            ctx2d.save();
+            const glowGrad = ctx2d.createRadialGradient(
+              stickTipX + aimDx * 4,
+              stickTipY + aimDy * 4,
+              0,
+              stickTipX + aimDx * 4,
+              stickTipY + aimDy * 4,
+              18 * spinGlowR
+            );
+            glowGrad.addColorStop(
+              0,
+              `rgba(${r},${g},${b},${0.3 * spinGlowR})`
+            );
+            glowGrad.addColorStop(
+              1,
+              'rgba(0,0,0,0)'
+            );
+            ctx2d.fillStyle = glowGrad;
+            ctx2d.beginPath();
+            ctx2d.arc(
+              stickTipX + aimDx * 4,
+              stickTipY + aimDy * 4,
+              18 * spinGlowR,
+              0,
+              Math.PI * 2
+            );
+            ctx2d.fill();
+            ctx2d.restore();
+          }
 
           const stickNormX = -aimDy;
           const stickNormY = aimDx;
@@ -3119,147 +3201,175 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             sy: number,
             ex: number,
             ey: number,
+            halfW: number,
             color1: string,
             color2: string,
             color3: string
           ) => {
+            const w = Math.max(halfW, 3);
             const lG = ctx2d.createLinearGradient(
-              sx - stickNormX * 4,
-              sy - stickNormY * 4,
-              sx + stickNormX * 4,
-              sy + stickNormY * 4
+              sx - stickNormX * w,
+              sy - stickNormY * w,
+              sx + stickNormX * w,
+              sy + stickNormY * w
             );
+            // Shadow edge
             lG.addColorStop(0, color1);
-            lG.addColorStop(0.3, color2);
-            
-            // Specular moving highlight based on angle
-            const highlightPos = 0.5 + Math.cos(activeAngle * 2) * 0.15;
-            lG.addColorStop(Math.max(0, highlightPos - 0.05), color2);
-            lG.addColorStop(Math.min(1, Math.max(0, highlightPos)), 'rgba(255,255,255,0.4)');
-            lG.addColorStop(Math.min(1, highlightPos + 0.05), color2);
-            
-            lG.addColorStop(0.7, color2);
+            lG.addColorStop(0.08, color1);
+            // Ramp up to lit face
+            lG.addColorStop(0.18, color2);
+            lG.addColorStop(0.30, color2);
+            // Specular highlight
+            const hp = 0.45 + Math.cos(activeAngle * 2 + 1.2) * 0.12;
+            lG.addColorStop(Math.max(0.20, hp - 0.04), color2);
+            lG.addColorStop(Math.max(0.20, hp), 'rgba(255,255,255,0.55)');
+            lG.addColorStop(Math.min(1, hp + 0.04), color2);
+            // Lit face
+            lG.addColorStop(0.65, color2);
+            // Shadow side
+            lG.addColorStop(0.85, color2);
+            lG.addColorStop(0.95, color3);
             lG.addColorStop(1, color3);
             return lG;
           };
 
-          const buttLen = stickLength * 0.35;
+          const buttLen = stickLength * 0.40;
           const Joint1X =
             stickBackX + aimDx * buttLen;
           const Joint1Y =
             stickBackY + aimDy * buttLen;
 
-          const shaftLen = stickLength * 0.58;
+          const shaftLen = stickLength * 0.50;
           const Joint2X =
             Joint1X + aimDx * shaftLen;
           const Joint2Y =
             Joint1Y + aimDy * shaftLen;
 
+          const ferruleLen = stickLength * 0.06;
           const Joint3X =
-            Joint2X +
-            aimDx * (stickLength * 0.05);
+            Joint2X + aimDx * ferruleLen;
           const Joint3Y =
-            Joint2Y +
-            aimDy * (stickLength * 0.05);
+            Joint2Y + aimDy * ferruleLen;
 
+          // Segment 1 — Butt (ebony/walnut), rich dark wood with subtle grain simulation
           const buttGrad = getCylinderGrad(
-            stickBackX,
-            stickBackY,
-            Joint1X,
-            Joint1Y,
-            '#0a0301',
-            '#4a1a0a',
-            '#1a0803'
+            stickBackX, stickBackY,
+            Joint1X, Joint1Y,
+            5.0,
+            '#0a0200', '#5a2210', '#1a0702'
           );
           drawSegment(
-            stickBackX,
-            stickBackY,
-            Joint1X,
-            Joint1Y,
-            5.0,
-            4.3,
+            stickBackX, stickBackY,
+            Joint1X, Joint1Y,
+            5.0, 4.5,
             buttGrad
           );
 
-          const goldRingGrad = getCylinderGrad(
-            Joint1X,
-            Joint1Y,
-            Joint1X + aimDx * 2,
-            Joint1Y + aimDy * 2,
-            '#6b3a0a',
-            '#fde68a',
-            '#92400e'
+          // Decorative wrap/grip section at bottom of butt
+          const wrapLen = 18;
+          const wrapStartX =
+            stickBackX + aimDx * wrapLen;
+          const wrapStartY =
+            stickBackY + aimDy * wrapLen;
+          const wrapGrad = getCylinderGrad(
+            stickBackX, stickBackY,
+            wrapStartX, wrapStartY,
+            5.0,
+            '#1a0502', '#3a1508', '#1a0502'
           );
           drawSegment(
-            Joint1X,
-            Joint1Y,
-            Joint1X + aimDx * 2,
-            Joint1Y + aimDy * 2,
-            4.3,
-            4.2,
-            goldRingGrad
+            stickBackX, stickBackY,
+            wrapStartX, wrapStartY,
+            5.0, 5.0,
+            wrapGrad
           );
 
-          const mapleGrad = getCylinderGrad(
-            Joint1X + aimDx * 2,
-            Joint1Y + aimDy * 2,
-            Joint2X,
-            Joint2Y,
-            '#854d0e',
-            '#fef3c7',
-            '#a16207'
+          // Silver ring 1 (butt joint ring)
+          const ring1Grad = getCylinderGrad(
+            Joint1X - aimDx * 3, Joint1Y - aimDy * 3,
+            Joint1X + aimDx * 1, Joint1Y + aimDy * 1,
+            4.5,
+            '#334155', '#cbd5e1', '#1e293b'
           );
           drawSegment(
-            Joint1X + aimDx * 2,
-            Joint1Y + aimDy * 2,
-            Joint2X,
-            Joint2Y,
-            4.2,
-            3.2,
-            mapleGrad
+            Joint1X - aimDx * 3, Joint1Y - aimDy * 3,
+            Joint1X + aimDx * 1, Joint1Y + aimDy * 1,
+            4.5, 4.5,
+            ring1Grad
           );
 
-          const boneGrad = getCylinderGrad(
-            Joint2X,
-            Joint2Y,
-            Joint3X,
-            Joint3Y,
-            '#f1f5f9',
-            '#ffffff',
-            '#cbd5e1'
+          // Segment 2 — Maple shaft (lighter, warm wood)
+          const shaftGrad = getCylinderGrad(
+            Joint1X + aimDx * 1, Joint1Y + aimDy * 1,
+            Joint2X, Joint2Y,
+            4.5,
+            '#633d0a', '#fef3c7', '#7a4d0e'
           );
           drawSegment(
-            Joint2X,
-            Joint2Y,
-            Joint3X,
-            Joint3Y,
-            3.2,
+            Joint1X + aimDx * 1, Joint1Y + aimDy * 1,
+            Joint2X, Joint2Y,
+            4.5, 3.0,
+            shaftGrad
+          );
+
+          // Silver ring 2 (shaft→ferrule)
+          const ring2Grad = getCylinderGrad(
+            Joint2X - aimDx * 2, Joint2Y - aimDy * 2,
+            Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
             3.0,
-            boneGrad
-          );
-
-          const chalkTipX =
-            Joint3X + aimDx * 4;
-          const chalkTipY =
-            Joint3Y + aimDy * 4;
-          const chalkGrad = getCylinderGrad(
-            Joint3X,
-            Joint3Y,
-            chalkTipX,
-            chalkTipY,
-            '#2563eb',
-            '#93c5fd',
-            '#1e40af'
+            '#334155', '#e2e8f0', '#1e293b'
           );
           drawSegment(
-            Joint3X,
-            Joint3Y,
-            chalkTipX,
-            chalkTipY,
+            Joint2X - aimDx * 2, Joint2Y - aimDy * 2,
+            Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
+            3.0, 3.0,
+            ring2Grad
+          );
+
+          // Segment 3 — Ferrule (ivory/bone)
+          const ferruleGrad = getCylinderGrad(
+            Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
+            Joint3X, Joint3Y,
             3.0,
+            '#e2e8f0', '#fdfcf8', '#cbd5e1'
+          );
+          drawSegment(
+            Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
+            Joint3X, Joint3Y,
+            3.0, 2.8,
+            ferruleGrad
+          );
+
+          // Segment 4 — Chalk Tip (blue, with small specular dot)
+          const tipLen = 5;
+          const tipX = Joint3X + aimDx * tipLen;
+          const tipY = Joint3Y + aimDy * tipLen;
+          const tipGrad = getCylinderGrad(
+            Joint3X, Joint3Y,
+            tipX, tipY,
             2.8,
-            chalkGrad
+            '#1e3a8a', '#60a5fa', '#172554'
           );
+          drawSegment(
+            Joint3X, Joint3Y,
+            tipX, tipY,
+            2.8, 2.6,
+            tipGrad
+          );
+
+          // Tip highlight dot
+          ctx2d.save();
+          ctx2d.beginPath();
+          ctx2d.arc(
+            tipX - aimDx * 1.5 + stickNormX * 0.8,
+            tipY - aimDy * 1.5 + stickNormY * 0.8,
+            0.8,
+            0,
+            Math.PI * 2
+          );
+          ctx2d.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx2d.fill();
+          ctx2d.restore();
 
           ctx2d.restore();
 

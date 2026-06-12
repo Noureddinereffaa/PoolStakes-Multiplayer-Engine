@@ -24,30 +24,29 @@ export const MAX_Y = TABLE_H - CUSHION - BALL_R;
 // ═══════════════════════════════════════════════════════
 //  PHYSICS CONSTANTS (Calibrated to 8 Ball Pool feel)
 // ═══════════════════════════════════════════════════════
-const COR       = 0.92;   // ball-ball COR - slightly elastic for crisp collisions
-const COR_R     = 0.78;   // ball-rail COR - cushions have good rebound
-const MU_B      = 0.15;   // ball-ball friction - less grab for smoother slides
-const MU_RR     = 0.9975; // rolling friction/frame - slower decay for longer rolls
-const MU_RS     = 0.9925; // sliding friction/frame - slide persists longer
-const V_S       = 0.55;   // slide→roll transition speed threshold
-const MU_RT     = 0.12;   // rail tangential friction - less spin grab on cushions
+const COR       = 0.90;   // ball-ball COR - softer for more realistic energy loss
+const COR_R     = 0.75;   // ball-rail COR - cushions absorb more energy → tighter banks
+const MU_B      = 0.14;   // ball-ball friction - smoother slide with less grab
+const MU_RR     = 0.9982; // rolling friction/frame - longer, more natural rolls
+const MU_RS     = 0.9935; // sliding friction/frame - slide decays slightly faster
+const V_S       = 0.60;   // slide→roll transition speed threshold
+const MU_RT     = 0.14;   // rail tangential friction - more spin grab on cushions
 const SUB       = 60;     // sub-steps - higher for smoother simulation
 const S_IT      = 10;     // solver iterations - more accurate collision resolution
 
-const K_CURVE   = 0.042;  // English curve (side spin) - more pronounced masse
-const K_LONG    = 0.035;  // Draw/Follow (top/bottom spin) - stronger action
+const K_CURVE   = 0.038;  // English curve (side spin) - more controlled masse
+const K_LONG    = 0.030;  // Draw/Follow (top/bottom spin) - smoother action
 const SPIN_DEC  = 0.996;  // spin decay/frame - spin persists longer
 
 // Ball-ball Coulomb impulse multiplier
 const COR_TERM  = -(1 + COR) * 0.5;
 
 // ═══════════════════════════════════════════════════════
-//  POCKETS (8 Ball Pool style - tighter, skill-based)
+//  POCKETS (8 Ball Pool style - forgiving, smooth)
 // ═══════════════════════════════════════════════════════
-// Corner pockets: 21px radius (tight), Side pockets: 20px (tightest)
-// Only balls with center within radius are pocketed - no speed gate
-// This rewards precise aim like 8 Ball Pool
-const POCKET_RADII        = [21, 20, 21, 21, 20, 21];
+// Corner pockets: 24px radius (generous), Side pockets: 23px
+// More forgiving = closer to Miniclip feel
+const POCKET_RADII        = [24, 23, 24, 24, 23, 24];
 
 const POCKET_POS = [
   { x: CUSHION + 4,           y: CUSHION + 4           },

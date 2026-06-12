@@ -248,7 +248,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const basePlayMultiplier = physicsFrames.length > 350 ? (isMobile.current ? 2.6 : 1.95) : (isMobile.current ? 2.4 : 1.65);
       let animationFrameId: number;
       const animStartTime = performance.now();
-      const STRIKE_ACCEL = isMobile.current ? 4 : 8;
+      const STRIKE_ACCEL = 0;
       const physicsStartTime = animStartTime + STRIKE_ACCEL;
       animatedBallsRef.current = initialBallsCopy.map(b => {
         const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);
@@ -514,11 +514,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           } else if (pullStartPosRef.current) {
             const dx = coords.x - pullStartPosRef.current.x;
             const dy = coords.y - pullStartPosRef.current.y;
-            // Adaptive exponential curve: 0.001 at 0px → 0.014 at 300px+
+            // Adaptive curve: 0.0004 at 0px → 0.006 at 300px+ (ultra-fine for close balls)
             const dragDist = Math.hypot(dx, dy);
             const t = Math.min(dragDist, 300) / 300;
-            const base = isShiftHeldRef.current ? 0.0008 : 0.001;
-            const maxS = isShiftHeldRef.current ? 0.006 : 0.014;
+            const base = isShiftHeldRef.current ? 0.0003 : 0.0004;
+            const maxS = isShiftHeldRef.current ? 0.003 : 0.006;
             const adapt = base + t * (maxS - base);
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
             const newAngle = initialAimAngleRef.current + orthoDrag * adapt;
