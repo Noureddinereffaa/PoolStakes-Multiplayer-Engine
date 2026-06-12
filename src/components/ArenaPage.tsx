@@ -466,12 +466,12 @@ export default function ArenaPage({
             <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
               
               {/* Left Player (Me) */}
-              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-1 bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{myPlayer?.username || 'You'}</span>
-                  <div className="flex items-center gap-px min-h-[10px]">
-                    {myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />)}
+                  <div className="flex items-center gap-px min-h-[10px] flex-wrap">
+                    {myPocketed.length > 0 ? myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
                   </div>
                 </div>
               </div>
@@ -486,12 +486,12 @@ export default function ArenaPage({
                 </div>
               </div>
 
-              {/* Right Player (Opponent) - same style as left but right-aligned */}
-              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-1 justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
+              {/* Right Player (Opponent) - mirror of left */}
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="flex flex-col items-end min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
-                  <div className="flex items-center gap-px min-h-[10px] justify-end">
-                    {opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />)}
+                  <div className="flex items-center gap-px min-h-[10px] justify-end flex-wrap">
+                    {opponentPocketed.length > 0 ? opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
                   </div>
                 </div>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">👤</div>
