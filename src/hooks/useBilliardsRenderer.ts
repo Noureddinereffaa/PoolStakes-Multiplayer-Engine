@@ -1838,23 +1838,20 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.restore();
             }
 
-            {
-              const SIR = 36;
-              const siCX = cueBall.x;
-              const siCY = cueBall.y - 70;
+            if (Math.abs(activeSpinX) > 0.05 || Math.abs(activeSpinY) > 0.05) {
+              const SIR = 28;
+              const siCX = 760;
+              const siCY = 50;
               const spinLen = Math.sqrt(activeSpinX * activeSpinX + activeSpinY * activeSpinY);
-              const hasSpin = spinLen > 0.02;
 
               ctx2d.save();
 
-              // Background
-              ctx2d.fillStyle = 'rgba(0,0,0,0.7)';
+              ctx2d.fillStyle = 'rgba(0,0,0,0.65)';
               ctx2d.beginPath();
-              ctx2d.arc(siCX, siCY, SIR + 4, 0, Math.PI * 2);
+              ctx2d.arc(siCX, siCY, SIR + 3, 0, Math.PI * 2);
               ctx2d.fill();
 
-              // Cue ball representation (white circle with faint gradient)
-              const ballGrad = ctx2d.createRadialGradient(siCX - 6, siCY - 6, 1, siCX, siCY, SIR);
+              const ballGrad = ctx2d.createRadialGradient(siCX - 4, siCY - 4, 1, siCX, siCY, SIR);
               ballGrad.addColorStop(0, '#ffffff');
               ballGrad.addColorStop(0.5, '#f8f4ec');
               ballGrad.addColorStop(0.85, '#e8dcc8');
@@ -1864,73 +1861,48 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.arc(siCX, siCY, SIR, 0, Math.PI * 2);
               ctx2d.fill();
 
-              // Crosshair lines
-              ctx2d.strokeStyle = 'rgba(100,100,100,0.3)';
-              ctx2d.lineWidth = 0.6;
+              ctx2d.strokeStyle = 'rgba(100,100,100,0.25)';
+              ctx2d.lineWidth = 0.5;
               ctx2d.beginPath();
               ctx2d.moveTo(siCX - SIR + 4, siCY); ctx2d.lineTo(siCX + SIR - 4, siCY);
               ctx2d.moveTo(siCX, siCY - SIR + 4); ctx2d.lineTo(siCX, siCY + SIR - 4);
               ctx2d.stroke();
 
-              // Center dot
-              ctx2d.fillStyle = 'rgba(100,100,100,0.2)';
-              ctx2d.beginPath();
-              ctx2d.arc(siCX, siCY, 2, 0, Math.PI * 2);
-              ctx2d.fill();
-
-              // Dashed ring at radius for reference
-              ctx2d.strokeStyle = 'rgba(100,100,100,0.15)';
-              ctx2d.lineWidth = 0.5;
-              ctx2d.setLineDash([2, 3]);
-              ctx2d.beginPath();
-              ctx2d.arc(siCX, siCY, SIR * 0.5, 0, Math.PI * 2);
-              ctx2d.stroke();
-              ctx2d.setLineDash([]);
-
-              // Spin dot position (clamped within ball)
-              const dotRadius = 5;
+              const dotRadius = 4;
               const maxDist = SIR - dotRadius - 2;
-              let dx = -activeSpinX * 40;
-              let dy = -activeSpinY * 40;
+              let dx = -activeSpinX * 30;
+              let dy = -activeSpinY * 30;
               const dLen = Math.sqrt(dx * dx + dy * dy);
               if (dLen > maxDist) { dx = (dx / dLen) * maxDist; dy = (dy / dLen) * maxDist; }
 
-              // Glow behind dot
-              if (hasSpin) {
-                ctx2d.beginPath();
-                ctx2d.arc(siCX + dx, siCY + dy, dotRadius + 4, 0, Math.PI * 2);
-                ctx2d.fillStyle = 'rgba(239, 68, 68, 0.25)';
-                ctx2d.fill();
-              }
-
-              // Red dot (where cue strikes)
               ctx2d.beginPath();
-              ctx2d.arc(siCX + dx, siCY + dy, dotRadius, 0, Math.PI * 2);
-              ctx2d.fillStyle = hasSpin ? '#ef4444' : 'rgba(200,200,200,0.1)';
+              ctx2d.arc(siCX + dx, siCY + dy, dotRadius + 3, 0, Math.PI * 2);
+              ctx2d.fillStyle = 'rgba(239, 68, 68, 0.2)';
               ctx2d.fill();
 
-              // White glint on dot
-              if (hasSpin) {
-                ctx2d.beginPath();
-                ctx2d.arc(siCX + dx - 1.5, siCY + dy - 1.5, 2, 0, Math.PI * 2);
-                ctx2d.fillStyle = 'rgba(255,255,255,0.5)';
-                ctx2d.fill();
+              ctx2d.beginPath();
+              ctx2d.arc(siCX + dx, siCY + dy, dotRadius, 0, Math.PI * 2);
+              ctx2d.fillStyle = '#ef4444';
+              ctx2d.fill();
 
-                // Label below
-                ctx2d.font = '500 8px sans-serif';
-                ctx2d.fillStyle = 'rgba(255,255,255,0.6)';
-                ctx2d.textAlign = 'center';
-                let label = 'CENTER';
-                if (activeSpinY > 0.05 && activeSpinX > 0.05) label = 'FOLLOW+RIGHT';
-                else if (activeSpinY > 0.05 && activeSpinX < -0.05) label = 'FOLLOW+LEFT';
-                else if (activeSpinY < -0.05 && activeSpinX > 0.05) label = 'DRAW+RIGHT';
-                else if (activeSpinY < -0.05 && activeSpinX < -0.05) label = 'DRAW+LEFT';
-                else if (activeSpinY > 0.05) label = 'FOLLOW';
-                else if (activeSpinY < -0.05) label = 'DRAW';
-                else if (activeSpinX > 0.05) label = 'RIGHT ENGLISH';
-                else if (activeSpinX < -0.05) label = 'LEFT ENGLISH';
-                ctx2d.fillText(label, siCX, siCY + SIR + 12);
-              }
+              ctx2d.beginPath();
+              ctx2d.arc(siCX + dx - 1, siCY + dy - 1, 1.5, 0, Math.PI * 2);
+              ctx2d.fillStyle = 'rgba(255,255,255,0.4)';
+              ctx2d.fill();
+
+              ctx2d.font = '500 7px sans-serif';
+              ctx2d.fillStyle = 'rgba(255,255,255,0.5)';
+              ctx2d.textAlign = 'center';
+              let label = 'CENTER';
+              if (activeSpinY > 0.05 && activeSpinX > 0.05) label = 'FOL+R';
+              else if (activeSpinY > 0.05 && activeSpinX < -0.05) label = 'FOL+L';
+              else if (activeSpinY < -0.05 && activeSpinX > 0.05) label = 'DRAW+R';
+              else if (activeSpinY < -0.05 && activeSpinX < -0.05) label = 'DRAW+L';
+              else if (activeSpinY > 0.05) label = 'FOLLOW';
+              else if (activeSpinY < -0.05) label = 'DRAW';
+              else if (activeSpinX > 0.05) label = 'R.ENG';
+              else if (activeSpinX < -0.05) label = 'L.ENG';
+              ctx2d.fillText(label, siCX, siCY + SIR + 10);
 
               ctx2d.restore();
             }
