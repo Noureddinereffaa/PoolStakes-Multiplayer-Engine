@@ -416,16 +416,28 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     else if (e.changedTouches?.length) { clientXRaw = e.changedTouches[0].clientX; clientYRaw = e.changedTouches[0].clientY; }
     else { clientXRaw = e.clientX; clientYRaw = e.clientY; }
     
-    // Scale to 800x400 coordinate space
-    const screenX = ((clientXRaw - rect.left) / rect.width) * 800;
-    const screenY = ((clientYRaw - rect.top) / rect.height) * 400;
+    // Account for object-fit: contain letterboxing
+    const canvasRatio = canvas.width / canvas.height; // 800/400 = 2
+    const elementRatio = rect.width / rect.height;
+    let offsetX = 0, offsetY = 0, drawW = rect.width, drawH = rect.height;
+    if (elementRatio > canvasRatio) {
+      // Element is wider: black bars on left/right
+      drawH = rect.height;
+      drawW = drawH * canvasRatio;
+      offsetX = (rect.width - drawW) / 2;
+    } else {
+      // Element is taller: black bars on top/bottom
+      drawW = rect.width;
+      drawH = drawW / canvasRatio;
+      offsetY = (rect.height - drawH) / 2;
+    }
+    const screenX = ((clientXRaw - rect.left - offsetX) / drawW) * 800;
+    const screenY = ((clientYRaw - rect.top - offsetY) / drawH) * 400;
     
-    // Account for camera pan offset to get world coordinates
     return { x: screenX, y: screenY };
   };
 
   const handlePointerAction = (e: any, isInitialDown = false) => {
-    if (isAnimatingRef.current) return;
     const coords = getPointerCoords(e);
     if (!coords) return;
     
@@ -437,6 +449,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     });
     return;
   }
+
+    if (isAnimatingRef.current) return;
 
     if (isMyTurnRef.current && !roomStateRef.current.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
@@ -518,9 +532,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   // Inertia loop removed for 1-to-1 precise manual control
 
-  const handlePointerDown = (e: any) => { if (isAnimatingRef.current) return; setIsPointerActive(true); handlePointerAction(e, true); };
+  const handlePointerDown = (e: any) => { setIsPointerActive(true); handlePointerAction(e, true); };
   const handlePointerMove = (e: any) => {
-    if (isAnimatingRef.current) return;
     if (isPointerActive || pullStartPosRef.current) handlePointerAction(e, false);
     else if (!isMobile.current && isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
       const coords = getPointerCoords(e);

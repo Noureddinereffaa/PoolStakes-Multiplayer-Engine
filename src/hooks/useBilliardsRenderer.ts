@@ -333,8 +333,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         
         // Cushion top edge highlight (ball contact surface)
         const edgeHL = offCtx.createLinearGradient(PX, PY, PX, PY + 3);
-        edgeHL.addColorStop(0, 'rgba(100,230,190,0.35)');
-        edgeHL.addColorStop(0.5, 'rgba(80,200,160,0.2)');
+        edgeHL.addColorStop(0, 'rgba(100,230,190,0.42)');
+        edgeHL.addColorStop(0.5, 'rgba(80,200,160,0.25)');
         edgeHL.addColorStop(1, 'rgba(0,0,0,0)');
         offCtx.fillStyle = edgeHL;
         offCtx.fillRect(PX + 3, PY - 1, PLAY_W - 6, 3);
@@ -633,9 +633,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             offCtx.stroke();
           }
           // Inner drop shadow to give depth to the net
-          const innerShadow = offCtx.createRadialGradient(p.x, p.y, s(10), p.x, p.y, s(20));
-          innerShadow.addColorStop(0, 'rgba(0,0,0,0)');
-          innerShadow.addColorStop(1, 'rgba(0,0,0,0.4)');
+          const innerShadow = offCtx.createRadialGradient(p.x, p.y, s(5), p.x, p.y, s(22));
+          innerShadow.addColorStop(0, 'rgba(0,0,0,0.55)');
+          innerShadow.addColorStop(0.35, 'rgba(0,0,0,0.25)');
+          innerShadow.addColorStop(1, 'rgba(0,0,0,0)');
           offCtx.fillStyle = innerShadow;
           offCtx.fill();
           offCtx.restore();
@@ -888,7 +889,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         castShadow.addColorStop(0.4, 'rgba(0, 0, 0, 0.08)');
         castShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
-        ctx2d.arc(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 2.0, 0, Math.PI * 2);
+        ctx2d.ellipse(px + shadowOffX + 2, py + shadowOffY + 2, ballRadius * 1.8, ballRadius * 1.2, lightDir, 0, Math.PI * 2);
         ctx2d.fillStyle = castShadow;
         ctx2d.fill();
 
@@ -902,7 +903,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         contactShadow.addColorStop(0.6, 'rgba(0, 0, 0, 0.05)');
         contactShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx2d.beginPath();
-        ctx2d.arc(px + 1, py + 3, ballRadius * 1.3, 0, Math.PI * 2);
+        ctx2d.ellipse(px + 1, py + 3, ballRadius * 1.1, ballRadius * 0.85, lightDir, 0, Math.PI * 2);
         ctx2d.fillStyle = contactShadow;
         ctx2d.fill();
 
@@ -1669,7 +1670,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               beamGrad.addColorStop(0.6, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0.10)`);
               beamGrad.addColorStop(1, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0)`);
               ctx2d.strokeStyle = beamGrad;
-              ctx2d.lineWidth = 6 * (ctx.isMobileRef.current ? 0.45 : 1);
+              ctx2d.lineWidth = 6;
               ctx2d.lineCap = 'round';
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
@@ -1684,10 +1685,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               precGrad.addColorStop(0.5, mainLaserColor);
               precGrad.addColorStop(1, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0)`);
               ctx2d.strokeStyle = precGrad;
-              ctx2d.lineWidth = 1.0 * (ctx.isMobileRef.current ? 0.6 : 1);
+              ctx2d.lineWidth = 1.0;
               ctx2d.lineCap = 'round';
               ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 4 * (ctx.isMobileRef.current ? 0.5 : 1);
+              ctx2d.shadowBlur = 4;
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               ctx2d.lineTo(contactX, contactY);
@@ -3589,12 +3590,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx2d.fillRect(0, 0, 800, 400);
       ctx2d.restore();
 
-      // Bright pass bloom (subtle glow on white areas) — skip on mobile for performance
-      if (!ctx.isMobileRef.current) {
+      // Bright pass bloom (subtle glow on white areas)
+      {
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
-        ctx2d.globalAlpha = 0.06;
-        ctx2d.filter = 'blur(3px)';
+        ctx2d.globalAlpha = ctx.isMobileRef.current ? 0.03 : 0.06;
+        ctx2d.filter = ctx.isMobileRef.current ? 'blur(2px)' : 'blur(3px)';
         ctx2d.drawImage(canvas, 0, 0);
         ctx2d.filter = 'none';
         ctx2d.restore();

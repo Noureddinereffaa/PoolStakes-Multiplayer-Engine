@@ -486,7 +486,7 @@ export default function ArenaPage({
                 </div>
               </div>
 
-              {/* Right Player (Opponent) */}
+              {/* Right Player (Opponent) - same style as left but right-aligned */}
               <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-1 justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="flex flex-col items-end min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
@@ -497,17 +497,12 @@ export default function ArenaPage({
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">👤</div>
               </div>
 
-              {/* Action Buttons - hide on mobile */}
-              {!isMobile && (
-                <div className="flex items-center gap-1 ml-2">
-                  <button onClick={() => setShowSidebar(prev => !prev)} className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 transition text-white/80">
-                    <Users className="w-4 h-4" />
-                  </button>
-                  <button onClick={onQuitRoom} className="px-3 py-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-bold transition shrink-0">
-                    {language === 'ar' ? 'مغادرة' : 'Quit'}
-                  </button>
-                </div>
-              )}
+              {/* Quit button - always visible */}
+              <button onClick={onQuitRoom} className="shrink-0 p-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 transition">
+                <svg width={isMobile ? 12 : 16} height={isMobile ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+                </svg>
+              </button>
 
             </div>
       </header>
@@ -654,48 +649,44 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   };
 
   return (
-    <div className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 flex items-center gap-2 pointer-events-none select-none ${disabled ? 'opacity-30' : ''}`}>
-      {/* Track + arrow handle */}
-      <div className="relative flex flex-col items-center pointer-events-auto" style={{ touchAction: 'none' }}>
-        {/* Arrow handle - always visible as grab point */}
-        <div
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          className="relative flex flex-col items-center cursor-pointer"
-        >
-          {/* Power bar track */}
-          <div className="relative w-4 h-44 rounded-full bg-black/50 border border-amber-500/20 overflow-hidden shadow-lg shadow-black/40">
-            {/* Fill */}
-            <div
-              className="absolute bottom-0 w-full rounded-full transition-[height] duration-[30ms]"
-              style={{
-                height: `${shotPower}%`,
-                background: shotPower > 70
-                  ? 'linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)'
-                  : 'linear-gradient(to top, #22c55e, #eab308)',
-                boxShadow: shotPower > 0 ? '0 0 10px rgba(234,179,8,0.3)' : 'none',
-              }}
-            />
-          </div>
-          {/* Drag arrow ▼ */}
-          {!disabled && (
-            <div className="mt-1 flex flex-col items-center gap-0.5">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="text-amber-400 animate-bounce" style={{ animationDuration: '1.5s' }}>
-                <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span className="text-[7px] font-mono text-amber-400/70 tracking-wider uppercase">Drag</span>
-            </div>
-          )}
+    <div className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1 pointer-events-none select-none ${disabled ? 'opacity-25' : ''}`}>
+      {/* Arrow handle - drag down */}
+      <div
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className="pointer-events-auto flex flex-col items-center"
+        style={{ touchAction: 'none' }}
+      >
+        {/* Power bar */}
+        <div className="relative w-3.5 h-40 rounded-full bg-black/60 border border-amber-500/25 overflow-hidden shadow-lg shadow-black/50">
+          <div
+            className="absolute bottom-0 w-full rounded-full transition-[height] duration-[30ms]"
+            style={{
+              height: `${shotPower}%`,
+              background: shotPower > 70
+                ? 'linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)'
+                : 'linear-gradient(to top, #22c55e, #eab308)',
+              boxShadow: shotPower > 0 ? '0 0 10px rgba(234,179,8,0.25)' : 'none',
+            }}
+          />
         </div>
-        {/* Power % badge */}
-        {shotPower > 0 && (
-          <div className="mt-1 px-1.5 py-0.5 rounded bg-black/80 border border-amber-500/30 text-amber-400 text-[10px] font-bold font-mono">
-            {shotPower}%
+        {/* Arrow ▼ */}
+        {!disabled && (
+          <div className="mt-0.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-amber-400/80">
+              <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </div>
         )}
       </div>
+      {/* Power % */}
+      {shotPower > 0 && (
+        <div className="pointer-events-auto px-1.5 py-0.5 rounded bg-black/80 border border-amber-500/30 text-amber-400 text-[10px] font-bold font-mono">
+          {shotPower}%
+        </div>
+      )}
     </div>
   );
 }
