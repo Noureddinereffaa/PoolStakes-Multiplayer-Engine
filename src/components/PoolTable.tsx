@@ -504,22 +504,17 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             aimAngleRef.current = smoothed;
           }
         } else {
-          // ================= MOBILE: PRO AIM =================
-          // Touch: absolute angle for instant response
-          // Drag: relative from initial touch with lower sensitivity for precision
+          // ================= MOBILE: RELATIVE AIM (professional, finger-free) =================
+          // Touch anywhere, drag left/right to rotate aim. Finger never covers the ball.
+          const sens = isShiftHeldRef.current ? 0.003 : 0.01;
           if (isInitialDown) {
             pullStartPosRef.current = coords;
-            const cbX = cueBall.x, cbY = cueBall.y;
-            const newAngle = Math.atan2(coords.y - cbY, coords.x - cbX);
-            setAimAngle(newAngle);
-            aimAngleRef.current = newAngle;
-            initialAimAngleRef.current = newAngle;
+            initialAimAngleRef.current = aimAngleRef.current;
           } else if (pullStartPosRef.current) {
             const dx = coords.x - pullStartPosRef.current.x;
             const dy = coords.y - pullStartPosRef.current.y;
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-            const sensitivity = 0.005;
-            const newAngle = initialAimAngleRef.current + orthoDrag * sensitivity;
+            const newAngle = initialAimAngleRef.current + orthoDrag * sens;
             setAimAngle(newAngle);
             aimAngleRef.current = newAngle;
           }

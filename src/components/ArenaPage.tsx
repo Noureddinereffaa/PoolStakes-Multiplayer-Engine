@@ -608,7 +608,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Cue Stick Power Slider with drag arrow ─── */
+/* ─── Mobile Power Slider: arrow button, drag down to charge, release to shoot ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -643,14 +643,12 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     if (!disabled && p >= 5) {
       try { navigator.vibrate?.(15); } catch (_) {}
       onShoot();
-    } else {
-      onPowerChange(0);
     }
+    onPowerChange(0);
   };
 
   return (
-    <div className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1 pointer-events-none select-none ${disabled ? 'opacity-25' : ''}`}>
-      {/* Arrow handle - drag down */}
+    <div className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-0.5 pointer-events-none select-none ${disabled ? 'opacity-20' : ''}`}>
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -660,33 +658,25 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
         style={{ touchAction: 'none' }}
       >
         {/* Power bar */}
-        <div className="relative w-3.5 h-40 rounded-full bg-black/60 border border-amber-500/25 overflow-hidden shadow-lg shadow-black/50">
+        <div className="relative w-3 h-36 rounded-full bg-black/50 border border-white/10 overflow-hidden">
           <div
-            className="absolute bottom-0 w-full rounded-full transition-[height] duration-[30ms]"
+            className="absolute bottom-0 w-full rounded-full transition-[height] duration-[20ms]"
             style={{
               height: `${shotPower}%`,
-              background: shotPower > 70
-                ? 'linear-gradient(to top, #22c55e, #eab308 50%, #ef4444)'
-                : 'linear-gradient(to top, #22c55e, #eab308)',
-              boxShadow: shotPower > 0 ? '0 0 10px rgba(234,179,8,0.25)' : 'none',
+              background: shotPower > 70 ? '#ef4444' : shotPower > 30 ? '#eab308' : '#22c55e',
             }}
           />
         </div>
-        {/* Arrow ▼ */}
+        {/* Arrow handle */}
         {!disabled && (
-          <div className="mt-0.5">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-amber-400/80">
-              <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <div className="flex flex-col items-center mt-0.5">
+            <svg width="18" height="14" viewBox="0 0 24 24" fill="none" className="text-amber-400">
+              <path d="M12 2v18M5 13l7 7 7-7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
+            <span className="text-[6px] text-amber-400/50 font-mono mt-0.5">PULL</span>
           </div>
         )}
       </div>
-      {/* Power % */}
-      {shotPower > 0 && (
-        <div className="pointer-events-auto px-1.5 py-0.5 rounded bg-black/80 border border-amber-500/30 text-amber-400 text-[10px] font-bold font-mono">
-          {shotPower}%
-        </div>
-      )}
     </div>
   );
 }
