@@ -145,17 +145,16 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
     if (spd < 0.010) {
       b.vx = 0;
       b.vy = 0;
-      continue;
+    } else {
+      // Gradual slide→roll friction (exponential — physically correct)
+      const t = Math.min(1, spd / V_S);
+      const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
+      const f = Math.pow(mu, dt);
+      b.vx = vx * f;
+      b.vy = vy * f;
     }
 
-    // Gradual slide→roll friction (exponential — physically correct)
-    const t = Math.min(1, spd / V_S);
-    const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
-    const f = Math.pow(mu, dt);
-    b.vx = vx * f;
-    b.vy = vy * f;
-
-    // Cue ball spin
+    // Cue ball spin (decays even when ball is stopped, preventing frozen spin)
     if (b.id === 0) {
       const sx = b.spinX || 0;
       const sy = b.spinY || 0;
@@ -314,7 +313,7 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
         if (d2 >= MIN_D2) continue;
 
         anyOverlap = true;
-        const dist = Math.sqrt(d2) || 1e-8;
+        const dist = Math.sqrt(Math.max(0, d2)) || 1e-8;
         const nx   = dx / dist;
         const ny   = dy / dist;
         const tx   = -ny;
@@ -331,7 +330,7 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
         // Recalculate normal after position correction
         const rdx  = b2.x - b1.x;
         const rdy  = b2.y - b1.y;
-        const rd   = Math.sqrt(rdx * rdx + rdy * rdy) || 1e-8;
+        const rd   = Math.sqrt(Math.max(0, rdx * rdx + rdy * rdy)) || 1e-8;
         const rnx  = rdx / rd;
         const rny  = rdy / rd;
 
@@ -425,9 +424,36 @@ export function simulateOneFrame(balls: Ball[], tracker?: { firstContactBallId: 
 }
 
 export function isAnyBallMoving(balls: Ball[]): boolean {
-  return balls.some(b => !b.isPocketed && (Math.abs(b.vx) > 0.05 || Math.abs(b.vy) > 0.05));
+  return balls.some(b => !b.isPocketed && Math.hypot(b.vx, b.vy) > 0.05);
 }
 
 export function captureFrame(balls: Ball[]): Array<{ id: number; x: number; y: number; isPocketed: boolean }> {
   return balls.map(b => ({ id: b.id, x: b.x, y: b.y, isPocketed: b.isPocketed }));
+}
+
+/**
+ * Yield to the event loop if the simulation has been running too long.
+ * Prevents physics from blocking other WebSocket messages.
+ */
+const YIELD_INTERVAL_ITERATIONS = 60; // Yield every ~60 physics frames (~1s simulated)
+const YIELD_TIME_THRESHOLD_MS = 16;    // Yield if wall-clock elapsed > 16ms
+
+let _yieldIterationCounter = 0;
+let _yieldStartTime = 0;
+
+export function resetYieldTimer(): void {
+  _yieldIterationCounter = 0;
+  _yieldStartTime = Date.now();
+}
+
+export async function yieldIfNeeded(): Promise<void> {
+  _yieldIterationCounter++;
+  if (_yieldIterationCounter < YIELD_INTERVAL_ITERATIONS) return;
+  _yieldIterationCounter = 0;
+
+  const elapsed = Date.now() - _yieldStartTime;
+  if (elapsed > YIELD_TIME_THRESHOLD_MS) {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    _yieldStartTime = Date.now();
+  }
 }

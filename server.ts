@@ -76,6 +76,11 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   res.status(500).json({ success: false, error: 'Internal server error' });
 });
 
+// ── Health Check ──────────────────────────────────────────
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
 // ── Metrics & Monitoring ──────────────────────────────────
 app.get('/api/metrics', (_req, res) => {
   const roomCount = activeRooms.size;

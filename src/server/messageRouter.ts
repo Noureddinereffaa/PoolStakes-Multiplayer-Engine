@@ -91,7 +91,7 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       handlePreviewAim(ws, msg);
       break;
     case 'shoot':
-      handleShoot(ws, msg);
+      await handleShoot(ws, msg);
       break;
     case 'reset_cue_ball':
       handleResetCueBall(ws, msg);

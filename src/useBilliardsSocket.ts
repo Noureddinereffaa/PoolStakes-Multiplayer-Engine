@@ -50,6 +50,19 @@ export function useBilliardsSocket({
   const wsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  
+  // Strict-mode / unmount cleanup
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      if (pingTimerRef.current) { clearInterval(pingTimerRef.current); pingTimerRef.current = null; }
+      if (pongTimeoutRef.current) { clearTimeout(pongTimeoutRef.current); pongTimeoutRef.current = null; }
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+      if (fallbackTimerRef.current) { clearTimeout(fallbackTimerRef.current); fallbackTimerRef.current = null; }
+    };
+  }, []);
+  
   const reconnectRef = useRef<{ targetRoomId: string; customStake: number; autoJoinAI: boolean | Difficulty } | null>(null);
   const reconnectAttemptRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,15 +362,15 @@ export function useBilliardsSocket({
       // بدء مؤقت ping/pann لمراقبة جودة الاتصال
       if (pingTimerRef.current) clearInterval(pingTimerRef.current);
       pingTimerRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          markPingSent();
-          ws.send(JSON.stringify({ type: 'ping' }));
-          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
-          pongTimeoutRef.current = setTimeout(() => {
-            setConnectionGrade('poor');
-            onGradeRef.current?.('poor');
-          }, CONNECTION_TIMEOUT);
-        }
+        if (!mountedRef.current || ws.readyState !== WebSocket.OPEN) return;
+        markPingSent();
+        ws.send(JSON.stringify({ type: 'ping' }));
+        if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+        pongTimeoutRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
+          setConnectionGrade('poor');
+          onGradeRef.current?.('poor');
+        }, CONNECTION_TIMEOUT);
       }, PING_INTERVAL);
 
       while (offlineQueueRef.current.length > 0) {
@@ -430,6 +443,7 @@ export function useBilliardsSocket({
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
     ws.onopen = () => {
+      if (!mountedRef.current) return;
       if (fallbackTimer) clearTimeout(fallbackTimer);
       reconnectAttemptRef.current = 0;
       setIsReconnecting(false);
@@ -441,15 +455,15 @@ export function useBilliardsSocket({
 
       if (pingTimerRef.current) clearInterval(pingTimerRef.current);
       pingTimerRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          markPingSent();
-          ws.send(JSON.stringify({ type: 'ping' }));
-          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
-          pongTimeoutRef.current = setTimeout(() => {
-            setConnectionGrade('poor');
-            onGradeRef.current?.('poor');
-          }, CONNECTION_TIMEOUT);
-        }
+        if (!mountedRef.current || ws.readyState !== WebSocket.OPEN) return;
+        markPingSent();
+        ws.send(JSON.stringify({ type: 'ping' }));
+        if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+        pongTimeoutRef.current = setTimeout(() => {
+          if (!mountedRef.current) return;
+          setConnectionGrade('poor');
+          onGradeRef.current?.('poor');
+        }, CONNECTION_TIMEOUT);
       }, PING_INTERVAL);
 
       while (offlineQueueRef.current.length > 0) {

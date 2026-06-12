@@ -433,6 +433,19 @@ export function getOrCreateRoom(roomId: string, name: string, stake = 10): RoomS
 
 const MAX_LOG_SYNC = 30;
 
+/** Maximum WebSocket send buffer per client (64KB). Clients exceeding this are skipped. */
+const MAX_BUFFERED_AMOUNT = 65536;
+
+/**
+ * Safe send: respects backpressure. If client's buffer exceeds MAX_BUFFERED_AMOUNT,
+ * the message is dropped to prevent unbounded memory growth.
+ */
+export function safeSend(ws: WebSocket, payload: string): void {
+  if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < MAX_BUFFERED_AMOUNT) {
+    ws.send(payload);
+  }
+}
+
 export function broadcastRoom(roomId: string): void {
   const room = activeRooms.get(roomId);
   if (!room) return;
@@ -451,9 +464,7 @@ export function broadcastRoom(roomId: string): void {
   });
 
   for (const client of wssList) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
+    safeSend(client, payload);
   }
 }
 
@@ -466,7 +477,7 @@ export function sendFullState(ws: WebSocket, roomId: string): void {
     players: room.players.map(p => ({ ...p })),
     log: room.log.slice(-MAX_LOG_SYNC)
   };
-  ws.send(JSON.stringify({ type: 'sync_state', state: stateForSync }));
+  safeSend(ws, JSON.stringify({ type: 'sync_state', state: stateForSync }));
 }
 
 export function startForfeitTimer(roomId: string, fn: () => void): void {
@@ -491,9 +502,7 @@ export function cancelForfeitTimer(roomId: string): void {
 export function broadcastToAllWebSockets(messageObj: Record<string, unknown>): void {
   const payload = JSON.stringify(messageObj);
   for (const ws of activeSockets) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(payload);
-    }
+    safeSend(ws, payload);
   }
 }
 

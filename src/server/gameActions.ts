@@ -1,13 +1,14 @@
 import { WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { RoomState, SocketMessage } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, resetYieldTimer, yieldIfNeeded } from './physics';
 import {
   activeRooms, activeSockets, animatingRoomIds, clientsByRoom, playerRoomMap,
   userSockets, rematchingRooms, getOrCreateRoom, broadcastRoom,
   pushRoomLog, cancelForfeitTimer, startForfeitTimer, DISCONNECT_TIMEOUT_MS,
   enforceSingleSocket, removeUserSocket, pushEventLog, sendFullState, cleanupRoom,
-  registerRoomTimeout, getPublicRooms, withRoomLock
+  registerRoomTimeout, getPublicRooms, withRoomLock, roomIndex, ensureRoomLoaded,
+  safeSend
 } from './state';
 import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
 import { sendPushNotification } from './push';
@@ -253,7 +254,7 @@ export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { ty
 }
 
 // ── Shoot ────────────────────────────────────────────────────
-export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: 'shoot' }>): void {
+export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: 'shoot' }>): Promise<void> {
   const mapping = playerRoomMap.get(ws);
   if (!mapping) return;
   const { roomId, playerId } = mapping;
@@ -299,9 +300,12 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   const MOVEMENT_THRESHOLD_SQ = 4;
   let framesSinceLastCapture = 0;
 
+  resetYieldTimer();
+
   while (iterations < maxStepsLimit) {
     const preStates = room.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
     simulatePhysicsStep(room.balls, contactTracker);
+    await yieldIfNeeded();
     let pocketedThisStep = false;
     for (let i = 0; i < room.balls.length; i++) {
       const cb = room.balls[i], pb = preStates.find(s => s.id === cb.id);
@@ -331,8 +335,9 @@ export function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { type: '
   if (framesSinceLastCapture > 0 || frames.length === 0) frames.push(captureFrame(room.balls));
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
+  const payload = JSON.stringify({ type: 'physics_frames', frames: compactFrames });
   for (const client of clientsByRoom.get(roomId) || []) {
-    if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: 'physics_frames', frames: compactFrames }));
+    safeSend(client, payload);
   }
 
   const totalSteps = iterations;
@@ -484,6 +489,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
   if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token for reconnection.' })); return; }
   if (!enforceSingleSocket(decoded.id, ws, false)) return;
 
+  // First pass: scan activeRooms (rooms already in memory)
   for (const [roomId, room] of activeRooms) {
     if (room.status !== 'playing' && room.status !== 'ready') continue;
     if (!room.disconnectedPlayerIds?.includes(decoded.id)) continue;
@@ -513,6 +519,45 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     pushEventLog('reconnect_complete', { roomId, playerId: decoded.id });
     return;
   }
+
+  // Second pass: check roomIndex for rooms not in memory (e.g., after server restart)
+  for (const [roomId, meta] of roomIndex) {
+    if (meta.status !== 'playing' && meta.status !== 'ready' && meta.status !== 'paused') continue;
+
+    const room = await ensureRoomLoaded(roomId);
+    if (!room) continue;
+    if (!room.disconnectedPlayerIds?.includes(decoded.id)) continue;
+
+    cancelForfeitTimer(roomId);
+
+    const player = room.players.find(p => p.id === decoded.id);
+    if (!player) { ws.send(JSON.stringify({ type: 'error', message: 'Player record not found.' })); return; }
+
+    if (!clientsByRoom.has(roomId)) clientsByRoom.set(roomId, new Set());
+    clientsByRoom.get(roomId)!.add(ws);
+    playerRoomMap.set(ws, { roomId, playerId: decoded.id });
+    player.isConnected = true;
+    room.disconnectedPlayerIds = room.disconnectedPlayerIds!.filter(id => id !== decoded.id);
+    delete room.reconnectDeadlines?.[decoded.id];
+    if (!room.disconnectedPlayerIds.length) cancelForfeitTimer(roomId);
+
+    // Resume from paused state
+    if (room.status === 'paused') {
+      room.status = 'playing';
+      room.lastActiveAt = Date.now();
+    }
+
+    sendFullState(ws, roomId);
+    for (const client of clientsByRoom.get(roomId) || []) {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'reconnect_notice', playerId: decoded.id }));
+      }
+    }
+    broadcastRoom(roomId);
+    pushEventLog('reconnect_complete', { roomId, playerId: decoded.id });
+    return;
+  }
+
   ws.send(JSON.stringify({ type: 'error', message: 'No active disconnection found for rejoin.' }));
 }
 

@@ -10,6 +10,14 @@ import {
 import { poolAudio } from '../utils/audio';
 import { getOptimalDPR } from '../utils/mobile';
 
+const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : (cb: (t: number) => void) => { return +setTimeout(() => cb(performance.now()), 16); };
+const caf = typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : (id: number) => clearTimeout(id);
+
+interface AdaptiveQuality {
+  reducedParticles: boolean;
+  disableShadows: boolean;
+  reducedAnimations: boolean;
+}
 
 interface RenderContext {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -42,6 +50,9 @@ interface RenderContext {
   impactFlashesRef?: RefObject<{x: number, y: number, startTime: number}[]>;
   isFineAimRef?: RefObject<boolean>;
   aimInertiaVelocityRef?: RefObject<number>;
+  magnifierCaptureRef?: HTMLCanvasElement | null;
+  qualityRef?: RefObject<AdaptiveQuality>;
+  prefersReducedMotionRef?: RefObject<boolean>;
 }
 
 
@@ -72,8 +83,6 @@ function drawArrowhead(ctx: CanvasRenderingContext2D, x: number, y: number, angl
   ctx.lineTo(-size, -size / 1.5);
   ctx.closePath();
   ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 3;
   ctx.fill();
   ctx.restore();
 }
@@ -753,24 +762,28 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx.offscreenCanvasRef.current = offCanvas;
     }
 
-    // Atmospheric dust specks (ambient effect)
-    if (ctx.dustSpecksRef.current.length === 0) {
-      for (let i = 0; i < 15; i++) {
-        ctx.dustSpecksRef.current.push({
-          x: Math.random() * 760 + 20,
-          y: Math.random() * 360 + 20,
-          vx: (Math.random() - 0.5) * 0.16,
-          vy: (Math.random() - 0.5) * 0.16,
-          radius: Math.random() * 1.5 + 0.6,
-          alpha: Math.random() * 0.28 + 0.12,
-          speed: Math.random() * 0.04 + 0.015,
-        });
-      }
-    }
-
     const drawLoop = () => {
-      // Clear background
-      ctx2d.clearRect(0, 0, 800, 400);
+      // Adaptive quality settings (read at start of frame)
+      const quality = ctx.qualityRef?.current || { reducedParticles: false, disableShadows: false, reducedAnimations: false };
+      const prefersReducedMotion = ctx.prefersReducedMotionRef?.current || false;
+      const reducedAnimations = quality.reducedAnimations || prefersReducedMotion;
+
+      // Atmospheric dust specks (ambient effect) - init once with quality
+      if (ctx.dustSpecksRef.current.length === 0) {
+        const dustCount = quality.reducedParticles ? 6 : 15;
+        for (let i = 0; i < dustCount; i++) {
+          ctx.dustSpecksRef.current.push({
+            x: Math.random() * 760 + 20,
+            y: Math.random() * 360 + 20,
+            vx: (Math.random() - 0.5) * 0.16,
+            vy: (Math.random() - 0.5) * 0.16,
+            radius: Math.random() * 1.5 + 0.6,
+            alpha: Math.random() * 0.28 + 0.12,
+            speed: Math.random() * 0.04 + 0.015,
+          });
+        }
+      }
+      // No clearRect needed — offscreen canvas drawImage covers the full area
 
       let lastDrawContactX: number | null = null;
       let lastDrawContactY: number | null = null;
@@ -929,15 +942,17 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const specOffX = -0.40 + dxCenter * 0.12;
         const specOffY = -0.38 + dyCenter * 0.10;
 
-        // Ground contact shadow (keeps balls grounded)
-        const shadowGrad = ctx2d.createRadialGradient(px, py + 2, 0, px, py + 2, ballRadius * 0.65);
-        shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
-        shadowGrad.addColorStop(0.4, 'rgba(0,0,0,0.06)');
-        shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx2d.beginPath();
-        ctx2d.ellipse(px + 0.5, py + 2.5, ballRadius * 0.55, ballRadius * 0.28, 0, 0, Math.PI * 2);
-        ctx2d.fillStyle = shadowGrad;
-        ctx2d.fill();
+        // Ground contact shadow (keeps balls grounded) - skip if shadows disabled
+        if (!quality.disableShadows) {
+          const shadowGrad = ctx2d.createRadialGradient(px, py + 2, 0, px, py + 2, ballRadius * 0.65);
+          shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
+          shadowGrad.addColorStop(0.4, 'rgba(0,0,0,0.06)');
+          shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx2d.beginPath();
+          ctx2d.ellipse(px + 0.5, py + 2.5, ballRadius * 0.55, ballRadius * 0.28, 0, 0, Math.PI * 2);
+          ctx2d.fillStyle = shadowGrad;
+          ctx2d.fill();
+        }
 
         const isTarget = eligibleIds.includes(b.id);
 
@@ -955,7 +970,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             );
           }
 
-          if (baseAlphaScalar > 0) {
+          if (baseAlphaScalar > 0 && !reducedAnimations) {
             const isMyTurnActive =
               snap.roomState.currentTurn ===
               ctx.myPlayerIdRef.current;
@@ -1779,8 +1794,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.strokeStyle = precGrad;
               ctx2d.lineWidth = 1.0;
               ctx2d.lineCap = 'round';
-              ctx2d.shadowColor = mainShadowColor;
-              ctx2d.shadowBlur = 4;
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
               if (showSpinCurve) {
@@ -2076,8 +2089,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.save();
               ctx2d.strokeStyle = isMyTurnActive ? 'rgba(255, 170, 0, 0.25)' : 'rgba(0, 229, 255, 0.25)';
               ctx2d.lineWidth = 6;
-          ctx2d.shadowColor = mainShadowColor;
-          ctx2d.shadowBlur = 4;
               ctx2d.beginPath();
               ctx2d.moveTo(bouncePoints[0].x, bouncePoints[0].y);
               for (let i = 1; i < bouncePoints.length; i++) ctx2d.lineTo(bouncePoints[i].x, bouncePoints[i].y);
@@ -2234,8 +2245,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
               // Render Target Ball Primary path
               ctx2d.save();
-          ctx2d.shadowColor = '#059669';
-          ctx2d.shadowBlur = 3;
               ctx2d.strokeStyle =
                 'rgba(16, 185, 129, 0.18)';
               ctx2d.lineWidth = 3.5;
@@ -2472,8 +2481,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 }
 
                 ctx2d.save();
-                ctx2d.shadowColor = '#059669';
-                ctx2d.shadowBlur = 2;
                 ctx2d.strokeStyle =
                   'rgba(16, 185, 129, 0.3)';
                 ctx2d.lineWidth = 2;
@@ -2852,13 +2859,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
               // Render telemetry labels
               ctx2d.save();
-              ctx2d.fillStyle = '#fffaeb';
               ctx2d.font =
                 'bold 8.5px "JetBrains Mono", monospace';
               ctx2d.textAlign = 'center';
-              ctx2d.shadowColor =
-                'rgba(0, 0, 0, 0.4)';
-              ctx2d.shadowBlur = 2;
 
               let angleText = `${cutAngleDeg}° Cut`;
               if (cutAngleDeg < 3.5)
@@ -2868,6 +2871,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 angleText =
                   'Thin Cut (رقيق جداً)';
 
+              // Shadow via double fillText (replaces expensive shadowBlur)
+              ctx2d.fillStyle = 'rgba(0,0,0,0.4)';
+              ctx2d.fillText(angleText, contactX + 0.5, contactY - 14.5);
+              ctx2d.fillStyle = '#fffaeb';
               ctx2d.fillText(
                 angleText,
                 contactX,
@@ -3003,29 +3010,19 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           const stickTipY =
             cueBall.y - aimDy * stickDist;
 
-          // Shadow — wider, softer, with perspective
+          // Shadow — offset stroke (replaces expensive shadowBlur)
           const shadowOff = 18;
-          const shadowBlur = 10;
-          const shadowTipX =
-            stickTipX + aimDy * shadowOff + 3;
-          const shadowTipY =
-            stickTipY - aimDx * shadowOff + 4;
-          const shadowBackX =
-            stickBackX + aimDy * shadowOff + 3;
-          const shadowBackY =
-            stickBackY - aimDx * shadowOff + 4;
-
-          ctx2d.save();
-          ctx2d.shadowColor = 'rgba(0,0,0,0.35)';
-          ctx2d.shadowBlur = shadowBlur;
+          const sTx = stickTipX + aimDy * shadowOff + 3;
+          const sTy = stickTipY - aimDx * shadowOff + 4;
+          const sBx = stickBackX + aimDy * shadowOff + 3;
+          const sBy = stickBackY - aimDx * shadowOff + 4;
           ctx2d.beginPath();
-          ctx2d.moveTo(shadowBackX, shadowBackY);
-          ctx2d.lineTo(shadowTipX, shadowTipY);
+          ctx2d.moveTo(sBx, sBy);
+          ctx2d.lineTo(sTx, sTy);
           ctx2d.lineWidth = 6;
-          ctx2d.strokeStyle = 'rgba(0,0,0,0.12)';
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.10)';
           ctx2d.lineCap = 'round';
           ctx2d.stroke();
-          ctx2d.restore();
 
           // Spin visual glow near tip
           const sx = activeSpinX || 0;
@@ -3559,19 +3556,27 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             panelH
           );
         ctx2d.fillStyle = panelGrad;
-        ctx2d.shadowColor = '#f59e0b';
-        ctx2d.shadowBlur = 10;
         ctx2d.fill();
         ctx2d.strokeStyle = '#f59e0b';
         ctx2d.lineWidth = 1.5;
         ctx2d.stroke();
         ctx2d.restore();
 
+        // Soft gold border (replaces shadowBlur)
+        ctx2d.save();
+        ctx2d.strokeStyle = 'rgba(245,158,11,0.20)';
+        ctx2d.lineWidth = 6;
+        if (ctx2d.roundRect) {
+          ctx2d.roundRect(panelX, panelY, panelW, panelH, 14);
+        } else {
+          ctx2d.rect(panelX, panelY, panelW, panelH);
+        }
+        ctx2d.stroke();
+        ctx2d.restore();
+
         ctx2d.save();
         ctx2d.translate(400, panelY + 30);
         ctx2d.fillStyle = '#fbbf24';
-        ctx2d.shadowColor = '#f59e0b';
-        ctx2d.shadowBlur = 6;
         ctx2d.font = '26px serif';
         ctx2d.textAlign = 'center';
         ctx2d.textBaseline = 'middle';
@@ -3594,17 +3599,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           : '#f87171';
         ctx2d.textAlign = 'center';
         ctx2d.textBaseline = 'middle';
-        ctx2d.shadowColor = isMyWin
-          ? '#f59e0b'
-          : '#dc2626';
-        ctx2d.shadowBlur = 4;
-        ctx2d.fillText(
-          isMyWin
-            ? '🎉 YOU WIN!'
-            : `${winnerName} wins`,
-          400,
-          panelY + 70
-        );
+        // Shadow via double fillText (replaces expensive shadowBlur)
+        ctx2d.fillStyle = isMyWin ? 'rgba(245,158,11,0.3)' : 'rgba(220,38,38,0.3)';
+        ctx2d.fillText(isMyWin ? '🎉 YOU WIN!' : `${winnerName} wins`, 401, panelY + 71);
+        ctx2d.fillStyle = isMyWin ? '#fbbf24' : '#f87171';
+        ctx2d.fillText(isMyWin ? '🎉 YOU WIN!' : `${winnerName} wins`, 400, panelY + 70);
         ctx2d.restore();
 
         ctx2d.save();
@@ -3667,27 +3666,18 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       ctx2d.restore();
 
-      // 9. Post-processing: cinematic vignette for depth and focus
-      ctx2d.save();
-      ctx2d.fillStyle = gradVignette;
-      ctx2d.fillRect(0, 0, 800, 400);
-      ctx2d.restore();
-
-      // Warm light glow from overhead (dramatic spotlight - Miniclip style)
-      ctx2d.save();
-      ctx2d.globalCompositeOperation = 'screen';
-      ctx2d.fillStyle = gradWarmGlow;
-      ctx2d.fillRect(0, 0, 800, 400);
-      ctx2d.restore();
-
-      // Bright pass bloom (subtle glow on white areas)
-      {
+      // 9. Post-processing: cinematic vignette for depth and focus (skip on reduced animations)
+      if (!reducedAnimations) {
         ctx2d.save();
-        ctx2d.globalCompositeOperation = 'lighter';
-        ctx2d.globalAlpha = 0.06;
-        ctx2d.filter = 'blur(3px)';
-        ctx2d.drawImage(canvas, 0, 0);
-        ctx2d.filter = 'none';
+        ctx2d.fillStyle = gradVignette;
+        ctx2d.fillRect(0, 0, 800, 400);
+        ctx2d.restore();
+
+        // Warm light glow from overhead (dramatic spotlight - Miniclip style)
+        ctx2d.save();
+        ctx2d.globalCompositeOperation = 'screen';
+        ctx2d.fillStyle = gradWarmGlow;
+        ctx2d.fillRect(0, 0, 800, 400);
         ctx2d.restore();
       }
 
@@ -3720,25 +3710,37 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const srcX = targetScreenX - srcW / 2;
         const srcY = targetScreenY - srcH / 2;
 
-        // Draw Magnifier Border & Background
-        ctx2d.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx2d.shadowBlur = 10;
+        // Draw Magnifier Background (dark fill with soft border outline)
         ctx2d.fillStyle = '#0a0a0a';
         ctx2d.fillRect(destX, destY, magW, magH);
-        
-        ctx2d.shadowBlur = 0;
+        // Soft dark border glow (replaces shadowBlur)
+        ctx2d.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx2d.lineWidth = 4;
+        ctx2d.strokeRect(destX - 2, destY - 2, magW + 4, magH + 4);
         // Clip area for drawing canvas
         ctx2d.beginPath();
         ctx2d.rect(destX + 1, destY + 1, magW - 2, magH - 2);
         ctx2d.clip();
         
-        // Draw zoomed region from the current canvas
-        // (Note: canvas coordinates are in pixels = logical * dpr)
-        ctx2d.drawImage(
-          canvas,
-          srcX * dpr, srcY * dpr, srcW * dpr, srcH * dpr,
-          destX + 1, destY + 1, magW - 2, magH - 2
-        );
+        // Draw zoomed region from a cached offscreen snapshot of the main canvas
+        // (Avoids self-readback pipeline stall by using a one-time capture)
+        if (!ctx.magnifierCaptureRef) ctx.magnifierCaptureRef = document.createElement('canvas');
+        const magCapture = ctx.magnifierCaptureRef;
+        magCapture.width = srcW * dpr;
+        magCapture.height = srcH * dpr;
+        const magCtx = magCapture.getContext('2d');
+        if (magCtx) {
+          magCtx.drawImage(
+            canvas,
+            srcX * dpr, srcY * dpr, srcW * dpr, srcH * dpr,
+            0, 0, srcW * dpr, srcH * dpr
+          );
+          ctx2d.drawImage(
+            magCapture,
+            0, 0, srcW * dpr, srcH * dpr,
+            destX + 1, destY + 1, magW - 2, magH - 2
+          );
+        }
 
         // Add a crosshair / center marker over the magnifier
         ctx2d.strokeStyle = 'rgba(255, 255, 255, 0.4)';
@@ -3762,13 +3764,24 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
 
       // 10. Frame continuation
-      animationId = requestAnimationFrame(drawLoop);
+      animationId = raf(drawLoop);
     };
 
     drawLoop();
 
+    const dprMq = typeof matchMedia !== 'undefined' ? matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`) : null;
+    const onDprChange = () => {
+      const newDPR = getOptimalDPR();
+      canvas.width = 800 * newDPR;
+      canvas.height = 400 * newDPR;
+      ctx2d.scale(newDPR, newDPR);
+      ctx2d.imageSmoothingEnabled = true;
+    };
+    if (dprMq) dprMq.addEventListener('change', onDprChange);
+
     return () => {
-      cancelAnimationFrame(animationId);
+      caf(animationId);
+      if (dprMq) dprMq.removeEventListener('change', onDprChange);
     };
   }, []);
 }

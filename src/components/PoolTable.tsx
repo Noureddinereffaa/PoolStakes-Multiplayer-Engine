@@ -3,6 +3,7 @@ import { useBilliardsRenderer } from '../hooks/useBilliardsRenderer';
 import { Ball, RoomState, Difficulty } from '../types';
 import { poolAudio } from '../utils/audio';
 import { BallRotationData } from './PoolTable/rotation';
+import { getAdaptiveSettings } from '../utils/connectionQuality';
 
 const haptic = (ms: number) => { try { navigator.vibrate?.(ms); } catch (_) {} };
 
@@ -128,6 +129,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   
   const aimInertiaVelocityRef = useRef(0);
   const impactFlashesRef = useRef<{x: number, y: number, startTime: number}[]>([]);
+  const qualityRef = useRef({ reducedParticles: false, disableShadows: false, reducedAnimations: false });
 
   useEffect(() => { aimAngleRef.current = aimAngle; }, [aimAngle]);
   useEffect(() => { shotPowerRef.current = shotPower; }, [shotPower]);
@@ -184,11 +186,13 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const pullStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftHeldRef = useRef(false);
   const DEAD_ZONE_PX = 3; // minimum drag distance before power registers
+  const AIM_DEAD_ZONE_PX = 2; // minimum ortho drag before aim adjusts (unified for touch/mouse)
   const AIM_SENSITIVITY = 0.0010; // radians per pixel of ortho drag — smoother
   const SHIFT_MODIFIER = 0.25; // precision mode sensitivity multiplier
   const SMOOTH_FACTOR = 0.10; // lerp factor for angle smoothing — more responsive, Miniclip feel
   const targetAimAngleRef = useRef(0);
   const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
+  const prefersReducedMotionRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartAngleRef = useRef(0);
 
@@ -237,6 +241,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     window.addEventListener('keyup', handleKeyUp);
     return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
   }, [isMyTurn, isAnimating, isScratchPlacing, aimAngle, shotPower, spinX, spinY, animatedBalls]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const handler = () => { prefersReducedMotionRef.current = mq.matches; };
+    prefersReducedMotionRef.current = mq.matches;
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   useEffect(() => {
     if (physicsFrames && physicsFrames.length > 0) {
@@ -398,13 +410,20 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     } else setIsScratchPlacing(false);
   }, [roomState.scratchOccurred, isMyTurn, roomState.balls]);
 
+  useEffect(() => {
+    qualityRef.current = getAdaptiveSettings();
+    const id = setInterval(() => { qualityRef.current = getAdaptiveSettings(); }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
   useBilliardsRenderer({
     canvasRef, offscreenCanvasRef, aimAngleRef, shotPowerRef, spinXRef, spinYRef,
     isMyTurnRef, isAnimatingRef, isScratchPlacingRef, placedPosRef, isPullingRef,
     roomStateRef, difficultyRef, myPlayerIdRef, ballRotationsRef, impactShakeRef,
     feltRipplesRef, chalkParticlesRef, dustSpecksRef, sinkingBallsRef, strikeAnimRef,
     turnStartTimestampRef, animatedBallsRef, isMobileRef: isMobile, opponentAim,
-    impactFlashesRef, isFineAimRef, aimInertiaVelocityRef,
+    impactFlashesRef, isFineAimRef, aimInertiaVelocityRef, qualityRef,
+    prefersReducedMotionRef,
   });
 
   const CANVAS_LOGICAL_W = 800;
@@ -495,11 +514,12 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             setShotPower(power);
             shotPowerRef.current = power;
             
-            // Aim Ortho Adjust
+            // Aim Ortho Adjust (with deadzone for consistency)
             if (!isAimLockedRef.current) {
               const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
+              const effectiveOrtho = Math.abs(orthoDrag) > AIM_DEAD_ZONE_PX ? orthoDrag : 0;
               const sens = isShiftHeldRef.current ? AIM_SENSITIVITY * SHIFT_MODIFIER : AIM_SENSITIVITY;
-              const newAngle = initialAimAngleRef.current + orthoDrag * sens;
+              const newAngle = initialAimAngleRef.current + effectiveOrtho * sens;
               targetAimAngleRef.current = newAngle;
               const smoothed = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
               setAimAngle(smoothed);
@@ -532,7 +552,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             const maxS = isShiftHeldRef.current ? 0.003 : 0.006;
             const adapt = base + t * (maxS - base);
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-            const newAngle = initialAimAngleRef.current + orthoDrag * adapt;
+            const effectiveOrtho = Math.abs(orthoDrag) > AIM_DEAD_ZONE_PX ? orthoDrag : 0;
+            const newAngle = initialAimAngleRef.current + effectiveOrtho * adapt;
             const smoothed = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
             setAimAngle(smoothed);
             aimAngleRef.current = smoothed;

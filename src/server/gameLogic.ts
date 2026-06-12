@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 import { RoomState, Player, MatchHistory, Ball } from '../types';
 import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog, payingOutRooms, pushEventLog } from './state';
 import { prisma } from './db';
-import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H } from './physics';
+import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H, resetYieldTimer, yieldIfNeeded } from './physics';
 import { logger } from './logger';
 import { sendPushNotification } from './push';
 
@@ -600,12 +600,12 @@ function findSafetyShot(
 //  MAIN AI SHOT FUNCTION
 // ─────────────────────────────────────────────────────────────
 
-export function triggerAiShot(room: RoomState, opts?: {
+export async function triggerAiShot(room: RoomState, opts?: {
   animSet?: Set<string>;
   clientsMap?: Map<string, Set<WebSocket>>;
   broadcastFn?: (roomId: string) => void;
   logFn?: (room: RoomState, msg: string) => void;
-}): void {
+}): Promise<void> {
   const animSet = opts?.animSet ?? animatingRoomIds;
   const clientsMap = opts?.clientsMap ?? clientsByRoom;
   const broadcastFn = opts?.broadcastFn ?? broadcastRoom;
@@ -634,7 +634,7 @@ export function triggerAiShot(room: RoomState, opts?: {
 
   logFn(room, `AI (${diff}) is ${isAggressive ? 'playing aggressively' : 'playing cautiously'}...`);
 
-  setTimeout(() => {
+  setTimeout(async () => {
     if ((room.animVersion || 0) !== currentAnimVersion) return;
     if (room.status !== 'playing' || room.currentTurn !== 'ai-bot') return;
 
@@ -733,9 +733,11 @@ export function triggerAiShot(room: RoomState, opts?: {
         let scratch = false;
         let pocketedTarget = false;
         const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
+        resetYieldTimer();
         while (iterations < 600 && isAnyBallMoving(simBalls)) {
           simulatePhysicsStep(simBalls, contactTracker);
           iterations++;
+          await yieldIfNeeded();
         }
         
         const endCb = simBalls.find(b => b.id === 0);
@@ -853,9 +855,11 @@ export function triggerAiShot(room: RoomState, opts?: {
     let cueBallPocketed = false;
     const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
 
+    resetYieldTimer();
     while (iterations < maxStepsLimit) {
       const preStates = room.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
       simulatePhysicsStep(room.balls, contactTracker);
+      await yieldIfNeeded();
 
       for (let i = 0; i < room.balls.length; i++) {
         const currentB = room.balls[i];

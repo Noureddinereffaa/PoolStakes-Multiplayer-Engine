@@ -156,21 +156,32 @@ export async function restoreRoomSnapshots(): Promise<void> {
   try {
     const cutoff = new Date(Date.now() - SNAPSHOT_MAX_AGE_MS);
 
-    // Only fetch roomId, status, updatedAt — lightweight query, no state blob
+    // Fetch roomId, status, updatedAt plus state (for player IDs only)
     const snapshots = await prisma.roomSnapshot.findMany({
       where: {
         status: { in: ['playing', 'waiting', 'ready', 'gameover', 'paused'] },
         updatedAt: { gte: cutoff },
       },
-      select: { roomId: true, status: true, updatedAt: true },
+      select: { roomId: true, status: true, updatedAt: true, state: true },
     });
 
     let indexedCount = 0;
     for (const snap of snapshots) {
+      // Extract player IDs from the state JSON (lightweight — no full room parsing)
+      let playerIds: string[] = [];
+      try {
+        const parsed = JSON.parse(snap.state);
+        if (Array.isArray(parsed.players)) {
+          playerIds = parsed.players.map((p: any) => p.id).filter(Boolean);
+        }
+      } catch {
+        // State is malformed; proceed with empty playerIds
+      }
+
       roomIndex.set(snap.roomId, {
         status: snap.status,
         updatedAt: snap.updatedAt,
-        playerIds: [], // populated on first lazy load
+        playerIds,
       });
       indexedCount++;
     }

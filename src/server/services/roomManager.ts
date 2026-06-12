@@ -5,7 +5,7 @@ import {
   activeRooms, clientsByRoom, playerRoomMap, userSockets,
   getOrCreateRoom, broadcastRoom, cleanupRoom,
   pushRoomLog, generateRoomCode, findRoomByCode, pushEventLog,
-  withRoomLock, sendFullState,
+  withRoomLock, sendFullState, ensureRoomLoaded,
   cancelForfeitTimer, startForfeitTimer, DISCONNECT_TIMEOUT_MS
 } from '../state';
 import { ensureLaravelUser, createPlayerFromUser, lockRoomEscrow } from '../room';
@@ -30,6 +30,9 @@ export function createRoom(ws: WebSocket, userId: string, username: string, stak
 }
 
 export async function joinRoom(ws: WebSocket, roomId: string, userId: string, username: string, stake: number): Promise<RoomJoinResult> {
+  // Ensure room is loaded (lazy-load from DB if evicted by lifecycle maintenance)
+  await ensureRoomLoaded(roomId);
+
   return withRoomLock<RoomJoinResult>(roomId, async () => {
     const room = activeRooms.get(roomId);
     if (!room) return { success: false, error: 'Room not found.' };

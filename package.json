@@ -24,6 +24,7 @@
     "@sentry/node": "^10.57.0",
     "@sentry/react": "^10.57.0",
     "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "framer-motion": "^12.40.0",
     "helmet": "^8.2.0",
@@ -33,10 +34,10 @@
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.17.0",
     "web-push": "^3.6.7",
-    "ws": "^8.21.0",
-    "dotenv": "^17.4.2"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
@@ -51,6 +52,7 @@
     "cross-env": "^10.1.0",
     "esbuild": "^0.25.0",
     "prisma": "^6.4.1",
+    "rollup-plugin-visualizer": "^7.0.1",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
