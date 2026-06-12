@@ -66,13 +66,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const dragModeRef = useRef<'rotate' | 'pan' | 'pull' | null>(null);
 
   const HEAD_STRING_LINE = 240; // Must match server HEAD_STRING_X = CUSHION + 220 = 240
+  const TABLE_BOUNDS = { minX: 38, maxX: 762, minY: 38, maxY: 362 }; // matches server CUSHION + BALL_R + 2
   const placementErrorMessage = () => {
     if (!isScratchPlacing) return null;
     const overOtherBall = roomState.balls.some((b) => {
       if (b.id === 0 || b.isPocketed) return false;
       return Math.hypot(placedPos.x - b.x, placedPos.y - b.y) < 20.0;
     });
-    const outBounds = placedPos.x < 40 || placedPos.x > 760 || placedPos.y < 40 || placedPos.y > 360;
+    const outBounds = placedPos.x < TABLE_BOUNDS.minX || placedPos.x > TABLE_BOUNDS.maxX || placedPos.y < TABLE_BOUNDS.minY || placedPos.y > TABLE_BOUNDS.maxY;
     const behindHeadStringInvalid = roomState.ballInHandRestriction === 'behind_head_string' && placedPos.x > HEAD_STRING_LINE - 10;
     if (overOtherBall) return 'Cannot place cue ball over another ball.';
     if (outBounds) return 'Placement must remain inside the table boundaries.';
@@ -428,13 +429,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     const coords = getPointerCoords(e);
     if (!coords) return;
     
-    if (isScratchPlacingRef.current) {
-      setPlacedPos({
-        x: Math.max(35, Math.min(coords.x, roomStateRef.current.ballInHandRestriction === 'behind_head_string' ? HEAD_STRING_LINE - 10 : 765)),
-        y: Math.max(35, Math.min(coords.y, 365)),
-      });
-      return;
-    }
+  if (isScratchPlacingRef.current) {
+    const maxX = roomStateRef.current.ballInHandRestriction === 'behind_head_string' ? HEAD_STRING_LINE - 10 : TABLE_BOUNDS.maxX;
+    setPlacedPos({
+      x: Math.max(TABLE_BOUNDS.minX, Math.min(coords.x, maxX)),
+      y: Math.max(TABLE_BOUNDS.minY, Math.min(coords.y, TABLE_BOUNDS.maxY)),
+    });
+    return;
+  }
 
     if (isMyTurnRef.current && !roomStateRef.current.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
@@ -552,6 +554,21 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const handlePointerUp = () => {
     setIsPointerActive(false);
 
+    if (isScratchPlacingRef.current) {
+      const pp = placedPosRef.current;
+      const overOtherBall = roomStateRef.current.balls.some((b) => {
+        if (b.id === 0 || b.isPocketed) return false;
+        return Math.hypot(pp.x - b.x, pp.y - b.y) < 20.0;
+      });
+      const outBounds = pp.x < TABLE_BOUNDS.minX || pp.x > TABLE_BOUNDS.maxX || pp.y < TABLE_BOUNDS.minY || pp.y > TABLE_BOUNDS.maxY;
+      const behindHS = roomStateRef.current.ballInHandRestriction === 'behind_head_string' && pp.x > HEAD_STRING_LINE - 10;
+      if (!overOtherBall && !outBounds && !behindHS) {
+        onResetCueBall(pp.x, pp.y);
+        setIsScratchPlacing(false);
+      }
+      return;
+    }
+
     if (isMobile.current) {
       setIsPulling(false);
       isPullingRef.current = false;
@@ -629,27 +646,35 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
-            onClick={isScratchPlacing ? handleConfirmPlacement : undefined}
             style={{ touchAction: 'none', width: '100%', height: '100%', objectFit: 'contain' }}
           />
         </div>
       </div>
 
-      {/* Minimal scratch confirm - only UI that stays inside for gameplay necessity */}
+      {/* Scratch placement UI */}
       {isScratchPlacing && (
-        <div className="absolute inset-x-0 bottom-0 z-20 flex justify-center pb-3">
-          <button
-            onClick={handleConfirmPlacement}
-            disabled={isPlacementInvalid()}
-            className={`px-3 py-1.5 rounded-lg font-bold text-[9px] font-mono transition-all ${
-              isPlacementInvalid()
-                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-amber-600 to-amber-500 text-black shadow-lg shadow-amber-500/20 hover:from-amber-500 hover:to-amber-400'
-            }`}
-          >
-            {isPlacementInvalid() ? placementErrorMessage() : 'PLACE CUE BALL'}
-          </button>
-        </div>
+        <>
+          {/* Hint text */}
+          <div className="absolute top-2 inset-x-0 z-20 flex justify-center pointer-events-none">
+            <span className="px-2 py-1 rounded bg-black/60 text-amber-400 text-[9px] font-mono font-bold border border-amber-500/20">
+              {roomStateRef.current.ballInHandRestriction === 'behind_head_string' ? 'PLACE BEHIND HEAD STRING' : 'PLACE CUE BALL ANYWHERE'}
+            </span>
+          </div>
+          {/* Confirm button */}
+          <div className="absolute inset-x-0 bottom-0 z-20 flex justify-center pb-4">
+            <button
+              onClick={handleConfirmPlacement}
+              disabled={isPlacementInvalid()}
+              className={`px-4 py-2 rounded-xl font-bold text-[10px] font-mono transition-all ${
+                isPlacementInvalid()
+                  ? 'bg-slate-800/80 text-slate-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-amber-500 to-amber-400 text-black font-black shadow-lg shadow-amber-500/30 active:scale-95'
+              }`}
+            >
+              {isPlacementInvalid() ? placementErrorMessage() : '✓ PLACE CUE BALL'}
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
