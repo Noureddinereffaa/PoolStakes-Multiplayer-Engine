@@ -92,43 +92,127 @@ function BallIcon({ id, size = 20 }: { id: number; size?: number }) {
 function SpinControl({ spinX, spinY, onChange, disabled }: {
   spinX: number; spinY: number; onChange: (x: number, y: number) => void; disabled: boolean;
 }) {
-  const size = 44;
-  const dotSize = 8;
-  return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <div className="w-full h-full rounded-full cursor-crosshair select-none touch-none"
-        style={{
-          background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
-          boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.7), inset 2px 2px 5px rgba(245,158,11,0.15), 0 0 15px rgba(0,0,0,0.4), 0 0 0 1px rgba(217,119,6,0.2)',
-        }}
-        onPointerDown={(e) => {
-          if (disabled) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const move = (ev: PointerEvent) => {
-            const x = (ev.clientX - rect.left) / rect.width * 2 - 1;
-            const y = -((ev.clientY - rect.top) / rect.height * 2 - 1);
-            const dist = Math.sqrt(x * x + y * y);
-            onChange(dist > 1 ? x / dist : x, dist > 1 ? y / dist : y);
-          };
-          move(e.nativeEvent as any);
-          const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
-          window.addEventListener('pointermove', move);
-          window.addEventListener('pointerup', up);
-        }}
+  const [expanded, setExpanded] = useState(false);
+  const padRef = useRef<HTMLDivElement>(null);
+  const isMobile = window.innerWidth < 768;
+  const compactSize = isMobile ? 36 : 44;
+  const expandedSize = isMobile ? 180 : 150;
+
+  const spinLabel = () => {
+    if (Math.abs(spinX) < 0.05 && Math.abs(spinY) < 0.05) return 'CENTER';
+    const f = spinY > 0.05, d = spinY < -0.05;
+    const r = spinX > 0.05, l = spinX < -0.05;
+    if (f && r) return 'FOL+R'; if (f && l) return 'FOL+L';
+    if (d && r) return 'DRAW+R'; if (d && l) return 'DRAW+L';
+    if (f) return 'FOLLOW'; if (d) return 'DRAW';
+    if (r) return 'R.ENG'; if (l) return 'L.ENG';
+    return 'CENTER';
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (disabled) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setExpanded(true);
+    updateSpin(e.clientX, e.clientY, e.currentTarget);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!expanded) return;
+    updateSpin(e.clientX, e.clientY, e.currentTarget);
+  };
+
+  const handlePointerUp = () => {
+    setExpanded(false);
+  };
+
+  const updateSpin = (cx: number, cy: number, el: EventTarget) => {
+    const rect = (el as HTMLElement).getBoundingClientRect();
+    const x = ((cx - rect.left) / rect.width) * 2 - 1;
+    const y = -((cy - rect.top) / rect.height) * 2 - 1;
+    const dist = Math.sqrt(x * x + y * y);
+    onChange(dist > 1 ? x / dist : x, dist > 1 ? y / dist : y);
+  };
+
+  if (expanded) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        onPointerDown={() => setExpanded(false)}
       >
-        <div className="absolute rounded-full"
-          style={{
-            width: dotSize, height: dotSize,
-            left: `calc(50% + ${spinX * (size / 2 - dotSize)}px)`,
-            top: `calc(50% + ${-spinY * (size / 2 - dotSize)}px)`,
-            transform: 'translate(-50%, -50%)',
-            background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
-            boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.3)',
-            border: '1px solid rgba(255,255,200,0.3)',
-          }}
-        />
+        <div className="flex flex-col items-center gap-2"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <span className="text-[9px] font-mono font-bold text-amber-400/70 tracking-widest">SPIN</span>
+          <div
+            ref={padRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="rounded-full cursor-crosshair select-none touch-none"
+            style={{
+              width: expandedSize, height: expandedSize,
+              background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
+              boxShadow: 'inset -3px -4px 10px rgba(0,0,0,0.8), inset 3px 3px 8px rgba(245,158,11,0.15), 0 0 40px rgba(0,0,0,0.5), 0 0 0 2px rgba(217,119,6,0.3)',
+              touchAction: 'none',
+            }}
+          >
+            {/* Crosshair */}
+            <div className="absolute inset-[20%] flex items-center justify-center pointer-events-none">
+              <div className="w-full h-px bg-white/10" />
+            </div>
+            <div className="absolute inset-[20%] flex items-center justify-center pointer-events-none">
+              <div className="h-full w-px bg-white/10" />
+            </div>
+            {/* Dot */}
+            <div className="absolute pointer-events-none"
+              style={{
+                left: `calc(50% + ${spinX * (expandedSize / 2 - 12)}px)`,
+                top: `calc(50% + ${-spinY * (expandedSize / 2 - 12)}px)`,
+                width: 16, height: 16,
+                transform: 'translate(-50%, -50%)',
+                background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
+                boxShadow: '0 0 12px #f59e0b, 0 0 30px rgba(245,158,11,0.3)',
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,200,0.4)',
+              }}
+            />
+          </div>
+          <span className="text-[10px] font-mono font-bold text-amber-500">{spinLabel()}</span>
+        </div>
       </div>
-      <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[6px] text-amber-500/60 font-mono pointer-events-none whitespace-nowrap">SPIN</div>
+    );
+  }
+
+  // Compact view
+  return (
+    <div
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className="relative rounded-full cursor-crosshair select-none touch-none"
+      style={{
+        width: compactSize, height: compactSize,
+        background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
+        boxShadow: 'inset -2px -3px 6px rgba(0,0,0,0.7), inset 2px 2px 5px rgba(245,158,11,0.15), 0 0 15px rgba(0,0,0,0.4), 0 0 0 1px rgba(217,119,6,0.2)',
+        touchAction: 'none',
+      }}
+    >
+      <div className="absolute rounded-full pointer-events-none"
+        style={{
+          width: 8, height: 8,
+          left: `calc(50% + ${spinX * (compactSize / 2 - 8)}px)`,
+          top: `calc(50% + ${-spinY * (compactSize / 2 - 8)}px)`,
+          transform: 'translate(-50%, -50%)',
+          background: 'radial-gradient(circle at 30% 30%, #fde68a, #f59e0b 60%, #b45309)',
+          boxShadow: '0 0 8px #f59e0b, 0 0 20px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.3)',
+          border: '1px solid rgba(255,255,200,0.3)',
+        }}
+      />
+      {(Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05) && (
+        <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 text-[6px] text-amber-500/60 font-mono pointer-events-none whitespace-nowrap">
+          {spinLabel()}
+        </div>
+      )}
     </div>
   );
 }
@@ -465,14 +549,12 @@ export default function ArenaPage({
       >
             <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
               
-              {/* Left Player (Me) - shows all pocketed balls */}
+              {/* Left Player (Me) - compact: avatar + name only */}
               <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{myPlayer?.username || 'You'}</span>
-                  <div className="flex items-center gap-px min-h-[10px] flex-wrap">
-                    {allPocketed.length > 0 ? allPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
-                  </div>
+                  <span className="text-[6px] md:text-[8px] text-white/30 font-mono">{myPocketed.length} {myPocketed.length === 1 ? 'ball' : 'balls'}</span>
                 </div>
               </div>
 
@@ -486,13 +568,11 @@ export default function ArenaPage({
                 </div>
               </div>
 
-              {/* Right Player (Opponent) - shows all pocketed balls (both players) */}
+              {/* Right Player (Opponent) - compact: avatar + name only */}
               <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="flex flex-col items-end min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
-                  <div className="flex items-center gap-px min-h-[10px] justify-end flex-wrap">
-                    {allPocketed.length > 0 ? allPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
-                  </div>
+                  <span className="text-[6px] md:text-[8px] text-white/30 font-mono">{opponentPocketed.length} {opponentPocketed.length === 1 ? 'ball' : 'balls'}</span>
                 </div>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">👤</div>
               </div>
@@ -506,6 +586,45 @@ export default function ArenaPage({
 
             </div>
       </header>
+
+      {/* Pocketed Balls Panel - professional rectangular tray between header & table */}
+      {(myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+        <div
+          className={`${isMobile ? `absolute transition-opacity duration-300 ${headerVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}` : ''} inset-x-0 z-30 flex justify-center`}
+          style={{ top: isMobile ? 44 : 0 }}
+        >
+          <div className="w-full max-w-3xl mx-2 md:mx-4">
+            <div className="flex items-stretch gap-0 rounded-xl overflow-hidden border border-white/5 bg-black/60 backdrop-blur-sm shadow-lg shadow-black/30">
+              
+              {/* My pocketed balls - left half */}
+              <div className="flex-1 flex items-center gap-1 px-2 py-1.5 min-h-[28px]">
+                {myPocketed.length > 0 ? myPocketed.map(b => (
+                  <div key={b.id} className="shrink-0">
+                    <BallIcon id={b.id} size={isMobile ? 16 : 20} />
+                  </div>
+                )) : (
+                  <span className="text-[8px] text-white/15 font-mono px-1">—</span>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="w-px bg-white/5 self-stretch my-1" />
+
+              {/* Opponent pocketed balls - right half */}
+              <div className="flex-1 flex items-center justify-end gap-1 px-2 py-1.5 min-h-[28px]">
+                {opponentPocketed.length > 0 ? opponentPocketed.map(b => (
+                  <div key={b.id} className="shrink-0">
+                    <BallIcon id={b.id} size={isMobile ? 16 : 20} />
+                  </div>
+                )) : (
+                  <span className="text-[8px] text-white/15 font-mono px-1">—</span>
+                )}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main - PoolTable fills everything */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -529,8 +648,8 @@ export default function ArenaPage({
 
 
 
-          {/* Spin control — bottom-right corner (both desktop & mobile) */}
-          <div className="absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 scale-[0.65] md:scale-100 origin-bottom-right">
+          {/* Spin control — bottom-right corner */}
+          <div className="absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right">
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
           </div>
 
@@ -608,7 +727,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Power Slider: large touch target, drag down to charge, release to shoot ─── */
+/* ─── Mobile Power Slider: unified touch area, drag down to charge, release to shoot ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -648,10 +767,23 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   };
 
   return (
-    <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center pointer-events-none select-none">
-      <div className={`flex flex-col items-center transition-opacity ${disabled ? 'opacity-20' : ''}`}>
-        {/* Power bar */}
-        <div className="relative w-4 h-44 rounded-full bg-black/60 border border-white/10 overflow-hidden shadow-lg">
+    <div className="absolute left-0 top-0 bottom-0 z-30 flex items-center pointer-events-none select-none">
+      {/* Entire column is pointer-events-auto — canvas below gets nothing */}
+      <div
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        className={`pointer-events-auto flex flex-col items-center justify-center gap-0 rounded-xl transition-opacity ${disabled ? 'opacity-20' : ''}`}
+        style={{
+          touchAction: 'none',
+          width: 64,
+          paddingTop: 8,
+          paddingBottom: 8,
+        }}
+      >
+        {/* Power bar — visual only */}
+        <div className="relative w-4.5 h-44 rounded-full bg-black/70 border border-white/10 overflow-hidden shadow-lg shadow-black/40">
           <div
             className="absolute bottom-0 w-full rounded-full transition-[height] duration-[20ms]"
             style={{
@@ -660,22 +792,12 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
             }}
           />
         </div>
-        {/* Arrow handle — large touch target (48px) so aim never activates */}
+        {/* Arrow handle */}
         {!disabled && (
-          <div
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            className="pointer-events-auto flex items-center justify-center mt-1"
-            style={{ touchAction: 'none', width: 48, height: 48, minWidth: 48, minHeight: 48 }}
-          >
-            <div className="flex flex-col items-center">
-              <svg width="24" height="18" viewBox="0 0 24 24" fill="none" className="text-amber-400 drop-shadow-lg">
-                <path d="M12 2v18M5 13l7 7 7-7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              <span className="text-[7px] text-amber-400/40 font-mono mt-0.5">PULL</span>
-            </div>
+          <div className="flex flex-col items-center mt-1.5 pointer-events-none">
+            <svg width="26" height="18" viewBox="0 0 24 24" fill="none" className="text-amber-400 drop-shadow-lg">
+              <path d="M12 2v18M5 13l7 7 7-7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </div>
         )}
       </div>

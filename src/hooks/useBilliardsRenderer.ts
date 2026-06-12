@@ -1590,8 +1590,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             ? ctx.spinYRef.current
             : ctx.opponentAim?.spinY || 0;
 
-          const aimDx = Math.cos(activeAngle);
-          const aimDy = Math.sin(activeAngle);
+          let aimDx = Math.cos(activeAngle);
+          let aimDy = Math.sin(activeAngle);
 
           if (showLasers) {
             const radius = 10;
@@ -1706,6 +1706,20 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ? '#ffaa00'
               : '#00e5ff';
 
+            aimDx = contactX - cueBall.x;
+            aimDy = contactY - cueBall.y;
+            const aimLen = Math.sqrt(aimDx * aimDx + aimDy * aimDy) || 1;
+            // Spin-based aim curve preview (subtle visual feedback)
+            const showSpinCurve = (Math.abs(activeSpinX) > 0.05 || Math.abs(activeSpinY) > 0.05) && aimLen > 30;
+            let ctrlX = 0, ctrlY = 0;
+            if (showSpinCurve) {
+              const perpX = -aimDy / aimLen;
+              const perpY = aimDx / aimLen;
+              const curveAmt = Math.min(aimLen * 0.15, 40);
+              ctrlX = (cueBall.x + contactX) / 2 + perpX * activeSpinX * curveAmt - aimDx / aimLen * activeSpinY * curveAmt * 0.3;
+              ctrlY = (cueBall.y + contactY) / 2 + perpY * activeSpinX * curveAmt - aimDy / aimLen * activeSpinY * curveAmt * 0.3;
+            }
+
             // Aiming line: beam + precision center
             {
               ctx2d.save();
@@ -1721,7 +1735,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.lineCap = 'round';
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
-              ctx2d.lineTo(contactX, contactY);
+              if (showSpinCurve) {
+                ctx2d.quadraticCurveTo(ctrlX, ctrlY, contactX, contactY);
+              } else {
+                ctx2d.lineTo(contactX, contactY);
+              }
               ctx2d.stroke();
               ctx2d.restore();
 
@@ -1738,7 +1756,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.shadowBlur = 4;
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
-              ctx2d.lineTo(contactX, contactY);
+              if (showSpinCurve) {
+                ctx2d.quadraticCurveTo(ctrlX, ctrlY, contactX, contactY);
+              } else {
+                ctx2d.lineTo(contactX, contactY);
+              }
               ctx2d.stroke();
               ctx2d.restore();
 
@@ -1749,9 +1771,10 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             }
 
             if (Math.abs(activeSpinX) > 0.05 || Math.abs(activeSpinY) > 0.05) {
-              const SIR = 28;
-              const siCX = 760;
-              const siCY = 50;
+              const isMobile = ctx.isMobileRef.current;
+              const SIR = isMobile ? 36 : 28;
+              const siCX = isMobile ? 56 : 760;
+              const siCY = isMobile ? 56 : 50;
               const spinLen = Math.sqrt(activeSpinX * activeSpinX + activeSpinY * activeSpinY);
 
               ctx2d.save();
@@ -2626,10 +2649,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 realContactX,
                 realContactY
               );
-              if (
-                activeSpinY !== 0 &&
-                ctx.difficultyRef.current === 'easy'
-              ) {
+              if (activeSpinY !== 0) {
                 const midX =
                   (realContactX + tangentContactX) /
                   2;
