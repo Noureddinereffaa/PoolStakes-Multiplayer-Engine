@@ -2258,8 +2258,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               }
             } else if (
               pType === 'ball' &&
-              targetBallObj &&
-              ctx.difficultyRef.current !== 'hard'
+              targetBallObj
             ) {
               const phiDx =
                 targetBallObj.x - realContactX;
@@ -2337,7 +2336,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               if (
                 ctx.difficultyRef.current === 'medium'
               ) {
-                tcMin = Math.min(tcMin, 65);
+                tcMin = Math.min(tcMin, 120);
+              } else if (ctx.difficultyRef.current === 'hard') {
+                tcMin = Math.min(tcMin, 200);
               }
 
               const targetContactX =
@@ -2751,9 +2752,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.stroke();
 
               if (
-                tpMin < 200 &&
-                tpMin > 1 &&
-                ctx.difficultyRef.current === 'easy'
+                tpMin < 300 &&
+                tpMin > 1
               ) {
                 let tangRefDx =
                   perpDx -

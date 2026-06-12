@@ -22,41 +22,40 @@ export const MIN_Y = CUSHION + BALL_R;
 export const MAX_Y = TABLE_H - CUSHION - BALL_R;
 
 // ═══════════════════════════════════════════════════════
-//  PHYSICS CONSTANTS (Aramith Pro Cup calibrated)
+//  PHYSICS CONSTANTS (Calibrated to 8 Ball Pool feel)
 // ═══════════════════════════════════════════════════════
-const COR       = 0.88;   // ball-ball COR (was 0.93)
-const COR_R     = 0.72;   // ball-rail COR (was 0.79)
-const MU_B      = 0.20;   // ball-ball friction
-const MU_RR     = 0.9968; // rolling friction/frame
-const MU_RS     = 0.9910; // sliding friction/frame
-const V_S       = 0.60;   // slide→roll transition (was 0.40)
-const MU_RT     = 0.15;   // rail tangential friction
-const SUB       = 48;     // sub-steps
-const S_IT      = 8;      // solver iterations
+const COR       = 0.92;   // ball-ball COR - slightly elastic for crisp collisions
+const COR_R     = 0.78;   // ball-rail COR - cushions have good rebound
+const MU_B      = 0.15;   // ball-ball friction - less grab for smoother slides
+const MU_RR     = 0.9975; // rolling friction/frame - slower decay for longer rolls
+const MU_RS     = 0.9925; // sliding friction/frame - slide persists longer
+const V_S       = 0.55;   // slide→roll transition speed threshold
+const MU_RT     = 0.12;   // rail tangential friction - less spin grab on cushions
+const SUB       = 60;     // sub-steps - higher for smoother simulation
+const S_IT      = 10;     // solver iterations - more accurate collision resolution
 
-const K_CURVE   = 0.035;  // English curve (was 0.028)
-const K_LONG    = 0.028;  // Draw/Follow (was 0.035)
-const SPIN_DEC  = 0.997;  // spin decay/frame
+const K_CURVE   = 0.042;  // English curve (side spin) - more pronounced masse
+const K_LONG    = 0.035;  // Draw/Follow (top/bottom spin) - stronger action
+const SPIN_DEC  = 0.996;  // spin decay/frame - spin persists longer
 
 // Ball-ball Coulomb impulse multiplier
 const COR_TERM  = -(1 + COR) * 0.5;
 
 // ═══════════════════════════════════════════════════════
-//  POCKETS
+//  POCKETS (8 Ball Pool style - tighter, skill-based)
 // ═══════════════════════════════════════════════════════
-// Corner pockets are tighter (22) than middle pockets (26)
-// Any ball whose center is within a pocket's radius (>50% of ball over the hole)
-// is immediately pocketed — no speed or angle gate required.
-// Design goal: "ball with more than half its body over the hole must enter."
-const POCKET_RADII        = [22, 21, 22, 22, 21, 22];
+// Corner pockets: 21px radius (tight), Side pockets: 20px (tightest)
+// Only balls with center within radius are pocketed - no speed gate
+// This rewards precise aim like 8 Ball Pool
+const POCKET_RADII        = [21, 20, 21, 21, 20, 21];
 
 const POCKET_POS = [
-  { x: CUSHION + 3,           y: CUSHION + 3           },
-  { x: TABLE_W / 2,           y: CUSHION               },
-  { x: TABLE_W - CUSHION - 3, y: CUSHION + 3           },
-  { x: CUSHION + 3,           y: TABLE_H - CUSHION - 3 },
-  { x: TABLE_W / 2,           y: TABLE_H - CUSHION     },
-  { x: TABLE_W - CUSHION - 3, y: TABLE_H - CUSHION - 3 },
+  { x: CUSHION + 4,           y: CUSHION + 4           },
+  { x: TABLE_W / 2,           y: CUSHION + 2           },
+  { x: TABLE_W - CUSHION - 4, y: CUSHION + 4           },
+  { x: CUSHION + 4,           y: TABLE_H - CUSHION - 4 },
+  { x: TABLE_W / 2,           y: TABLE_H - CUSHION - 2 },
+  { x: TABLE_W - CUSHION - 4, y: TABLE_H - CUSHION - 4 },
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -116,12 +115,16 @@ export function getInitialBalls(): Ball[] {
 }
 
 // ═══════════════════════════════════════════════════════
-//  POWER → VELOCITY
-//  Shared function for both server and client
+//  POWER → VELOCITY (8 Ball Pool calibrated curve)
+//  8 Ball Pool uses: very gentle at low power, exponential at high
 // ═══════════════════════════════════════════════════════
 export function powerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  return Math.min(26, Math.pow(p, 1.15) * 26);
+  // 8 Ball Pool curve: starts very slow, accelerates exponentially
+  // 0-30%: gentle, 30-70%: medium curve, 70-100%: steep
+  if (p < 0.3) return Math.min(26, Math.pow(p / 0.3, 1.8) * 7.8);
+  if (p < 0.7) return Math.min(26, 7.8 + Math.pow((p - 0.3) / 0.4, 1.4) * 10.2);
+  return Math.min(26, 18 + Math.pow((p - 0.7) / 0.3, 1.1) * 8);
 }
 
 // ═══════════════════════════════════════════════════════
