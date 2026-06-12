@@ -504,17 +504,24 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             aimAngleRef.current = smoothed;
           }
         } else {
-          // ================= MOBILE: RELATIVE AIM (professional, finger-free) =================
-          // Touch anywhere, drag left/right to rotate aim. Finger never covers the ball.
-          const sens = isShiftHeldRef.current ? 0.003 : 0.01;
+          // ================= MOBILE: ADAPTIVE RELATIVE AIM (professional) =================
+          // Touch anywhere, drag to aim. Sensitivity adapts to drag distance:
+          //   tiny moves → ultra-precise, large swipes → quick turn.
+          // Finger never covers the ball.
           if (isInitialDown) {
             pullStartPosRef.current = coords;
             initialAimAngleRef.current = aimAngleRef.current;
           } else if (pullStartPosRef.current) {
             const dx = coords.x - pullStartPosRef.current.x;
             const dy = coords.y - pullStartPosRef.current.y;
+            // Adaptive exponential curve: 0.001 at 0px → 0.014 at 300px+
+            const dragDist = Math.hypot(dx, dy);
+            const t = Math.min(dragDist, 300) / 300;
+            const base = isShiftHeldRef.current ? 0.0008 : 0.001;
+            const maxS = isShiftHeldRef.current ? 0.006 : 0.014;
+            const adapt = base + t * (maxS - base);
             const orthoDrag = -dx * Math.sin(initialAimAngleRef.current) + dy * Math.cos(initialAimAngleRef.current);
-            const newAngle = initialAimAngleRef.current + orthoDrag * sens;
+            const newAngle = initialAimAngleRef.current + orthoDrag * adapt;
             setAimAngle(newAngle);
             aimAngleRef.current = newAngle;
           }

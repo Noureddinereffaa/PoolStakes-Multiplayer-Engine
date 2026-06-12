@@ -465,13 +465,13 @@ export default function ArenaPage({
       >
             <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
               
-              {/* Left Player (Me) */}
+              {/* Left Player (Me) - shows all pocketed balls */}
               <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{myPlayer?.username || 'You'}</span>
                   <div className="flex items-center gap-px min-h-[10px] flex-wrap">
-                    {myPocketed.length > 0 ? myPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
+                    {allPocketed.length > 0 ? allPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
                   </div>
                 </div>
               </div>
@@ -486,12 +486,12 @@ export default function ArenaPage({
                 </div>
               </div>
 
-              {/* Right Player (Opponent) - mirror of left */}
+              {/* Right Player (Opponent) - shows all pocketed balls (both players) */}
               <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
                 <div className="flex flex-col items-end min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
                   <div className="flex items-center gap-px min-h-[10px] justify-end flex-wrap">
-                    {opponentPocketed.length > 0 ? opponentPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
+                    {allPocketed.length > 0 ? allPocketed.map(b => <BallIcon key={b.id} id={b.id} size={isMobile ? 8 : 12} />) : <span className="text-[7px] text-white/20 font-mono">--</span>}
                   </div>
                 </div>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">👤</div>
@@ -608,7 +608,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Power Slider: arrow button, drag down to charge, release to shoot ─── */
+/* ─── Mobile Power Slider: large touch target, drag down to charge, release to shoot ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -648,17 +648,10 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   };
 
   return (
-    <div className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-0.5 pointer-events-none select-none ${disabled ? 'opacity-20' : ''}`}>
-      <div
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className="pointer-events-auto flex flex-col items-center"
-        style={{ touchAction: 'none' }}
-      >
+    <div className="absolute left-1 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center pointer-events-none select-none">
+      <div className={`flex flex-col items-center transition-opacity ${disabled ? 'opacity-20' : ''}`}>
         {/* Power bar */}
-        <div className="relative w-3 h-36 rounded-full bg-black/50 border border-white/10 overflow-hidden">
+        <div className="relative w-4 h-44 rounded-full bg-black/60 border border-white/10 overflow-hidden shadow-lg">
           <div
             className="absolute bottom-0 w-full rounded-full transition-[height] duration-[20ms]"
             style={{
@@ -667,13 +660,22 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
             }}
           />
         </div>
-        {/* Arrow handle */}
+        {/* Arrow handle — large touch target (48px) so aim never activates */}
         {!disabled && (
-          <div className="flex flex-col items-center mt-0.5">
-            <svg width="18" height="14" viewBox="0 0 24 24" fill="none" className="text-amber-400">
-              <path d="M12 2v18M5 13l7 7 7-7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span className="text-[6px] text-amber-400/50 font-mono mt-0.5">PULL</span>
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="pointer-events-auto flex items-center justify-center mt-1"
+            style={{ touchAction: 'none', width: 48, height: 48, minWidth: 48, minHeight: 48 }}
+          >
+            <div className="flex flex-col items-center">
+              <svg width="24" height="18" viewBox="0 0 24 24" fill="none" className="text-amber-400 drop-shadow-lg">
+                <path d="M12 2v18M5 13l7 7 7-7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span className="text-[7px] text-amber-400/40 font-mono mt-0.5">PULL</span>
+            </div>
           </div>
         )}
       </div>
