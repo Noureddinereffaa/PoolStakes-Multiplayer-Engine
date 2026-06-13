@@ -39,6 +39,12 @@ const K_LONG    = 0.028;  // Draw/Follow (top/bottom spin) - Miniclip match: smo
 const K_SWERVE  = 0.012;  // Swerve: pre-contact curve from heavy side spin (Miniclip match)
 const SPIN_DEC  = 0.994;  // spin decay/frame - Miniclip match: spin fades naturally over shot travel
 
+// ── Sleep / Hard-Stop Threshold ─────────────────────────
+// Any ball below this speed is force-stopped and marked sleeping.
+// MUST match the stop check inside applyFrictionAndSpin.
+export const STOP_THRESHOLD = 0.01;
+// ────────────────────────────────────────────────────────
+
 // Ball-ball Coulomb impulse multiplier
 const COR_TERM  = -(1 + COR) * 0.5;
 
@@ -76,7 +82,8 @@ export function getInitialBalls(): Ball[] {
   balls.push({
     id: 0, x: 200, y: TABLE_H / 2,
     vx: 0, vy: 0, radius: BALL_R,
-    isPocketed: false, type: 'cue', color: '#FEFCFA',
+    isPocketed: false, sleeping: true,
+    type: 'cue', color: '#FEFCFA',
     spinX: 0, spinY: 0,
   });
 
@@ -103,7 +110,7 @@ export function getInitialBalls(): Ball[] {
       balls.push({
         id, x: rx, y: ry,
         vx: 0, vy: 0, radius: BALL_R,
-        isPocketed: false,
+        isPocketed: false, sleeping: true,
         type: id === 8 ? 'black' : id <= 7 ? 'solid' : 'stripe',
         color: BALL_COLORS[id],
         number: id,
@@ -134,65 +141,69 @@ export function powerToVelocity(powerPercent: number): number {
 function applyFrictionAndSpin(balls: Ball[], dt: number): void {
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
-    if (b.isPocketed) continue;
+    if (b.isPocketed || b.sleeping) continue;
 
     const vx = b.vx;
     const vy = b.vy;
     const spdSq = vx * vx + vy * vy;
-
     const spd = Math.sqrt(spdSq);
 
-    // Dead-ball stop (Miniclip match: crisper stop, no creeping)
-    if (spd < 0.010) {
+    // ── HARD STOP + SLEEP ──────────────────────────────
+    // Single unified threshold: any ball at or below STOP_THRESHOLD
+    // is force-stopped AND put to sleep. No exceptions.
+    if (spd <= STOP_THRESHOLD) {
       b.vx = 0;
       b.vy = 0;
-    } else {
-      // Gradual slide→roll friction (exponential — physically correct)
-      const t = Math.min(1, spd / V_S);
-      const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
-      const f = Math.pow(mu, dt);
-      b.vx = vx * f;
-      b.vy = vy * f;
+      b.spinX = 0;
+      b.spinY = 0;
+      b.sleeping = true;
+      continue;
     }
 
-    // Cue ball spin (decays even when ball is stopped, preventing frozen spin)
-    if (b.id === 0) {
-      const sx = b.spinX || 0;
-      const sy = b.spinY || 0;
+    // ── Friction (exponential decay — physically correct) ──
+    const t = Math.min(1, spd / V_S);
+    const mu = MU_RR + (MU_RS - MU_RR) * (t * t);
+    const f = Math.pow(mu, dt);
+    b.vx = vx * f;
+    b.vy = vy * f;
 
-      if (spd > 0.05 && (sx !== 0 || sy !== 0)) {
-        const nvx = b.vx;
-        const nvy = b.vy;
-        const nspd = Math.sqrt(nvx * nvx + nvy * nvy);
-        if (nspd > 0.05) {
-          const px = -nvy / nspd;
-          const py =  nvx / nspd;
+    // ── Cue ball spin effects ──────────────────────────
+    const sx = b.spinX || 0;
+    const sy = b.spinY || 0;
 
-          // Side spin → curve (english)
-          const curve = sx * K_CURVE * nspd * dt;
-          b.vx = nvx + px * curve;
-          b.vy = nvy + py * curve;
+    if (b.id === 0 && spd > 0.05 && (sx !== 0 || sy !== 0)) {
+      // Capture friction-only velocity direction BEFORE any spin modifications
+      const nvx = b.vx;
+      const nvy = b.vy;
+      const nspd = Math.hypot(nvx, nvy);
+      if (nspd > 0.05) {
+        const px = -nvy / nspd;
+        const py =  nvx / nspd;
 
-          // Top/bottom spin → follow/draw (longitudinal)
-          const le = sy * K_LONG * nspd * dt;
-          b.vx += (nvx / nspd) * le;
-          b.vy += (nvy / nspd) * le;
+        // Side spin → curve (english) — perpendicular to velocity
+        const curve = sx * K_CURVE * nspd * dt;
+        b.vx = nvx + px * curve;
+        b.vy = nvy + py * curve;
 
-          // Swerve: heavy side spin causes pre-contact curve (perpendicular to velocity)
-          const swerveMag = Math.abs(sx);
-          if (swerveMag > 0.3) {
-            const swerveForce = K_SWERVE * (swerveMag - 0.3) * nspd * dt * Math.sign(sx);
-            b.vx += px * swerveForce;
-            b.vy += py * swerveForce;
-          }
+        // Top/bottom spin → follow/draw — parallel to friction-only direction
+        const le = sy * K_LONG * nspd * dt;
+        b.vx += (nvx / nspd) * le;
+        b.vy += (nvy / nspd) * le;
+
+        // Swerve: heavy side spin induces pre-contact curve
+        if (Math.abs(sx) > 0.3) {
+          const swerveForce = K_SWERVE * (Math.abs(sx) - 0.3) * nspd * dt * Math.sign(sx);
+          b.vx += px * swerveForce;
+          b.vy += py * swerveForce;
         }
       }
+    }
 
+    // ── Spin decay (all balls) ─────────────────────────
+    if (Math.abs(sx) > 0 || Math.abs(sy) > 0) {
       const sd = Math.pow(SPIN_DEC, dt);
-      if (spd > 0.01) {
-        b.spinX = (b.spinX || 0) * sd;
-        b.spinY = (b.spinY || 0) * sd;
-      }
+      b.spinX = sx * sd;
+      b.spinY = sy * sd;
     }
   }
 }
@@ -200,7 +211,7 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
 function integrate(balls: Ball[], dt: number): void {
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
-    if (b.isPocketed) continue;
+    if (b.isPocketed || b.sleeping) continue;
     b.x += b.vx * dt;
     b.y += b.vy * dt;
   }
@@ -209,7 +220,7 @@ function integrate(balls: Ball[], dt: number): void {
 function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
-    if (b.isPocketed) continue;
+    if (b.isPocketed || b.sleeping) continue;
 
     const sx = b.spinX || 0;
     let hit = false;
@@ -294,7 +305,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
 function detectPockets(balls: Ball[]): void {
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
-    if (b.isPocketed) continue;
+    if (b.isPocketed || b.sleeping) continue;
 
     for (let pi = 0; pi < POCKET_POS.length; pi++) {
       const p = POCKET_POS[pi];
@@ -318,7 +329,19 @@ function detectPockets(balls: Ball[]): void {
 
 function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
   const n = balls.length;
-  const MIN_D2 = (BALL_R * 2) ** 2; // 400 — all balls share the same radius
+  const MIN_D2 = (BALL_R * 2) ** 2;
+
+  // ── Post-collision hard stop ─────────────────────────
+  // After impulse is applied, if a ball's resulting velocity
+  // is below STOP_THRESHOLD, force-zero it and mark sleeping.
+  const clampToSleep = (b: Ball) => {
+    if (b.isPocketed) return;
+    if (Math.hypot(b.vx, b.vy) < STOP_THRESHOLD) {
+      b.vx = 0; b.vy = 0;
+      b.spinX = 0; b.spinY = 0;
+      b.sleeping = true;
+    }
+  };
 
   for (let iter = 0; iter < S_IT; iter++) {
     let anyOverlap = false;
@@ -330,6 +353,11 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
       for (let j = i + 1; j < n; j++) {
         const b2 = balls[j];
         if (b2.isPocketed) continue;
+
+        // ── SLEEP CHECK ─────────────────────────────────
+        // If both are sleeping, skip entirely.
+        // If one is sleeping, it can be awakened by the moving ball.
+        if (b1.sleeping && b2.sleeping) continue;
 
         const dx = b2.x - b1.x;
         const dy = b2.y - b1.y;
@@ -344,7 +372,7 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
         const tx   = -ny;
         const ty   =  nx;
 
-        // Position correction (50%)
+        // Position correction (50%) — always applied regardless of sleep
         const minD = BALL_R * 2;
         const overlap = (minD - dist) * 0.50;
         b1.x -= nx * overlap;
@@ -366,6 +394,11 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
 
         if (vn < 0) continue;
 
+        // ── WAKE SLEEPING BALLS ─────────────────────────
+        // A moving ball hitting a sleeping ball wakes it up.
+        if (b1.sleeping) b1.sleeping = false;
+        if (b2.sleeping) b2.sleeping = false;
+
         // Normal impulse (COR)
         const jn = COR_TERM * vn;
         b1.vx += jn * rnx;
@@ -385,26 +418,27 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
         b2.vx -= jt * tx;
         b2.vy -= jt * ty;
 
-        // Collision-induced throw (Miniclip match: cut shots deflect object ball slightly offline)
-        if (iter === 0) {
+        // Collision-induced throw — MIN SPEED GATE
+        // Only apply throw if the collision speed is significant.
+        // Prevents micro-throw from creating ghost velocity.
+        if (iter === 0 && vn > STOP_THRESHOLD) {
           const cosCut = Math.abs(rnx * (rvx / (Math.sqrt(rvx * rvx + rvy * rvy) || 1)) + rny * (rvy / (Math.sqrt(rvx * rvx + rvy * rvy) || 1)));
-          const throwAmount = 0.15 * (1 - cosCut) * Math.min(1, Math.sqrt(rvx * rvx + rvy * rvy) / 10);
+          const throwAmount = 0.15 * (1 - cosCut) * Math.min(1, vn / 10);
           b2.vx += tx * throwAmount * Math.sign(vt || 1);
           b2.vy += ty * throwAmount * Math.sign(vt || 1);
           b1.vx -= tx * throwAmount * Math.sign(vt || 1) * 0.5;
           b1.vy -= ty * throwAmount * Math.sign(vt || 1) * 0.5;
         }
 
-        // Cue spin transfer (conservative model)
-        if (iter === 0 && (b1.id === 0 || b2.id === 0)) {
+        // Cue spin transfer
+        if (iter === 0 && (b1.id === 0 || b2.id === 0) && vn > STOP_THRESHOLD) {
           const cue    = b1.id === 0 ? b1 : b2;
           const tgt    = b1.id === 0 ? b2 : b1;
           const dir    = b1.id === 0 ? 1 : -1;
           const sx     = cue.spinX || 0;
           const sy     = cue.spinY || 0;
-          const spd    = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy + b2.vx * b2.vx + b2.vy * b2.vy);
+          const spd    = Math.hypot(b1.vx, b1.vy) + Math.hypot(b2.vx, b2.vy);
 
-          // Spin → velocity transfer proportional to relative speed (Miniclip match: gradual curve, full at ~90% power)
           if (spd > 0.1) {
             const transfer = Math.min(1.0, spd * 0.025);
             tgt.vx += rnx * (sy * 1.2 * dir * transfer);
@@ -413,7 +447,6 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
             tgt.vy += ty  * (sx * 0.8 * dir * transfer);
           }
 
-          // Spin conservation: cue retains most, target gets residual
           cue.spinY = sy * 0.65;
           cue.spinX = sx * 0.70;
           tgt.spinY = (tgt.spinY || 0) + sy * 0.12 * dir;
@@ -425,6 +458,12 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
           if (b1.id === 0) tracker.firstContactBallId = b2.id;
           else if (b2.id === 0) tracker.firstContactBallId = b1.id;
         }
+
+        // ── POST-COLLISION HARD STOP ────────────────────
+        // Immediately clamp any ball whose collision result
+        // is below threshold, preventing ghost micro-velocity.
+        clampToSleep(b1);
+        clampToSleep(b2);
       }
     }
 
@@ -459,7 +498,43 @@ export function simulateOneFrame(balls: Ball[], tracker?: { firstContactBallId: 
 }
 
 export function isAnyBallMoving(balls: Ball[]): boolean {
-  return balls.some(b => !b.isPocketed && Math.hypot(b.vx, b.vy) > 0.05);
+  return balls.some(b => !b.isPocketed && !b.sleeping && Math.hypot(b.vx, b.vy) > STOP_THRESHOLD);
+}
+
+/**
+ * Wake all sleeping balls (called at the START of a new shot).
+ * The cue ball receives new velocity; other balls are reset
+ * to moving state so they can participate in collisions.
+ */
+export function wakeAllForShot(balls: Ball[]): void {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.isPocketed) continue;
+    b.sleeping = false;
+    // Reset spin on ALL non-cue balls (cue spin set by shooter)
+    if (b.id !== 0) {
+      b.spinX = 0;
+      b.spinY = 0;
+    }
+  }
+}
+
+/**
+ * After the simulation loop ends (or max steps reached),
+ * UNCONDITIONALLY zero ALL ball velocities and mark them sleeping.
+ * This guarantees NO residual velocity across turn boundaries,
+ * even if maxSteps was reached with balls still technically "moving."
+ */
+export function forceSettleBalls(balls: Ball[]): void {
+  for (let i = 0; i < balls.length; i++) {
+    const b = balls[i];
+    if (b.isPocketed) continue;
+    b.vx = 0;
+    b.vy = 0;
+    b.spinX = 0;
+    b.spinY = 0;
+    b.sleeping = true;
+  }
 }
 
 export function captureFrame(balls: Ball[]): Array<{ id: number; x: number; y: number; isPocketed: boolean }> {

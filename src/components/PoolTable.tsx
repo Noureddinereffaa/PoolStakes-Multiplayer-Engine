@@ -112,17 +112,20 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const [animatedBalls, setAnimatedBalls] = useState<Ball[]>(roomState.balls);
   const animatedBallsRef = useRef<Ball[]>(roomState.balls);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [animPhase, setAnimPhase] = useState<'idle' | 'animating'>('idle');
+  const animPhaseRef = useRef<'idle' | 'animating'>('idle');
+  const isAnimating = animPhase === 'animating';
 
   const aimAngleRef = useRef(aimAngle);
   const shotPowerRef = useRef(shotPower);
   const spinXRef = useRef(spinX);
   const spinYRef = useRef(spinY);
   const isMyTurnRef = useRef(isMyTurn);
-  const isAnimatingRef = useRef(isAnimating);
+  const isAnimatingRef = useRef(false);
   const isScratchPlacingRef = useRef(isScratchPlacing);
   const placedPosRef = useRef(placedPos);
   const isPullingRef = useRef(isPulling);
+  const hasShotThisTurnRef = useRef(false);
   const roomStateRef = useRef(roomState);
   const difficultyRef = useRef(difficulty);
   const myPlayerIdRef = useRef(myPlayerId);
@@ -139,7 +142,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   useEffect(() => { spinXRef.current = spinX; }, [spinX]);
   useEffect(() => { spinYRef.current = spinY; }, [spinY]);
   useEffect(() => { isMyTurnRef.current = isMyTurn; }, [isMyTurn]);
-  useEffect(() => { isAnimatingRef.current = isAnimating; }, [isAnimating]);
+  useEffect(() => { isAnimatingRef.current = animPhase === 'animating'; }, [animPhase]);
+  useEffect(() => { animPhaseRef.current = animPhase; }, [animPhase]);
   useEffect(() => { isScratchPlacingRef.current = isScratchPlacing; }, [isScratchPlacing]);
   useEffect(() => { placedPosRef.current = placedPos; }, [placedPos]);
   useEffect(() => { isPullingRef.current = isPulling; }, [isPulling]);
@@ -149,13 +153,13 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   useEffect(() => { dragModeRef.current = dragMode; }, [dragMode]);
 
   useEffect(() => {
-    if (!isAnimating) turnStartTimestampRef.current = Date.now();
-  }, [roomState?.currentTurn, isAnimating]);
+    if (animPhase === 'idle') turnStartTimestampRef.current = Date.now();
+  }, [roomState?.currentTurn, animPhase]);
 
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (isMyTurn && !isAnimating && roomState.status === 'playing') {
+    if (isMyTurn && animPhase === 'idle' && roomState.status === 'playing') {
       if (previewTimeoutRef.current) {
         clearTimeout(previewTimeoutRef.current);
       }
@@ -166,7 +170,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     return () => {
       if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current);
     };
-  }, [aimAngle, shotPower, spinX, spinY, isMyTurn, isAnimating, roomState.status, onPreviewAim]);
+  }, [aimAngle, shotPower, spinX, spinY, isMyTurn, animPhase, roomState.status, onPreviewAim]);
 
   useEffect(() => {
     if (roomState?.log?.length) {
@@ -184,8 +188,10 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   useEffect(() => { animatedBallsRef.current = animatedBalls; }, [animatedBalls]);
 
-  const [waitingForSync, setWaitingForSync] = useState(false);
-  const lastBallsRef = useRef<string>(JSON.stringify(roomState.balls));
+  // ── Single animPhase state machine gate ──────────────────────
+  // When idle: roomState.balls is the absolute truth → sync immediately
+  // When animating: animation loop owns animatedBalls; defer sync until idle
+  const [pendingRoomBalls, setPendingRoomBalls] = useState<Ball[] | null>(null);
   const pullStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftHeldRef = useRef(false);
   const DEAD_ZONE_PX = 6; // minimum drag distance before power registers
@@ -200,38 +206,31 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const dragStartXRef = useRef(0);
   const dragStartAngleRef = useRef(0);
 
+  // ── State machine: track actual roomState.balls changes ────
+  // When animating, only defer if balls actually changed (not from phase transition)
+  const roomBallsHashRef = useRef('');
   useEffect(() => {
-    if (!isAnimating && !waitingForSync) {
-      setAnimatedBalls(roomState.balls);
-      lastBallsRef.current = JSON.stringify(roomState.balls);
+    const hash = JSON.stringify(roomState.balls);
+    if (hash !== roomBallsHashRef.current) {
+      hasShotThisTurnRef.current = false;
     }
-  }, [roomState.balls, isAnimating, waitingForSync]);
-
-  useEffect(() => {
-    if (waitingForSync && !isAnimating) {
-      const hash = JSON.stringify(roomState.balls);
-      if (hash !== lastBallsRef.current) {
-        setWaitingForSync(false);
+    if (animPhase === 'idle') {
+      if (pendingRoomBalls) {
+        setAnimatedBalls(pendingRoomBalls);
+        setPendingRoomBalls(null);
+      } else if (hash !== roomBallsHashRef.current) {
         setAnimatedBalls(roomState.balls);
-        lastBallsRef.current = hash;
       }
+    } else if (hash !== roomBallsHashRef.current) {
+      setPendingRoomBalls(roomState.balls);
     }
-  }, [roomState.balls, isAnimating, waitingForSync]);
-
-  useEffect(() => {
-    if (isAnimating && physicsFrames) {
-      setAnimatedBalls(roomState.balls);
-      setIsAnimating(false);
-      setWaitingForSync(false);
-      lastBallsRef.current = JSON.stringify(roomState.balls);
-      onClearFrames();
-    }
-  }, [roomState.balls]);
+    roomBallsHashRef.current = hash;
+  }, [roomState.balls, animPhase]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift') { isShiftHeldRef.current = true; return; }
-      if (!isMyTurn || isAnimating || isScratchPlacing) return;
+      if (!isMyTurn || isAnimating || isScratchPlacing || hasShotThisTurnRef.current) return;
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea') return;
       const step = isShiftHeldRef.current ? 0.004 : 0.015;
@@ -272,14 +271,16 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
         const dx = firstFrameCue.x - currentCue.x;
         const dy = firstFrameCue.y - currentCue.y;
         if (dx * dx + dy * dy > 1) {
-          setAnimatedBalls(roomState.balls);
+          setPendingRoomBalls(roomState.balls);
+          setAnimPhase('idle');
+          sinkingBallsRef.current = [];
           onClearFrames();
           return;
         }
       }
       strikeAnimRef.current = { active: false, power: 0, startTime: -1, angle: 0, duration: 0, hasStruck: false };
-      setIsAnimating(true);
-      setWaitingForSync(true);
+      sinkingBallsRef.current = [];
+      setAnimPhase('animating');
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
       const serverDivisor = (physicsTotalSteps || physicsFrames.length) > 350 ? 2.4 : 2.0;
@@ -431,12 +432,13 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           animatedBallsRef.current = updatedBalls;
           animationFrameId = requestAnimationFrame(animate);
         } else {
-          setIsAnimating(false);
+          sinkingBallsRef.current = [];
           const finalFrame = physicsFrames?.length ? physicsFrames[physicsFrames.length - 1] : undefined;
           setAnimatedBalls(initialBallsCopy.map(b => {
             const fb = finalFrame?.find(f => f.id === b.id);
             return fb ? { ...b, x: fb.x, y: fb.y, isPocketed: fb.isPocketed } : b;
           }));
+          setAnimPhase('idle');
           onClearFrames();
         }
       };
@@ -523,7 +525,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     return;
   }
 
-    if (isAnimatingRef.current) return;
+    if (isAnimatingRef.current || hasShotThisTurnRef.current) return;
 
     if (isMyTurnRef.current && !roomStateRef.current.scratchOccurred) {
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
@@ -614,7 +616,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const handlePointerDown = (e: any) => { setIsPointerActive(true); handlePointerAction(e, true); };
   const handlePointerMove = (e: any) => {
     if (isPointerActive || pullStartPosRef.current) handlePointerAction(e, false);
-    else if (!isMobile.current && isMyTurnRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
+    else if (!isMobile.current && isMyTurnRef.current && !isAnimatingRef.current && !isScratchPlacingRef.current && !roomStateRef.current.scratchOccurred && !isAimLockedRef.current) {
       const coords = getPointerCoords(e);
       if (coords) {
         const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
@@ -631,10 +633,12 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   };
 
   const executeAuthorizedShot = (angle: number, power: number, sX: number, sY: number) => {
-    if (!isMyTurnRef.current || isAnimatingRef.current) return;
+    if (!isMyTurnRef.current || isAnimatingRef.current || hasShotThisTurnRef.current) return;
+    hasShotThisTurnRef.current = true;
+    sinkingBallsRef.current = [];
     // Shot Stick Snap Animation: 40ms anticipation delay before hit for visual impact
     strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: 40 };
-    setIsAnimating(true);
+    setAnimPhase('animating');
     const cueBall = animatedBallsRef.current.find(b => b.id === 0);
     triggerShootParticles(power, cueBall, angle, chalkParticlesRef.current, feltRipplesRef.current);
     impactShakeRef.current = Math.min(14.0, 2.0 + (power / 100) * 12.0);
@@ -680,7 +684,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       setDragMode(null);
       dragModeRef.current = null;
       pullStartPosRef.current = null;
-      if (p >= 5 && isMyTurnRef.current && !isAnimatingRef.current) {
+      if (p >= 5 && isMyTurnRef.current && !isAnimatingRef.current && !hasShotThisTurnRef.current) {
         executeAuthorizedShot(aimAngleRef.current, p, spinXRef.current, spinYRef.current);
       } else {
         // Cancel shot
@@ -709,7 +713,10 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     };
   }, [isPointerActive]);
 
-  const handleShootClick = () => { if (isMyTurnRef.current && !isAnimatingRef.current) executeAuthorizedShot(aimAngleRef.current, shotPowerRef.current, spinXRef.current, spinYRef.current); };
+  const handleShootClick = () => {
+    if (isMyTurnRef.current && !isAnimatingRef.current && !hasShotThisTurnRef.current)
+      executeAuthorizedShot(aimAngleRef.current, shotPowerRef.current, spinXRef.current, spinYRef.current);
+  };
 
   const handleConfirmPlacement = () => { if (!isPlacementInvalid()) { onResetCueBall(placedPos.x, placedPos.y); setIsScratchPlacing(false); } };
 

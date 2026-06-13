@@ -70,24 +70,45 @@ function BallIcon({ id, size = 20 }: { id: number; size?: number }) {
       style={{
         width: s, height: s,
         background: isStripe
-          ? `linear-gradient(135deg, #ffffff 20%, ${meta.color} 20%, ${meta.color} 80%, #ffffff 80%)`
-          : `radial-gradient(circle at 32% 32%, ${meta.color} 35%, #000000 120%)`,
-        boxShadow: `inset -1.5px -1.5px 4px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)`,
+          ? `linear-gradient(135deg, #f5f0e8 18%, #ffffff 22%, ${meta.color} 22%, ${meta.color} 78%, #ffffff 78%, #f5f0e8 82%)`
+          : `radial-gradient(circle at 32% 30%, ${lightenColor(meta.color, 30)} 0%, ${meta.color} 40%, ${darkenColor(meta.color, 40)} 110%)`,
+        boxShadow: `inset -1.5px -1.5px 4px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)`,
       }}
     >
+      {/* Stripe 3D shading overlay */}
       {isStripe && (
         <div className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25) 0%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.5) 100%)' }}
+          style={{ background: 'radial-gradient(circle at 30% 28%, rgba(255,255,255,0.3) 0%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.6) 100%)' }}
         />
       )}
-      <div className="absolute top-[15%] left-[18%] w-[22%] h-[12%] bg-white/50 rounded-full rotate-[-15deg] pointer-events-none" />
-      <div className="rounded-full bg-[#fffaeb] border border-amber-600/30 flex items-center justify-center z-10"
+      {/* Solid ball extra gloss */}
+      {!isStripe && (
+        <div className="absolute inset-0 rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle at 30% 28%, rgba(255,255,255,0.15) 0%, transparent 50%)' }}
+        />
+      )}
+      {/* Top highlight */}
+      <div className="absolute top-[12%] left-[15%] w-[25%] h-[10%] bg-white/50 rounded-full rotate-[-20deg] pointer-events-none" />
+      {/* Number badge */}
+      <div className="rounded-full bg-[#fffaeb] border border-amber-600/40 flex items-center justify-center z-10 shadow-sm"
         style={{ width: s * 0.52, height: s * 0.52 }}
       >
-        <span className="font-black text-slate-900 font-mono leading-none" style={{ fontSize: s * 0.28 }}>{meta.number}</span>
+        <span className="font-black text-slate-900 font-mono leading-none drop-shadow-[0_0.5px_0_rgba(255,255,255,0.5)]" style={{ fontSize: s * 0.3 }}>{meta.number}</span>
       </div>
     </div>
   );
+}
+
+function lightenColor(hex: string, amt: number): string {
+  let r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+  r = Math.min(255, r + amt); g = Math.min(255, g + amt); b = Math.min(255, b + amt);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+function darkenColor(hex: string, amt: number): string {
+  let r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+  r = Math.max(0, r - amt); g = Math.max(0, g - amt); b = Math.max(0, b - amt);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
 }
 
 function SpinControl({ spinX, spinY, onChange, disabled, isMobile }: {
@@ -491,7 +512,18 @@ export default function ArenaPage({
     };
   }, []);
 
-  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [roomState?.log]);
+  useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;   }, [roomState?.log]);
+
+  // Inject pocketed ball insert animation
+  useEffect(() => {
+    const id = 'arena-page-anim';
+    if (!document.getElementById(id)) {
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = `@keyframes fadeScaleIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }`;
+      document.head.appendChild(style);
+    }
+  }, []);
 
   // One-shot fullscreen on first user interaction (captures any click/touch)
   useEffect(() => {
@@ -823,27 +855,59 @@ export default function ArenaPage({
             />
           )}
 
-          {/* Mobile: pocketed balls panel — compact, overlays table right edge, offset left of power slider */}
+          {/* Mobile: SHOOT button — separate from slider, only when power is set, centered for thumb reach */}
+          {isMobile && isMyTurn && shotPower > 0 && (
+            <button onClick={handleShootClick}
+              className="absolute left-1/2 -translate-x-1/2 bottom-3 z-30 pointer-events-auto w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 border-2 border-amber-300/60 shadow-[0_0_30px_rgba(245,158,11,0.5)] active:scale-90 transition-transform duration-75 flex items-center justify-center"
+              style={{ touchAction: 'manipulation' }}
+              aria-label="Shoot"
+            >
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3" fill="white" />
+              </svg>
+            </button>
+          )}
+
+          {/* Mobile: pocketed balls panel — compact, overlays table right edge, rail-style */}
           {isMobile && (myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-            <div className="absolute right-10 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-              <div className="flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border border-[#2e0c04]/40 bg-gradient-to-b from-[#1a0702]/90 to-[#0d0301]/90 shadow-lg shadow-black/40 min-w-[30px]">
+            <div className="absolute right-14 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+              <div className="flex flex-col items-center gap-1.5 py-2 px-1.5 rounded-2xl bg-gradient-to-b from-[#2a1508]/95 via-[#1a0a04]/95 to-[#0d0501]/95 border border-[#3a1a0a]/60 shadow-lg shadow-black/50 min-w-[36px]"
+                style={{
+                  boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.06), 0 8px 24px rgba(0,0,0,0.5)',
+                }}
+              >
+                {/* My pocketed */}
                 {myPocketed.length > 0 && (
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[5px] font-mono font-bold text-amber-500/60 tracking-widest uppercase">You</span>
-                    {myPocketed.map(b => (
-                      <BallIcon key={b.id} id={b.id} size={16} />
-                    ))}
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[5px] font-mono font-bold text-amber-500/70 tracking-[0.15em] uppercase">You</span>
+                    <div className="flex flex-col items-center gap-0.5">
+                      {myPocketed.map(b => (
+                        <div key={b.id} className="transition-all duration-300" style={{ animation: 'fadeScaleIn 0.3s ease-out' }}>
+                          <BallIcon id={b.id} size={20} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {myPocketed.length > 0 && opponentPocketed.length > 0 && (
-                  <div className="w-3 h-px bg-amber-900/20" />
+                  <div className="w-4 h-px bg-amber-700/30 my-0.5" />
                 )}
+                {/* Opponent pocketed */}
                 {opponentPocketed.length > 0 && (
-                  <div className="flex flex-col items-center gap-0.5">
-                    <span className="text-[5px] font-mono font-bold text-blue-400/60 tracking-widest uppercase">Opp</span>
+                  <div className="flex flex-col items-center gap-1">
                     {opponentPocketed.map(b => (
-                      <BallIcon key={b.id} id={b.id} size={16} />
+                      <div key={b.id} className="transition-all duration-300" style={{ animation: 'fadeScaleIn 0.3s ease-out' }}>
+                        <BallIcon id={b.id} size={18} />
+                      </div>
                     ))}
+                    <span className="text-[5px] font-mono font-bold text-blue-400/70 tracking-[0.15em] uppercase">Opp</span>
+                  </div>
+                )}
+                {/* Empty slots placeholder */}
+                {myPocketed.length === 0 && opponentPocketed.length === 0 && (
+                  <div className="flex flex-col items-center gap-1 py-1">
+                    <div className="w-4 h-4 rounded-full border border-dashed border-amber-800/20" />
+                    <span className="text-[4px] font-mono font-bold text-amber-800/30 tracking-[0.2em] uppercase">Pocketed</span>
                   </div>
                 )}
               </div>
@@ -851,24 +915,24 @@ export default function ArenaPage({
           )}
         </div>
 
-        {/* Desktop: Pocketed Balls Panel — vertical wood panel on the right side */}
+        {/* Desktop: Pocketed Balls Panel — premium wood rail fixture */}
         {!isMobile && (
           <div className="shrink-0 flex items-center ml-0 z-10">
             {(myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-              <div className="flex flex-col items-center gap-2 py-4 px-1.5 rounded-r-xl border-l-0 border border-[#2e0c04]/80 bg-gradient-to-b from-[#1a0702] via-[#2a0c04] to-[#0d0301] shadow-lg shadow-black/50 min-w-[38px]"
+              <div className="flex flex-col items-center gap-2 py-5 px-2 rounded-r-2xl border-l-0 border border-[#3a1a0a]/80 bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] shadow-lg shadow-black/50 min-w-[44px]"
                 style={{
-                  boxShadow: 'inset 2px 0 8px rgba(0,0,0,0.4), inset -1px 0 4px rgba(90,35,15,0.15), 3px 0 12px rgba(0,0,0,0.3)',
-                  borderTopRightRadius: '10px',
-                  borderBottomRightRadius: '10px',
+                  boxShadow: 'inset 3px 0 12px rgba(0,0,0,0.5), inset -1px 0 6px rgba(180,120,60,0.08), 5px 0 20px rgba(0,0,0,0.4)',
+                  borderTopRightRadius: '14px',
+                  borderBottomRightRadius: '14px',
                 }}
               >
-                {/* My pocketed (top section) */}
+                {/* My pocketed */}
                 <div className="flex flex-col items-center gap-1.5">
                   {myPocketed.length > 0 && (
                     <>
-                      <span className="text-[5px] font-mono font-bold text-amber-500/70 tracking-[0.15em] uppercase">You</span>
+                      <span className="text-[6px] font-mono font-bold text-amber-500/80 tracking-[0.15em] uppercase">You</span>
                       {myPocketed.map(b => (
-                        <BallIcon key={b.id} id={b.id} size={16} />
+                        <BallIcon key={b.id} id={b.id} size={22} />
                       ))}
                     </>
                   )}
@@ -876,20 +940,28 @@ export default function ArenaPage({
 
                 {/* Divider */}
                 {(myPocketed.length > 0 && opponentPocketed.length > 0) && (
-                  <div className="w-5 h-px bg-amber-900/30 my-1" />
+                  <div className="w-6 h-px bg-gradient-to-r from-transparent via-amber-700/40 to-transparent my-1" />
                 )}
 
-                {/* Opponent pocketed (bottom section) */}
+                {/* Opponent pocketed */}
                 <div className="flex flex-col items-center gap-1.5">
                   {opponentPocketed.length > 0 && (
                     <>
-                      <span className="text-[5px] font-mono font-bold text-blue-400/70 tracking-[0.15em] uppercase">Opp</span>
                       {opponentPocketed.map(b => (
-                        <BallIcon key={b.id} id={b.id} size={16} />
+                        <BallIcon key={b.id} id={b.id} size={20} />
                       ))}
+                      <span className="text-[6px] font-mono font-bold text-blue-400/80 tracking-[0.15em] uppercase">Opp</span>
                     </>
                   )}
                 </div>
+
+                {/* Empty state */}
+                {myPocketed.length === 0 && opponentPocketed.length === 0 && (
+                  <div className="flex flex-col items-center gap-1.5 py-2">
+                    <div className="w-4 h-4 rounded-full border border-dashed border-amber-700/20" />
+                    <span className="text-[5px] font-mono font-bold text-amber-700/30 tracking-[0.15em] uppercase">Balls</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -977,48 +1049,60 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
-  const startYRef = useRef(0);
-  const powerRef = useRef(0);
+  const powerRef = useRef(shotPower);
   const trackRef = useRef<HTMLDivElement>(null);
+  const lastHapticThresholdRef = useRef(-1);
+
+  const getPowerFromY = (clientY: number): number => {
+    if (!trackRef.current) return shotPower;
+    const rect = trackRef.current.getBoundingClientRect();
+    const relY = clientY - rect.top;
+    const rawPct = Math.max(0, Math.min(100, ((rect.height - relY) / rect.height) * 100));
+    const curved = Math.round(Math.pow(rawPct / 100, 0.88) * 100);
+    return Math.max(0, Math.min(100, curved));
+  };
+
+  const applyHaptic = (power: number) => {
+    const thresholds = [25, 50, 75, 100];
+    for (const t of thresholds) {
+      if (power >= t && lastHapticThresholdRef.current < t) {
+        try { navigator.vibrate?.(5); } catch (_) {}
+        lastHapticThresholdRef.current = t;
+        break;
+      }
+    }
+    if (power < thresholds[0]) lastHapticThresholdRef.current = -1;
+  };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    startYRef.current = e.clientY;
-    if (trackRef.current) {
-      const rect = trackRef.current.getBoundingClientRect();
-      const relY = e.clientY - rect.top;
-      const rawPct = Math.max(0, Math.min(100, (relY / rect.height) * 100));
-      const curved = Math.round(Math.pow(rawPct / 100, 0.85) * 100);
-      powerRef.current = curved;
-      onPowerChange(curved);
-    }
+    const p = getPowerFromY(e.clientY);
+    powerRef.current = p;
+    onPowerChange(p);
+    applyHaptic(p);
     setDragging(true);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging || !trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const relY = e.clientY - rect.top;
-    const rawPct = Math.max(0, Math.min(100, (relY / rect.height) * 100));
-    const curved = Math.round(Math.pow(rawPct / 100, 0.85) * 100);
-    powerRef.current = curved;
-    onPowerChange(curved);
+    const p = getPowerFromY(e.clientY);
+    powerRef.current = p;
+    onPowerChange(p);
+    applyHaptic(p);
   };
 
   const handlePointerUp = () => {
     if (!dragging) return;
     setDragging(false);
-    const p = powerRef.current;
-    if (!disabled && p >= 5) {
-      try { navigator.vibrate?.(10); } catch (_) {}
-      onShoot();
-    }
-    onPowerChange(0);
+    lastHapticThresholdRef.current = -1;
   };
 
+  const powerColor = shotPower > 70 ? 'from-red-500 to-rose-600' : shotPower > 30 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-green-500';
+  const powerGlow = shotPower > 70 ? 'rgba(239,68,68,0.4)' : shotPower > 30 ? 'rgba(245,158,11,0.4)' : 'rgba(52,211,153,0.4)';
+
   return (
-    <div className="absolute right-1 top-1/2 -translate-y-1/2 z-30 pointer-events-none select-none">
+    <div className="absolute right-0.5 bottom-14 z-30 pointer-events-none select-none">
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1027,69 +1111,78 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
         className={`pointer-events-auto relative ${disabled ? 'opacity-20' : ''}`}
         style={{ touchAction: 'none' }}
       >
-        {/* Solid background panel */}
-        <div className="rounded-xl bg-[#14100c] border border-[#2a1a0e]/60 px-3 py-3 flex flex-col items-center gap-1"
-          style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 4px 12px rgba(0,0,0,0.5)' }}
+        {/* Premium wood panel with deep groove */}
+        <div className="rounded-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/80 px-4 py-3 flex flex-col items-center gap-1.5"
+          style={{
+            boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.08), 0 8px 32px rgba(0,0,0,0.6)',
+          }}
         >
-          {/* Track */}
-          <div ref={trackRef} className="relative w-6 h-40 flex flex-col items-center">
-            {/* Track line */}
-            <div className="absolute inset-y-0 w-0.5 rounded-full bg-white/8" />
-
-            {/* Handle */}
-            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
+          {/* Track container */}
+          <div ref={trackRef} className="relative w-8 h-44 flex flex-col items-center cursor-pointer">
+            {/* Deep groove background */}
+            <div className="absolute inset-y-0 inset-x-0 rounded-full bg-gradient-to-b from-[#0a0502] via-[#1a0a04] to-[#0a0502]"
               style={{
-                top: `${100 - shotPower}%`,
-                marginTop: -9,
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.8), inset 0 -1px 2px rgba(180,120,60,0.1)',
               }}
             >
-              <div className={`relative w-[18px] h-[18px] rounded-full border-2 ${
-                shotPower > 70
-                  ? 'bg-red-400 border-red-500'
-                  : shotPower > 30
-                  ? 'bg-amber-400 border-amber-500'
-                  : 'bg-emerald-400 border-emerald-500'
-              }`}
+              {/* Groove inner shadow */}
+              <div className="absolute inset-y-4 inset-x-1 rounded-full bg-black/40" />
+            </div>
+
+            {/* Power fill bar - grows from bottom */}
+            {shotPower > 0 && (
+              <div className="absolute bottom-0 w-2 rounded-full bg-gradient-to-t opacity-70"
                 style={{
-                  boxShadow: shotPower > 0
-                    ? `0 0 10px ${
-                        shotPower > 70
-                          ? 'rgba(239,68,68,0.6)'
-                          : shotPower > 30
-                          ? 'rgba(245,158,11,0.6)'
-                          : 'rgba(52,211,153,0.6)'
-                      }`
-                    : 'none',
+                  height: `${shotPower}%`,
+                  background: `linear-gradient(to top, ${powerGlow}, transparent)`,
+                  marginBottom: 2,
+                  boxShadow: `0 0 8px ${powerGlow}`,
                 }}
               />
+            )}
+
+            {/* Metallic rail - left side */}
+            <div className="absolute left-1 top-2 bottom-2 w-[2px] rounded-full bg-gradient-to-b from-amber-300/10 via-amber-500/40 to-amber-300/10"
+              style={{ boxShadow: '0 0 2px rgba(180,120,60,0.3)' }}
+            />
+
+            {/* Thumb handle */}
+            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
+              style={{
+                bottom: `${Math.max(0, shotPower)}%`,
+                marginBottom: -14,
+              }}
+            >
+              <div className={`relative w-7 h-7 rounded-full bg-gradient-to-br ${powerColor} border-2 ${
+                shotPower > 70 ? 'border-red-300' : shotPower > 30 ? 'border-amber-300' : 'border-emerald-300'
+              }`}
+                style={{
+                  boxShadow: dragging
+                    ? `0 0 20px ${powerGlow}, 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3)`
+                    : `0 0 10px ${powerGlow}, 0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2)`,
+                }}
+              >
+                {/* Inner highlight */}
+                <div className="absolute inset-[3px] rounded-full bg-white/15" />
+                {/* Power percentage on thumb */}
+                <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black font-mono text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
+                  {shotPower}
+                </span>
+              </div>
             </div>
 
-            {/* Percentage display */}
-            <div className="absolute -right-9 top-1/2 -translate-y-1/2 pointer-events-none">
-              <span className="font-mono font-bold text-[9px] text-white/40">
-                {shotPower}%
-              </span>
-            </div>
-
-            {/* Tick marks (outside right edge) */}
-            <div className="absolute inset-y-0 -right-4 flex flex-col justify-between py-0.5 pointer-events-none">
+            {/* Tick marks inside groove */}
+            <div className="absolute inset-y-3 right-0.5 flex flex-col justify-between pointer-events-none">
               {[100, 75, 50, 25, 0].map((val) => (
-                <div key={val} className="flex items-center gap-1">
-                  <div className={`h-px ${val <= shotPower ? 'bg-white/25 w-2' : 'bg-white/8 w-1.5'}`} />
-                  <span className={`font-mono font-bold leading-none ${
-                    val <= shotPower
-                      ? 'text-white/35 text-[7px]'
-                      : 'text-white/12 text-[6px]'
-                  }`}>
-                    {val > 0 ? val : ''}
-                  </span>
+                <div key={val} className="flex items-center">
+                  <div className={`h-px ${val <= shotPower ? 'bg-white/30 w-1.5' : 'bg-white/8 w-1'}`} />
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Label */}
-          <span className="text-[7px] font-mono font-bold text-white/25 tracking-widest uppercase">Power</span>
+          {/* Power label */}
+          <span className="text-[6px] font-mono font-bold text-amber-600/60 tracking-[0.2em] uppercase">Power</span>
         </div>
       </div>
     </div>

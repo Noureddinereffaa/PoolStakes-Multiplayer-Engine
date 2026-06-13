@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { Ball, Player, Difficulty } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
 import { evaluateShotRules, triggerAiShot, findValidCueBallPosition } from './gameLogic';
 import { pushEventLog } from './state';
 
@@ -130,7 +130,7 @@ export function handleSetAiOpponent(ws: WebSocket, msg: { difficulty?: Difficult
 }
 
 // ── Shoot ──────────────────────────────────────────────
-export function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number; spinX?: number; spinY?: number }): void {
+export async function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number; spinX?: number; spinY?: number }): Promise<void> {
   const mapping = aiPlayerRoomMap.get(ws);
   if (!mapping) { ws.send(JSON.stringify({ type: 'error', message: 'Not in an AI match.' })); return; }
   const match = aiMatches.get(mapping.roomId);
@@ -151,6 +151,8 @@ export function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number
 
   match.log.push(isBreakShot ? `💥 ${shooterName} executes the BREAK SHOT!` : `${shooterName} shoots (Power: ${Math.round(clampedPower)}%)`);
 
+  wakeAllForShot(match.balls);
+
   const cueBall = match.balls[0];
   cueBall.spinX = Math.max(-1, Math.min(1, msg.spinX || 0));
   cueBall.spinY = Math.max(-1, Math.min(1, msg.spinY || 0));
@@ -168,9 +170,11 @@ export function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number
   let lastCapture = match.balls.map(b => ({ x: b.x, y: b.y }));
   let framesSinceCapture = 0;
 
+  resetYieldTimer();
   while (iterations < maxSteps) {
     const preStates = match.balls.map(b => ({ id: b.id, isPocketed: b.isPocketed }));
     simulatePhysicsStep(match.balls, contactTracker);
+    await yieldIfNeeded();
     for (let i = 0; i < match.balls.length; i++) {
       const cb = match.balls[i], pb = preStates.find(s => s.id === cb.id);
       if (pb && cb.isPocketed && !pb.isPocketed) {
@@ -191,13 +195,17 @@ export function handleAiShoot(ws: WebSocket, msg: { angle: number; power: number
     if (!isAnyBallMoving(match.balls)) break;
   }
   frames.push(captureFrame(match.balls));
+  forceSettleBalls(match.balls);
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
+  const totalSteps = iterations;
+  const animationDurationMs = (totalSteps * 16.66) / (totalSteps > 350 ? 2.4 : 2.0) + 80;
+  const framesPayload = JSON.stringify({ type: 'physics_frames', frames: compactFrames, totalSteps, serverTiming: animationDurationMs });
   for (const client of aiClientsByRoom.get(mapping.roomId) || []) {
-    if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify({ type: 'physics_frames', frames: compactFrames }));
+    if (client.readyState === WebSocket.OPEN) client.send(framesPayload);
   }
 
-  const duration = (iterations * 16.66) / (iterations > 350 ? 2.4 : 2.0) + 80;
+  const duration = animationDurationMs;
 
   const timer = setTimeout(() => {
     if ((match.animVersion || 0) !== currentAnimVersion || match.status !== 'playing') return;

@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { RoomState, SocketMessage } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, resetYieldTimer, yieldIfNeeded } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
 import {
   activeRooms, activeSockets, animatingRoomIds, clientsByRoom, playerRoomMap,
   userSockets, rematchingRooms, getOrCreateRoom, broadcastRoom,
@@ -282,6 +282,11 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
     ? `💥 ${shooterName} executes the BREAK SHOT!`
     : `${shooterName} shoots with Power: ${Math.round(clampedPower)}%`);
 
+  // ── WAKE ALL BALLS ──────────────────────────────────
+  // A new shot can hit ANY stationary ball. Waking them all
+  // ensures they participate in collisions and friction.
+  wakeAllForShot(room.balls);
+
   const cueBall = room.balls[0];
   cueBall.spinX = Math.max(-1, Math.min(1, msg.spinX || 0));
   cueBall.spinY = Math.max(-1, Math.min(1, msg.spinY || 0));
@@ -333,6 +338,7 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
     if (!isAnyBallMoving(room.balls)) break;
   }
   if (framesSinceLastCapture > 0 || frames.length === 0) frames.push(captureFrame(room.balls));
+  forceSettleBalls(room.balls);
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
   const payload = JSON.stringify({ type: 'physics_frames', frames: compactFrames, totalSteps: iterations });

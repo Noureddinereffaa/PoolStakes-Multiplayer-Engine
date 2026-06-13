@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 import { RoomState, Player, MatchHistory, Ball } from '../types';
 import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog, pushMatchLog, payingOutRooms, pushEventLog } from './state';
 import { prisma } from './db';
-import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H, resetYieldTimer, yieldIfNeeded } from './physics';
+import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y, CUSHION, BALL_R, TABLE_W, TABLE_H, resetYieldTimer, yieldIfNeeded } from './physics';
 import { logger } from './logger';
 import { sendPushNotification } from './push';
 
@@ -842,6 +842,8 @@ export async function triggerAiShot(room: RoomState, opts?: {
     const objectBallsLeft = room.balls.filter(b => b.id !== 0 && !b.isPocketed).length;
     const isBreakShot = objectBallsLeft === 15;
 
+    wakeAllForShot(room.balls);
+
     const aiForce = powerToVelocity(bestPower);
     cb.vx = Math.cos(finalAngle) * aiForce;
     cb.vy = Math.sin(finalAngle) * aiForce;
@@ -875,6 +877,7 @@ export async function triggerAiShot(room: RoomState, opts?: {
       iterations++;
       if (!isAnyBallMoving(room.balls)) break;
     }
+    forceSettleBalls(room.balls);
 
     const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
     for (const client of wssList) {

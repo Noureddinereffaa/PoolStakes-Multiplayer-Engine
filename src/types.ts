@@ -15,6 +15,7 @@ export interface Ball {
   vy: number;
   radius: number;
   isPocketed: boolean;
+  sleeping?: boolean; // true = velocity is 0, skip all physics (sleep state)
   type: 'cue' | 'black' | 'solid' | 'stripe';
   color: string;
   number?: number;

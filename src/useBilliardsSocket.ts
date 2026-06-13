@@ -642,7 +642,7 @@ export function useBilliardsSocket({
 
     const angle = pending.angle;
     const power = pending.power;
-    const balls: Ball[] = roomState.balls.map((b: any) => ({ ...b, vx: 0, vy: 0 }));
+    const balls: Ball[] = roomState.balls.map((b: any) => ({ ...b, vx: 0, vy: 0, spinX: 0, spinY: 0, sleeping: false }));
     const cueBall = balls.find(b => b.id === 0);
     if (!cueBall) return;
 

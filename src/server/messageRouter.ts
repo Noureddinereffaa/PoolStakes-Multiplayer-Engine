@@ -30,7 +30,7 @@ import {
 } from './aiMatchManager';
 import { pushEventLog } from './state';
 
-function routeAiMessage(ws: WebSocket, msg: SocketMessage): void {
+async function routeAiMessage(ws: WebSocket, msg: SocketMessage): Promise<void> {
   pushEventLog('ws_ai_route', { type: msg.type });
   switch (msg.type) {
     case 'start_ai_match':
@@ -40,7 +40,7 @@ function routeAiMessage(ws: WebSocket, msg: SocketMessage): void {
       handleAiSetAiOpponent(ws, msg);
       break;
     case 'shoot':
-      handleAiShoot(ws, msg);
+      await handleAiShoot(ws, msg);
       break;
     case 'preview_aim':
       handleAiPreviewAim(ws, msg);
@@ -73,7 +73,7 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
 
   // Mode-based dispatch: AI vs PvP
   if (isAiPlayer(ws)) {
-    routeAiMessage(ws, msg);
+    await routeAiMessage(ws, msg);
     return;
   }
 
