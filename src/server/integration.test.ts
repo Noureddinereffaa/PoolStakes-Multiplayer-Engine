@@ -18,6 +18,7 @@ function simulateShot(
   cueBall.vy = Math.sin(angle) * powerToVelocity(power);
   cueBall.spinX = spinX;
   cueBall.spinY = spinY;
+  cueBall.sleeping = false;
 
   const pocketed: number[] = [];
   let cueBallPocketed = false;

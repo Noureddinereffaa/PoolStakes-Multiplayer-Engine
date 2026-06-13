@@ -3,7 +3,7 @@ import {
   getInitialBalls, simulatePhysicsStep, simulateOneFrame,
   BALL_R, TABLE_W, TABLE_H, CUSHION,
   isAnyBallMoving, captureFrame, powerToVelocity,
-  MIN_X, MAX_X, MIN_Y, MAX_Y, POCKET_RADIUS,
+  MIN_X, MAX_X, MIN_Y, MAX_Y,
   HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y,
 } from './physics';
 
@@ -67,6 +67,7 @@ describe('simulatePhysicsStep', () => {
     const balls = getInitialBalls();
     balls[0].vx = 10;
     balls[0].vy = 0;
+    balls[0].sleeping = false;
 
     const initialSpeed = Math.abs(balls[0].vx);
     simulatePhysicsStep(balls);
@@ -93,6 +94,7 @@ describe('simulatePhysicsStep', () => {
     targetBall.y = 23;
     targetBall.vx = 5;
     targetBall.vy = 5;
+    targetBall.sleeping = false;
 
     simulatePhysicsStep(balls);
     expect(targetBall.isPocketed).toBe(true);
@@ -107,6 +109,7 @@ describe('simulatePhysicsStep', () => {
     cue.y = MIN_Y;
     cue.vx = 0;
     cue.vy = -10;
+    cue.sleeping = false;
 
     simulatePhysicsStep(balls);
     expect(cue.vy).toBeGreaterThan(0);
@@ -158,6 +161,7 @@ describe('isAnyBallMoving', () => {
   it('should return true when at least one ball moves', () => {
     const balls = getInitialBalls();
     balls[0].vx = 1;
+    balls[0].sleeping = false;
     expect(isAnyBallMoving(balls)).toBe(true);
   });
 
@@ -214,6 +218,7 @@ describe('Edge cases', () => {
     cue.spinY = 0.3;
     cue.vx = 5;
     cue.vy = 0;
+    cue.sleeping = false;
 
     const posBefore = { x: cue.x, y: cue.y };
     simulatePhysicsStep(balls);
@@ -229,6 +234,7 @@ describe('Edge cases', () => {
     target.y = 30;
     target.vx = 20;
     target.vy = 20;
+    target.sleeping = false;
 
     simulatePhysicsStep(balls);
     expect(target.isPocketed).toBe(true);

@@ -52,7 +52,6 @@ interface RenderContext {
   impactFlashesRef?: RefObject<{x: number, y: number, startTime: number}[]>;
   isFineAimRef?: RefObject<boolean>;
   aimInertiaVelocityRef?: RefObject<number>;
-  magnifierCaptureRef?: HTMLCanvasElement | null;
   qualityRef?: RefObject<AdaptiveQuality>;
   prefersReducedMotionRef?: RefObject<boolean>;
   isSnappingRef?: RefObject<boolean>;
@@ -900,59 +899,19 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       ctx2d.save();
 
       // ═══════════════════════════════════════════════════════════
-      //  Gentle Camera — floaty, alive, never hides the table
+      //  Static camera — always full table, zero movement
       // ═══════════════════════════════════════════════════════════
-      const cueBallCam = snap.balls.find(b => b.id === 0);
-      const isAnimPhase = ctx.isAnimatingRef.current;
       const isScratch = snap.isScratchPlacing;
-      let desiredX = 400, desiredY = 200, desiredZoom = 1.0;
+      let desiredZoom = 1.0;
 
-      if (isAnimPhase && cueBallCam && !cueBallCam.isPocketed) {
-        // Shot follow: float toward cue ball (35% blend from center)
-        desiredX = 400 + (cueBallCam.x - 400) * 0.35;
-        desiredY = 200 + (cueBallCam.y - 200) * 0.35;
-      } else if (isScratch && snap.placedPos) {
-        // Scratch: subtle zoom toward placement area
-        desiredX = snap.placedPos.x;
-        desiredY = snap.placedPos.y;
+      if (isScratch && snap.placedPos) {
         desiredZoom = 1.04;
-      } else if (snap.isMyTurn && !snap.isPulling && snap.roomState.status === 'playing') {
-        // Aiming: gentle drift toward cue ball (25% blend)
-        if (cueBallCam && !cueBallCam.isPocketed) {
-          desiredX = 400 + (cueBallCam.x - 400) * 0.25;
-          desiredY = 200 + (cueBallCam.y - 200) * 0.25;
-        }
-      } else if (snap.isPulling && cueBallCam && !cueBallCam.isPocketed) {
-        // Power pull: slightly more toward cue ball
-        desiredX = 400 + (cueBallCam.x - 400) * 0.3;
-        desiredY = 200 + (cueBallCam.y - 200) * 0.3;
       }
 
-      // Turn-start gentle zoom pulse: 1.03x that fades over 700ms
-      if (!isAnimPhase && !isScratch && snap.isMyTurn && snap.roomState.status === 'playing') {
-        const turnElapsed = frameDate - snap.turnStartTimestamp;
-        if (turnElapsed > 0 && turnElapsed < 1500) {
-          const decayT = Math.min(1, turnElapsed / 700);
-          const pulse = (1.03 / desiredZoom - 1) * (1 - decayT);
-          desiredZoom *= (1 + pulse);
-        }
-      }
-
-      // Pocket linger: gentle nudge toward pocket (first 8 frames)
-      if (isAnimPhase && snap.sinkingBalls?.length) {
-        const newest = snap.sinkingBalls[snap.sinkingBalls.length - 1];
-        if (newest.progress < 8) {
-          desiredX = (desiredX + newest.pocketX * 0.5) / 1.5;
-          desiredY = (desiredY + newest.pocketY * 0.5) / 1.5;
-        }
-      }
-
-      // Smooth, floaty interpolation
-      const lerpCam = isAnimPhase ? 0.05 : 0.035;
-      camX.current += (desiredX - camX.current) * lerpCam;
-      camY.current += (desiredY - camY.current) * lerpCam;
+      camX.current += (400 - camX.current) * 0.05;
+      camY.current += (200 - camY.current) * 0.05;
       camZoom.current += (desiredZoom - camZoom.current) * 0.04;
-      camZoom.current = Math.max(1.0, Math.min(1.12, camZoom.current));
+      camZoom.current = Math.max(1.0, Math.min(1.08, camZoom.current));
 
       ctx2d.translate(400 - camX.current * camZoom.current, 200 - camY.current * camZoom.current);
       ctx2d.scale(camZoom.current, camZoom.current);
@@ -4077,89 +4036,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fillStyle = gradWarmGlow;
         ctx2d.fillRect(0, 0, 800, 400);
         ctx2d.restore();
-      }
+      ctx2d.restore();
+    }
 
-      // === 9.5. Magnifier Zoom (Professional Aim Window) ===
-      const isFineAim = snap.isFineAim || false;
-      const velocity = Math.abs(snap.aimVelocity || 0);
-      const showMagnifier = isMyTurnActive && !isStrikingNow && snap.isPulling === false && (isFineAim || (velocity > 0.0001 && velocity < 0.005));
-
-      if (showMagnifier && lastDrawContactX !== null && lastDrawContactY !== null) {
-        ctx2d.save();
-        ctx2d.resetTransform(); // Draw in pure screen space without camera pan
-
-        const dpr = currentDPR;
-        
-        // Settings
-        const magZoom = 2; // 2x Zoom
-        const magW = 160;
-        const magH = 90;
-        const destX = 800 / 2 - magW / 2;
-        const destY = 8;
-        
-        // Calculate source rectangle in unscaled coordinates
-        const srcW = magW / magZoom;
-        const srcH = magH / magZoom;
-        
-        // Target in screen space
-        const targetScreenX = lastDrawContactX;
-        const targetScreenY = lastDrawContactY;
-        
-        const srcX = targetScreenX - srcW / 2;
-        const srcY = targetScreenY - srcH / 2;
-
-        // Draw Magnifier Background (dark fill with soft border outline)
-        ctx2d.fillStyle = '#0a0a0a';
-        ctx2d.fillRect(destX, destY, magW, magH);
-        // Soft dark border glow (replaces shadowBlur)
-        ctx2d.strokeStyle = 'rgba(0,0,0,0.5)';
-        ctx2d.lineWidth = 4;
-        ctx2d.strokeRect(destX - 2, destY - 2, magW + 4, magH + 4);
-        // Clip area for drawing canvas
-        ctx2d.beginPath();
-        ctx2d.rect(destX + 1, destY + 1, magW - 2, magH - 2);
-        ctx2d.clip();
-        
-        // Draw zoomed region from a cached offscreen snapshot of the main canvas
-        // (Avoids self-readback pipeline stall by using a one-time capture)
-        if (!ctx.magnifierCaptureRef) ctx.magnifierCaptureRef = document.createElement('canvas');
-        const magCapture = ctx.magnifierCaptureRef;
-        magCapture.width = srcW * dpr;
-        magCapture.height = srcH * dpr;
-        const magCtx = magCapture.getContext('2d');
-        if (magCtx) {
-          magCtx.drawImage(
-            canvas,
-            srcX * dpr, srcY * dpr, srcW * dpr, srcH * dpr,
-            0, 0, srcW * dpr, srcH * dpr
-          );
-          ctx2d.drawImage(
-            magCapture,
-            0, 0, srcW * dpr, srcH * dpr,
-            destX + 1, destY + 1, magW - 2, magH - 2
-          );
-        }
-
-        // Add a crosshair / center marker over the magnifier
-        ctx2d.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx2d.lineWidth = 1;
-        ctx2d.beginPath();
-        ctx2d.moveTo(destX + magW / 2, destY + 1);
-        ctx2d.lineTo(destX + magW / 2, destY + magH - 1);
-        ctx2d.moveTo(destX + 1, destY + magH / 2);
-        ctx2d.lineTo(destX + magW - 1, destY + magH / 2);
-        ctx2d.stroke();
-
-        ctx2d.restore(); // restore clip
-
-        // Outer border stroke
-        ctx2d.save();
-        ctx2d.resetTransform();
-        ctx2d.strokeStyle = '#f59e0b';
-        ctx2d.lineWidth = 1.5;
-        ctx2d.strokeRect(destX, destY, magW, magH);
-        ctx2d.restore();
-      }
+    ctx2d.restore(); // restore from camera transform
+    ctx2d.restore(); // restore from shadow/globalAlpha
 
       // 10. Frame continuation
       animationId = raf(drawLoop);

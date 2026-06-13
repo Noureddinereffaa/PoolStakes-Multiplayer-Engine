@@ -429,7 +429,6 @@ export default function ArenaPage({
   const [showSidebar, setShowSidebar] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [showSpinUI, setShowSpinUI] = useState(false);
-  const [isFineAim, setIsFineAim] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0.6);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
@@ -520,7 +519,10 @@ export default function ArenaPage({
     if (!document.getElementById(id)) {
       const style = document.createElement('style');
       style.id = id;
-      style.textContent = `@keyframes fadeScaleIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }`;
+    style.textContent = `@keyframes fadeScaleIn {
+      from { opacity: 0; transform: scale(0.3) translateY(-16px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }`;
       document.head.appendChild(style);
     }
   }, []);
@@ -726,7 +728,11 @@ export default function ArenaPage({
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{myPlayer?.username || 'You'}</span>
-                  <span className="text-[6px] md:text-[8px] text-white/30 font-mono">{myPocketed.length} {myPocketed.length === 1 ? 'ball' : 'balls'}</span>
+                </div>
+                {/* My pocket count badge */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[8px] md:text-[10px] font-black font-mono text-amber-300">{myPocketed.length}</span>
+                  <div className="w-[6px] h-[6px] rounded-full border border-white/20 bg-amber-500/40" />
                 </div>
               </div>
 
@@ -740,13 +746,17 @@ export default function ArenaPage({
                 </div>
               </div>
 
-              {/* Right Player (Opponent) - compact: avatar + name only */}
+              {/* Right Player (Opponent) - compact: avatar + name + pocket badge */}
               <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}
                 role="status" aria-label={`${opponent?.username || 'Waiting'} - ${opponentPocketed.length} balls pocketed${!isMyTurn && roomState.status === 'playing' ? ' - their turn' : ''}`}
               >
+                {/* Opponent pocket count badge */}
+                <div className="flex items-center gap-1">
+                  <div className="w-[6px] h-[6px] rounded-full border border-white/20 bg-blue-500/40" />
+                  <span className="text-[8px] md:text-[10px] font-black font-mono text-blue-300">{opponentPocketed.length}</span>
+                </div>
                 <div className="flex flex-col items-end min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
-                  <span className="text-[6px] md:text-[8px] text-white/30 font-mono">{opponentPocketed.length} {opponentPocketed.length === 1 ? 'ball' : 'balls'}</span>
                 </div>
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">👤</div>
               </div>
@@ -793,7 +803,6 @@ export default function ArenaPage({
             myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
             physicsFrames={physicsFrames} physicsTotalSteps={physicsTotalSteps} onClearFrames={() => setPhysicsFrames(null)}
             opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
-            isFineAim={isFineAim}
           />
 
           {/* AI summon centered overlay */}
@@ -840,29 +849,12 @@ export default function ArenaPage({
             </div>
           )}
 
-          {/* Desktop: Fine Aim toggle — precision mode for delicate shots */}
-          {!isMobile && (
-            <div className="absolute bottom-14 right-2 md:right-4 z-10 origin-bottom-right">
-              <button
-                onClick={() => setIsFineAim(v => !v)}
-                className={`px-2 py-1 rounded-lg text-[9px] font-mono font-bold transition-all border ${
-                  isFineAim
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
-                    : 'bg-black/40 text-amber-600/60 border-amber-800/20 hover:border-amber-600/30 hover:text-amber-400/70'
-                }`}
-                style={{ touchAction: 'manipulation' }}
-              >
-                {isFineAim ? 'FINE AIM ON' : 'FINE AIM'}
-              </button>
-            </div>
-          )}
-
           {/* Spin control — bottom-right on desktop, bottom-center on mobile */}
           <div className={`${isMobile ? 'absolute bottom-2 left-1/2 -translate-x-1/2 z-20' : 'absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right'}`}>
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} isMobile={isMobile} />
           </div>
 
-          {/* Mobile: Cue Stick Power Slider on left side */}
+          {/* Mobile: Power Slider — pull to set power, release to shoot */}
           {isMobile && (
             <CueStickSlider
               shotPower={shotPower}
@@ -872,56 +864,33 @@ export default function ArenaPage({
             />
           )}
 
-          {/* Mobile: SHOOT button — separate from slider, always visible during turn for instant action */}
-          {isMobile && isMyTurn && (
-            <button onClick={handleShootClick}
-              className="absolute left-1/2 -translate-x-1/2 bottom-3 z-30 pointer-events-auto w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 border-2 border-amber-300/60 shadow-[0_0_30px_rgba(245,158,11,0.5)] active:scale-90 transition-transform duration-75 flex items-center justify-center"
-              style={{ touchAction: 'manipulation' }}
-              aria-label="Shoot"
-            >
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3" fill="white" />
-              </svg>
-            </button>
-          )}
 
-          {/* Mobile: pocketed balls panel — compact, overlays table right edge, rail-style */}
-          {isMobile && (myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-            <div className="absolute right-14 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
-              <div className="flex flex-col items-center gap-1.5 py-2 px-1.5 rounded-2xl bg-gradient-to-b from-[#2a1508]/95 via-[#1a0a04]/95 to-[#0d0501]/95 border border-[#3a1a0a]/60 shadow-lg shadow-black/50 min-w-[36px]"
+
+          {/* Mobile: pocketed balls panel — single column, no labels, attached right rail */}
+          {isMobile && (allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 pointer-events-none h-[280px] flex items-center">
+              <div className="rounded-r-none rounded-l-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/60 border-r-0 shadow-lg shadow-black/50 min-w-[40px] h-full flex flex-col items-center justify-end px-1.5 py-3"
                 style={{
-                  boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.06), 0 8px 24px rgba(0,0,0,0.5)',
+                  boxShadow: 'inset 3px 0 10px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.6)',
+                  borderTopLeftRadius: '12px',
+                  borderBottomLeftRadius: '12px',
                 }}
               >
-                {/* My pocketed */}
-                {myPocketed.length > 0 && (
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-[5px] font-mono font-bold text-amber-500/70 tracking-[0.15em] uppercase">You</span>
-                    <div className="flex flex-col items-center gap-0.5">
-                      {myPocketed.map(b => (
-                        <div key={b.id} className="transition-all duration-300" style={{ animation: 'fadeScaleIn 0.3s ease-out' }}>
-                          <BallIcon id={b.id} size={20} />
-                        </div>
-                      ))}
+                {/* Balls stack from bottom — newest at bottom */}
+                <div className="flex flex-col items-center gap-0.5 justify-end flex-1">
+                  {[...allPocketed].reverse().map((b, idx) => (
+                    <div key={b.id}
+                      className="transition-all duration-300"
+                      style={{
+                        animation: `fadeScaleIn 0.3s ease-out ${idx * 0.05}s both`,
+                      }}
+                    >
+                      <BallIcon id={b.id} size={20} />
                     </div>
-                  </div>
-                )}
-                {myPocketed.length > 0 && opponentPocketed.length > 0 && (
-                  <div className="w-4 h-px bg-amber-700/30 my-0.5" />
-                )}
-                {/* Opponent pocketed */}
-                {opponentPocketed.length > 0 && (
-                  <div className="flex flex-col items-center gap-1">
-                    {opponentPocketed.map(b => (
-                      <div key={b.id} className="transition-all duration-300" style={{ animation: 'fadeScaleIn 0.3s ease-out' }}>
-                        <BallIcon id={b.id} size={18} />
-                      </div>
-                    ))}
-                    <span className="text-[5px] font-mono font-bold text-blue-400/70 tracking-[0.15em] uppercase">Opp</span>
-                  </div>
-                )}
-                {/* Empty slots placeholder */}
-                {myPocketed.length === 0 && opponentPocketed.length === 0 && (
+                  ))}
+                </div>
+                {/* Empty state */}
+                {allPocketed.length === 0 && (
                   <div className="flex flex-col items-center gap-1 py-1">
                     <div className="w-4 h-4 rounded-full border border-dashed border-amber-800/20" />
                     <span className="text-[4px] font-mono font-bold text-amber-800/30 tracking-[0.2em] uppercase">Pocketed</span>
@@ -932,51 +901,36 @@ export default function ArenaPage({
           )}
         </div>
 
-        {/* Desktop: Pocketed Balls Panel — premium wood rail fixture */}
+        {/* Desktop: Pocketed Balls Panel — premium right rail, single column */}
         {!isMobile && (
-          <div className="shrink-0 flex items-center ml-0 z-10">
-            {(myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-              <div className="flex flex-col items-center gap-2 py-5 px-2 rounded-r-2xl border-l-0 border border-[#3a1a0a]/80 bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] shadow-lg shadow-black/50 min-w-[44px]"
+          <div className="shrink-0 flex items-stretch ml-0 z-10 pointer-events-none">
+            {(allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+              <div className="flex flex-col items-center justify-end gap-1 py-5 px-2.5 rounded-r-2xl border-l-0 border border-[#3a1a0a]/80 bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] shadow-lg shadow-black/50 min-w-[48px]"
                 style={{
                   boxShadow: 'inset 3px 0 12px rgba(0,0,0,0.5), inset -1px 0 6px rgba(180,120,60,0.08), 5px 0 20px rgba(0,0,0,0.4)',
                   borderTopRightRadius: '14px',
                   borderBottomRightRadius: '14px',
+                  maxHeight: '340px',
                 }}
               >
-                {/* My pocketed */}
-                <div className="flex flex-col items-center gap-1.5">
-                  {myPocketed.length > 0 && (
-                    <>
-                      <span className="text-[6px] font-mono font-bold text-amber-500/80 tracking-[0.15em] uppercase">You</span>
-                      {myPocketed.map(b => (
-                        <BallIcon key={b.id} id={b.id} size={22} />
-                      ))}
-                    </>
-                  )}
+                {/* Balls stack from bottom */}
+                <div className="flex flex-col items-center gap-1 justify-end flex-1">
+                  {[...allPocketed].reverse().map((b, idx) => (
+                    <div key={b.id}
+                      className="transition-all duration-300"
+                      style={{
+                        animation: `fadeScaleIn 0.3s ease-out ${idx * 0.06}s both`,
+                      }}
+                    >
+                      <BallIcon id={b.id} size={22} />
+                    </div>
+                  ))}
                 </div>
-
-                {/* Divider */}
-                {(myPocketed.length > 0 && opponentPocketed.length > 0) && (
-                  <div className="w-6 h-px bg-gradient-to-r from-transparent via-amber-700/40 to-transparent my-1" />
-                )}
-
-                {/* Opponent pocketed */}
-                <div className="flex flex-col items-center gap-1.5">
-                  {opponentPocketed.length > 0 && (
-                    <>
-                      {opponentPocketed.map(b => (
-                        <BallIcon key={b.id} id={b.id} size={20} />
-                      ))}
-                      <span className="text-[6px] font-mono font-bold text-blue-400/80 tracking-[0.15em] uppercase">Opp</span>
-                    </>
-                  )}
-                </div>
-
                 {/* Empty state */}
-                {myPocketed.length === 0 && opponentPocketed.length === 0 && (
+                {allPocketed.length === 0 && (
                   <div className="flex flex-col items-center gap-1.5 py-2">
                     <div className="w-4 h-4 rounded-full border border-dashed border-amber-700/20" />
-                    <span className="text-[5px] font-mono font-bold text-amber-700/30 tracking-[0.15em] uppercase">Balls</span>
+                    <span className="text-[5px] font-mono font-bold text-amber-700/30 tracking-[0.15em] uppercase">Pocketed</span>
                   </div>
                 )}
               </div>
@@ -1061,7 +1015,7 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Power Slider: clean track + handle, drag down to shoot ─── */
+/* ─── Mobile Power Slider: pull to charge, release to shoot ─── */
 function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
 }) {
@@ -1069,6 +1023,7 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   const powerRef = useRef(shotPower);
   const trackRef = useRef<HTMLDivElement>(null);
   const lastHapticThresholdRef = useRef(-1);
+  const firedRef = useRef(false);
 
   const getPowerFromY = (clientY: number): number => {
     if (!trackRef.current) return shotPower;
@@ -1093,6 +1048,7 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (disabled) return;
+    firedRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = getPowerFromY(e.clientY);
     powerRef.current = p;
@@ -1113,13 +1069,18 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     if (!dragging) return;
     setDragging(false);
     lastHapticThresholdRef.current = -1;
+    // Auto-shoot on release if power is valid
+    if (!firedRef.current && powerRef.current >= 5) {
+      firedRef.current = true;
+      onShoot();
+    }
   };
 
   const powerColor = shotPower > 70 ? 'from-red-500 to-rose-600' : shotPower > 30 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-green-500';
-  const powerGlow = shotPower > 70 ? 'rgba(239,68,68,0.4)' : shotPower > 30 ? 'rgba(245,158,11,0.4)' : 'rgba(52,211,153,0.4)';
+  const powerGlow = shotPower > 70 ? 'rgba(239,68,68,0.5)' : shotPower > 30 ? 'rgba(245,158,11,0.5)' : 'rgba(52,211,153,0.5)';
 
   return (
-    <div className="absolute right-0.5 bottom-14 z-30 pointer-events-none select-none">
+    <div className="absolute left-2 bottom-14 z-30 pointer-events-none select-none">
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1128,78 +1089,75 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
         className={`pointer-events-auto relative ${disabled ? 'opacity-20' : ''}`}
         style={{ touchAction: 'none' }}
       >
-        {/* Premium wood panel with deep groove */}
-        <div className="rounded-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/80 px-4 py-3 flex flex-col items-center gap-1.5"
+        {/* Premium wood panel — rail-style, integrated with table */}
+        <div className="rounded-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/80 px-5 py-4 flex flex-col items-center gap-2"
           style={{
-            boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.08), 0 8px 32px rgba(0,0,0,0.6)',
+            boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.08), 6px 0 24px rgba(0,0,0,0.7)',
           }}
         >
-          {/* Track container */}
-          <div ref={trackRef} className="relative w-8 h-44 flex flex-col items-center cursor-pointer">
-            {/* Deep groove background */}
+          {/* Track container — enlarged */}
+          <div ref={trackRef} className="relative w-10 h-52 flex flex-col items-center cursor-pointer">
+            {/* Deep groove */}
             <div className="absolute inset-y-0 inset-x-0 rounded-full bg-gradient-to-b from-[#0a0502] via-[#1a0a04] to-[#0a0502]"
               style={{
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.8), inset 0 -1px 2px rgba(180,120,60,0.1)',
+                boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.9), inset 0 -1px 3px rgba(180,120,60,0.12)',
               }}
             >
-              {/* Groove inner shadow */}
-              <div className="absolute inset-y-4 inset-x-1 rounded-full bg-black/40" />
+              <div className="absolute inset-y-5 inset-x-1.5 rounded-full bg-black/40" />
             </div>
 
-            {/* Power fill bar - grows from bottom */}
+            {/* Power fill — wider glow */}
             {shotPower > 0 && (
-              <div className="absolute bottom-0 w-2 rounded-full bg-gradient-to-t opacity-70"
+              <div className="absolute bottom-0 w-3 rounded-full opacity-75"
                 style={{
                   height: `${shotPower}%`,
                   background: `linear-gradient(to top, ${powerGlow}, transparent)`,
-                  marginBottom: 2,
-                  boxShadow: `0 0 8px ${powerGlow}`,
+                  marginBottom: 3,
+                  boxShadow: `0 0 12px ${powerGlow}`,
                 }}
               />
             )}
 
-            {/* Metallic rail - left side */}
-            <div className="absolute left-1 top-2 bottom-2 w-[2px] rounded-full bg-gradient-to-b from-amber-300/10 via-amber-500/40 to-amber-300/10"
-              style={{ boxShadow: '0 0 2px rgba(180,120,60,0.3)' }}
+            {/* Groove rail line */}
+            <div className="absolute left-2 top-3 bottom-3 w-[2.5px] rounded-full bg-gradient-to-b from-amber-300/12 via-amber-500/45 to-amber-300/12"
+              style={{ boxShadow: '0 0 3px rgba(180,120,60,0.3)' }}
             />
 
-            {/* Thumb handle */}
+            {/* Thumb — bigger, bolder */}
             <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
               style={{
                 bottom: `${Math.max(0, shotPower)}%`,
-                marginBottom: -14,
+                marginBottom: -18,
               }}
             >
-              <div className={`relative w-7 h-7 rounded-full bg-gradient-to-br ${powerColor} border-2 ${
+              <div className={`relative w-9 h-9 rounded-full bg-gradient-to-br ${powerColor} border-[2.5px] ${
                 shotPower > 70 ? 'border-red-300' : shotPower > 30 ? 'border-amber-300' : 'border-emerald-300'
               }`}
                 style={{
                   boxShadow: dragging
-                    ? `0 0 20px ${powerGlow}, 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.3)`
-                    : `0 0 10px ${powerGlow}, 0 2px 6px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2)`,
+                    ? `0 0 28px ${powerGlow}, 0 3px 10px rgba(0,0,0,0.6), inset 0 1.5px 0 rgba(255,255,255,0.3)`
+                    : `0 0 14px ${powerGlow}, 0 3px 8px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.2)`,
                 }}
               >
-                {/* Inner highlight */}
-                <div className="absolute inset-[3px] rounded-full bg-white/15" />
-                {/* Power percentage on thumb */}
-                <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black font-mono text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">
+                <div className="absolute inset-[4px] rounded-full bg-white/15" />
+                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black font-mono text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
                   {shotPower}
                 </span>
               </div>
             </div>
 
-            {/* Tick marks inside groove */}
-            <div className="absolute inset-y-3 right-0.5 flex flex-col justify-between pointer-events-none">
+            {/* Tick marks */}
+            <div className="absolute inset-y-4 right-1 flex flex-col justify-between pointer-events-none">
               {[100, 75, 50, 25, 0].map((val) => (
                 <div key={val} className="flex items-center">
-                  <div className={`h-px ${val <= shotPower ? 'bg-white/30 w-1.5' : 'bg-white/8 w-1'}`} />
+                  <div className={`h-px ${val <= shotPower ? 'bg-white/35 w-2' : 'bg-white/10 w-1.5'}`} />
                 </div>
               ))}
             </div>
           </div>
 
           {/* Power label */}
-          <span className="text-[6px] font-mono font-bold text-amber-600/60 tracking-[0.2em] uppercase">Power</span>
+          <span className="text-[7px] font-mono font-bold text-amber-600/70 tracking-[0.2em] uppercase">Power</span>
         </div>
       </div>
     </div>
