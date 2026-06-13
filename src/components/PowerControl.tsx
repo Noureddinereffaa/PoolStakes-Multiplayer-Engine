@@ -49,12 +49,12 @@ export default function PowerControl({
     isDraggingRef.current = true;
     setIsDragging(true);
     if (isDesktop) {
-      if (zoneRef.current) {
-        const p = powerFromY(e.clientY, zoneRef.current);
-        powerRef.current = p;
-        setPower(p);
-        onPowerChange(p);
-      }
+      // Retain last power — don't jump to click position
+      const cur = powerRef.current;
+      startYRef.current = e.clientY + (cur * MAX_DRAG_PX / 100);
+      setIsDragging(true);
+      onDragStateChange?.(true);
+      return;
     } else {
       setPower(0);
       powerRef.current = 0;

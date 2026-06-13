@@ -197,11 +197,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const [pendingRoomBalls, setPendingRoomBalls] = useState<Ball[] | null>(null);
   const pullStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftHeldRef = useRef(false);
-  const DEAD_ZONE_PX = 6; // minimum drag distance before power registers
+  const DEAD_ZONE_PX = 8; // minimum drag distance before power registers
   const AIM_DEAD_ZONE_PX = 6; // minimum ortho drag before aim adjusts — filters hand tremor
   const SHIFT_MODIFIER = 0.15; // precision mode sensitivity multiplier (finer)
   const SMOOTH_FACTOR = 0.30; // lerp factor for angle smoothing during drag
-  const SMOOTH_FACTOR_HOVER = 0.28; // hover sensitivity — snappier tracking while maintaining smoothness
+  const SMOOTH_FACTOR_HOVER = 0.20; // hover sensitivity — smooth professional tracking without floatiness
   const targetAimAngleRef = useRef(0);
   const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
   const prefersReducedMotionRef = useRef(false);
@@ -211,19 +211,20 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   // ── Dynamic Sensitivity System ──────────────────────────
   type InputMode = 'hover' | 'aiming' | 'power_drag' | 'precision';
   const SENS = {
-    AIM_BASE:          0.0012,
-    AIM_SHRINK_AT:     200,
-    AIM_SHRINK_MAX:    0.70,
-    POWER_DRAG_RATIO:  0.058,
-    PRECISION_RATIO:   0.292,
-    SHIFT_RATIO:       0.15,
-    PRECISION_VEL:     0.12,
-    PRECISION_HYST:    0.20,
-    POWER_LOCK_AT:     80,
-    POWER_UNLOCK_AT:   40,
-    POWER_ANGLE_TOL:   0.5,
-    ORTHO_DZ:          6,
-    ORTHO_DZ_POWER:    24,
+    AIM_BASE:          0.0010,    // base sensitivity (radians per pixel of orthogonal drag)
+    AIM_SHRINK_AT:     200,       // drag distance at which sensitivity stops shrinking
+    AIM_SHRINK_MAX:    0.65,      // max sensitivity reduction from distance (65%)
+    POWER_DRAG_RATIO:  0.001,     // near-zero sens during power drag (locks aim)
+    PRECISION_RATIO:   0.40,      // precision mode sensitivity multiplier
+    SHIFT_RATIO:       0.15,      // shift-held sensitivity multiplier
+    PRECISION_VEL:     0.25,      // mouse velocity threshold (px/ms) to trigger precision
+    PRECISION_HYST:    0.40,      // velocity hysteresis to exit precision mode
+    PRECISION_DELTA:   2.0,       // individual delta threshold (px) for precision detection
+    POWER_LOCK_AT:     70,        // drag distance to lock into power drag mode
+    POWER_UNLOCK_AT:   35,        // drag distance to unlock from power drag mode
+    POWER_ANGLE_TOL:   0.5,       // radians tolerance for "along aim axis"
+    ORTHO_DZ:          6,         // orthogonal deadzone for normal aiming (px)
+    ORTHO_DZ_POWER:    24,        // orthogonal deadzone for power drag (px — larger to filter noise)
   };
   const inputModeRef = useRef<InputMode>('hover');
   const mouseTraceRef = useRef<Array<{ x: number; y: number; t: number }>>([]);
@@ -366,7 +367,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const basePlayMultiplier = physicsFrames.length / Math.max(1, (physicsTotalSteps || physicsFrames.length) / serverDivisor);
       let animationFrameId: number;
       const animStartTime = performance.now();
-      const STRIKE_ACCEL = 0;
+      const STRIKE_ACCEL = 30; // Matches renderer's cue pull-back duration — audio + physics start after visual wind-up
       const physicsStartTime = animStartTime + STRIKE_ACCEL;
       animatedBallsRef.current = initialBallsCopy.map(b => {
         const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);
@@ -650,14 +651,24 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               const span = now - mouseTraceRef.current[0].t;
               if (span > 0) mouseVel = totalPx / span;
             }
-            const isPrecisionMove = mouseVel < SENS.PRECISION_VEL;
+            // ── Enhanced Precision Detection ──
+            // Multiple signals: mouse velocity over sliding window, individual delta magnitude
+            let isPrecisionMove = mouseVel < SENS.PRECISION_VEL;
+            if (!isPrecisionMove && mouseTraceRef.current.length >= 2) {
+              const lastDx = mouseTraceRef.current[mouseTraceRef.current.length - 1].x - mouseTraceRef.current[mouseTraceRef.current.length - 2].x;
+              const lastDy = mouseTraceRef.current[mouseTraceRef.current.length - 1].y - mouseTraceRef.current[mouseTraceRef.current.length - 2].y;
+              if (Math.hypot(lastDx, lastDy) < SENS.PRECISION_DELTA) {
+                isPrecisionMove = true;
+              }
+            }
             
-            // ── Power from total drag distance ──
+            // ── Power from total drag distance (linear, no double curve) ──
+            // Server already applies quartic (p^4-dominant) curve via powerToVelocity().
+            // Client-side smoothstep would double-compress low range; use linear instead.
+            const MAX_DRAG_PX = 220;
             const effectiveDrag = Math.max(0, dragDist - DEAD_ZONE_PX);
-            const dragFactor = 1.8;
-            const rawPower = Math.min(100, effectiveDrag / dragFactor);
-            const t = rawPower / 100; const curvedPower = (t * t * (3 - 2 * t)) * 100;
-            const power = Math.min(100, Math.max(0, Math.floor(curvedPower)));
+            const rawPower = Math.min(100, (effectiveDrag / MAX_DRAG_PX) * 100);
+            const power = Math.min(100, Math.max(0, Math.round(rawPower)));
             setShotPower(power);
             shotPowerRef.current = power;
             
@@ -676,7 +687,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             }
             if (isPullingRef.current) {
               if (isPowerDrag) {
-                if (inputModeRef.current !== 'power_drag') inputModeRef.current = 'power_drag';
+                if (inputModeRef.current !== 'power_drag') {
+                  inputModeRef.current = 'power_drag';
+                  // Lock aim to current angle on power drag entry
+                  initialAimAngleRef.current = aimAngleRef.current;
+                }
                 setDragMode('pull'); dragModeRef.current = 'pull';
               } else if (isExitPower && inputModeRef.current === 'power_drag') {
                 inputModeRef.current = isPrecisionMove ? 'precision' : 'aiming';
@@ -689,38 +704,49 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               // Determine target mode multiplier
               let targetMult: number;
               if (inputModeRef.current === 'power_drag') {
+                // POWER DRAG: aim completely locked — no angle calculation
                 targetMult = SENS.POWER_DRAG_RATIO;
+                // Keep angle at the initial (locked) value
+                const lockedAngle = initialAimAngleRef.current;
+                const snapped = cueBall ? applyAimSnap(lockedAngle, cueBall) : lockedAngle;
+                setAimAngle(snapped);
+                aimAngleRef.current = snapped;
+                // Still track sensitivity for smooth transition back
               } else if (isPrecisionMove) {
-                targetMult = SENS.PRECISION_RATIO;
                 inputModeRef.current = 'precision';
+                targetMult = SENS.PRECISION_RATIO;
               } else if (inputModeRef.current === 'precision' && mouseVel > SENS.PRECISION_HYST) {
                 inputModeRef.current = 'aiming';
-                targetMult = 1.0 - Math.min(dragDist, SENS.AIM_SHRINK_AT) / SENS.AIM_SHRINK_AT * SENS.AIM_SHRINK_MAX;
+                const tDrag = Math.min(dragDist, SENS.AIM_SHRINK_AT) / SENS.AIM_SHRINK_AT;
+                targetMult = 1.0 - tDrag * SENS.AIM_SHRINK_MAX;
               } else {
                 // AIMING: sensitivity DECREASES with drag distance
+                // More drag commitment = less aim twitch
                 const tDrag = Math.min(dragDist, SENS.AIM_SHRINK_AT) / SENS.AIM_SHRINK_AT;
                 targetMult = 1.0 - tDrag * SENS.AIM_SHRINK_MAX;
               }
               if (isShiftHeldRef.current) targetMult *= SENS.SHIFT_RATIO;
               
-              // Smooth transitions (lerp toward target)
+              // Smooth sensitivity transitions (faster lerp for responsive feel)
               sensTargetRef.current = targetMult;
-              sensCurrentRef.current += (sensTargetRef.current - sensCurrentRef.current) * 0.15;
+              sensCurrentRef.current += (sensTargetRef.current - sensCurrentRef.current) * 0.18;
               
-              // Orthogonal component for aim rotation
-              const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
-              const deadZone = inputModeRef.current === 'power_drag' ? SENS.ORTHO_DZ_POWER : SENS.ORTHO_DZ;
-              const effectiveOrtho = Math.abs(orthoDrag) > deadZone ? orthoDrag : 0;
-              
-              const effectiveSens = SENS.AIM_BASE * sensCurrentRef.current;
-              const newAngle = initialAimAngleRef.current + effectiveOrtho * effectiveSens;
-              const targetAngle = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
-              const snapped = cueBall ? applyAimSnap(targetAngle, cueBall) : targetAngle;
-              setAimAngle(snapped);
-              aimAngleRef.current = snapped;
+              // ── Aim rotation (skipped entirely in power_drag mode) ──
+              if (inputModeRef.current !== 'power_drag') {
+                const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
+                const deadZone = inputModeRef.current === 'precision' ? SENS.ORTHO_DZ : SENS.ORTHO_DZ;
+                const effectiveOrtho = Math.abs(orthoDrag) > deadZone ? orthoDrag : 0;
+                
+                const effectiveSens = SENS.AIM_BASE * sensCurrentRef.current;
+                const newAngle = initialAimAngleRef.current + effectiveOrtho * effectiveSens;
+                const targetAngle = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
+                const snapped = cueBall ? applyAimSnap(targetAngle, cueBall) : targetAngle;
+                setAimAngle(snapped);
+                aimAngleRef.current = snapped;
+              }
             }
           } else if (!isAimLockedRef.current) {
-            // Hover logic — very slow, floaty tracking for professional aim preview
+            // Hover logic — smooth cursor-following for professional aim preview
             const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
             const snapped = applyAimSnap(rawAngle, cueBall);
             targetAimAngleRef.current = rawAngle;

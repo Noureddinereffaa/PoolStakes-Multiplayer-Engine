@@ -32,9 +32,9 @@ export const PHYSICS = {
 
   // ── Friction ──────────────────────────────────────────
   /** Rolling friction coefficient (exponential decay) */
-  FRICTION_ROLL:      0.55,
+  FRICTION_ROLL:      1.5,
   /** Sliding friction coefficient (applied when sliding) */
-  FRICTION_SLIDE:     0.70,
+  FRICTION_SLIDE:     2.0,
   /** Speed threshold for slide→roll transition */
   SLIDE_ROLL_SPEED:   1.0,
 
@@ -168,11 +168,11 @@ export function getInitialBalls(): Ball[] {
 // ═══════════════════════════════════════════════════════════════
 export function powerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  // Quartic-dominant: 92% p^4 + 8% linear
-  // Ultra-gentle at low end (10%→~21 units/sec), EXPLOSIVE at high end (100%→2520 units/sec)
-  // Each 10% drag increment gives a distinct, perceptible power increase.
+  // Quadratic-dominant: 60% p² + 40% linear
+  // Gentle at low end (10%→~116 units/sec → ~58u travel), full at 100% (2520 → 1260u)
+  // Each 10% power increment gives a distinct, intuitive velocity increase.
   const cap = 42 * PHYSICS.SUB_STEPS;
-  const v = cap * (0.08 * p + 0.92 * p * p * p * p);
+  const v = cap * (0.4 * p + 0.6 * p * p);
   return Math.min(cap, v);
 }
 
