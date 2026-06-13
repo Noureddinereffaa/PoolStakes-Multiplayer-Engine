@@ -879,12 +879,12 @@ export async function triggerAiShot(room: RoomState, opts?: {
     const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
     for (const client of wssList) {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: 'physics_frames', frames: compactFrames }));
+        client.send(JSON.stringify({ type: 'physics_frames', frames: compactFrames, totalSteps: iterations }));
       }
     }
 
     const basePlayMultiplier = frames.length > 350 ? 2.4 : 2.0;
-    const animationDurationMs = (frames.length * 16.66) / basePlayMultiplier + 80;
+    const animationDurationMs = (iterations * 16.66) / basePlayMultiplier + 80;
 
     setTimeout(() => {
       if ((room.animVersion || 0) !== currentAnimVersion) return;

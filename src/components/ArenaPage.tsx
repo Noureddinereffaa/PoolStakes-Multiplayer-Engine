@@ -28,6 +28,7 @@ interface ArenaPageProps {
   isMyTurn: boolean;
   physicsFrames: Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null;
   setPhysicsFrames: (f: Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null) => void;
+  physicsTotalSteps: number | null;
   handleShoot: (angle: number, power: number, spinX?: number, spinY?: number) => void;
   handleResetCueBall: (x: number, y: number) => void;
   opponentAim: { angle: number; power: number; spinX?: number; spinY?: number } | null | undefined;
@@ -89,13 +90,13 @@ function BallIcon({ id, size = 20 }: { id: number; size?: number }) {
   );
 }
 
-function SpinControl({ spinX, spinY, onChange, disabled }: {
-  spinX: number; spinY: number; onChange: (x: number, y: number) => void; disabled: boolean;
+function SpinControl({ spinX, spinY, onChange, disabled, isMobile }: {
+  spinX: number; spinY: number; onChange: (x: number, y: number) => void; disabled: boolean; isMobile: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const padRef = useRef<HTMLDivElement>(null);
-  const isMobile = window.innerWidth < 768;
-  const padSize = isMobile ? 220 : 200;
+  const isMobileDevice = window.innerWidth < 768;
+  const padSize = isMobileDevice ? 120 : (isMobile ? 120 : 200);
 
   const spinLabel = () => {
     if (Math.abs(spinX) < 0.05 && Math.abs(spinY) < 0.05) return 'CENTER';
@@ -128,13 +129,14 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
   };
 
   const handleUp = () => {
+    if (isMobileDevice) return; // persistent on mobile — don't close
     setOpen(false);
   };
 
   const hasSpin = Math.abs(spinX) > 0.05 || Math.abs(spinY) > 0.05;
 
-  // Overlay
-  if (open) {
+  // Desktop: overlay mode (existing behavior)
+  if (open && !isMobileDevice) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
         onPointerDown={() => setOpen(false)}
@@ -142,7 +144,6 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
         <div className="flex flex-col items-center gap-4"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {/* Title */}
           <div className="flex items-center gap-3">
             <span className="text-xs font-mono font-bold text-amber-400/80 tracking-[0.2em] uppercase">Cue Ball Spin</span>
             {hasSpin && (
@@ -151,8 +152,6 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
               >CENTER</button>
             )}
           </div>
-
-          {/* Spin pad */}
           <div
             ref={padRef}
             onPointerDown={handleDown}
@@ -161,31 +160,26 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
             onPointerCancel={handleUp}
             className="rounded-full cursor-crosshair select-none touch-none relative"
             style={{
-              width: padSize, height: padSize,
+              width: 200, height: 200,
               background: 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)',
               boxShadow: 'inset -4px -5px 14px rgba(0,0,0,0.85), inset 4px 4px 10px rgba(245,158,11,0.12), 0 0 50px rgba(0,0,0,0.5), 0 0 0 2px rgba(217,119,6,0.25)',
               touchAction: 'none',
             }}
           >
-            {/* Crosshair lines */}
             <div className="absolute inset-[18%] flex items-center justify-center pointer-events-none">
               <div className="w-full h-px bg-white/8" />
             </div>
             <div className="absolute inset-[18%] flex items-center justify-center pointer-events-none">
               <div className="h-full w-px bg-white/8" />
             </div>
-
-            {/* Direction labels */}
             <span className="absolute top-1 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">FOLLOW</span>
             <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">DRAW</span>
             <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">LEFT</span>
             <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] font-mono font-bold text-white/30 pointer-events-none">RIGHT</span>
-
-            {/* Spin indicator — inner cue ball with red contact dot */}
             <div className="absolute pointer-events-none"
               style={{
-                left: `calc(50% + ${spinX * (padSize / 2 - 16)}px)`,
-                top: `calc(50% + ${-spinY * (padSize / 2 - 16)}px)`,
+                left: `calc(50% + ${spinX * (200 / 2 - 16)}px)`,
+                top: `calc(50% + ${-spinY * (200 / 2 - 16)}px)`,
                 width: 24, height: 24,
                 transform: 'translate(-50%, -50%)',
               }}
@@ -207,15 +201,84 @@ function SpinControl({ spinX, spinY, onChange, disabled }: {
               />
             </div>
           </div>
-
-          {/* Label */}
           <span className="text-sm font-mono font-bold text-amber-500 min-h-[1.2em]">{spinLabel()}</span>
         </div>
       </div>
     );
   }
 
-  // Closed — small toggle button
+  // Mobile: Persistent bottom-center spin wheel (always visible)
+  if (isMobileDevice) {
+    return (
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
+        style={{ touchAction: 'none' }}
+      >
+        <div className="flex flex-col items-center gap-0.5">
+          {/* Compact spin pad — always visible */}
+          <div
+            ref={padRef}
+            onPointerDown={disabled ? undefined : handleDown}
+            onPointerMove={handleMove}
+            onPointerUp={handleUp}
+            onPointerCancel={handleUp}
+            className={`rounded-full cursor-crosshair select-none touch-none relative ${disabled ? 'opacity-25' : ''}`}
+            style={{
+              width: padSize, height: padSize,
+              background: hasSpin
+                ? 'radial-gradient(circle at 40% 35%, #78350f, #451a03 80%, #1a0a02)'
+                : 'radial-gradient(circle at 40% 35%, #292524, #1c1917 80%, #0a0a0a)',
+              boxShadow: hasSpin
+                ? '0 0 16px rgba(245,158,11,0.2), inset -3px -4px 10px rgba(0,0,0,0.85), inset 3px 3px 8px rgba(245,158,11,0.08), 0 0 0 1.5px rgba(217,119,6,0.2)'
+                : 'inset -3px -4px 10px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.05)',
+              touchAction: 'none',
+            }}
+          >
+            {/* Crosshair */}
+            <div className="absolute inset-[20%] flex items-center justify-center pointer-events-none">
+              <div className="w-full h-px bg-white/10" />
+            </div>
+            <div className="absolute inset-[20%] flex items-center justify-center pointer-events-none">
+              <div className="h-full w-px bg-white/10" />
+            </div>
+            {/* Labels */}
+            <span className="absolute top-0.5 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-white/20 pointer-events-none">F</span>
+            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[6px] font-mono font-bold text-white/20 pointer-events-none">D</span>
+            <span className="absolute left-0.5 top-1/2 -translate-y-1/2 text-[6px] font-mono font-bold text-white/20 pointer-events-none">L</span>
+            <span className="absolute right-0.5 top-1/2 -translate-y-1/2 text-[6px] font-mono font-bold text-white/20 pointer-events-none">R</span>
+            {/* Mini cue ball + red contact dot */}
+            <div className="absolute pointer-events-none"
+              style={{
+                left: `calc(50% + ${spinX * (padSize / 2 - 10)}px)`,
+                top: `calc(50% + ${-spinY * (padSize / 2 - 10)}px)`,
+                width: 16, height: 16,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <div className="w-full h-full rounded-full"
+                style={{
+                  background: 'radial-gradient(circle at 30% 30%, #ffffff, #f0e8dc 60%, #d4c8b4)',
+                  boxShadow: '0 0 8px rgba(245,158,11,0.4), inset -1px -1px 2px rgba(0,0,0,0.3)',
+                }}
+              />
+              <div className="absolute rounded-full"
+                style={{
+                  width: 5, height: 5,
+                  left: '50%', top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'radial-gradient(circle at 35% 35%, #ef4444, #b91c1c)',
+                  boxShadow: '0 0 5px rgba(239,68,68,0.6)',
+                }}
+              />
+            </div>
+          </div>
+          {/* Label below */}
+          <span className="text-[7px] font-mono font-bold text-white/25 tracking-wider">{spinLabel()}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop closed — small toggle button
   return (
     <button
       onClick={() => { if (!disabled) setOpen(true); }}
@@ -334,7 +397,7 @@ function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage
 
 export default function ArenaPage({
   roomState, userSession, language, onQuitRoom, myPlayerObj, isMyTurn,
-  physicsFrames, setPhysicsFrames, handleShoot, handleResetCueBall, opponentAim,
+  physicsFrames, setPhysicsFrames, physicsTotalSteps, handleShoot, handleResetCueBall, opponentAim,
   handlePreviewAim, handleJoinAI, handleRematch, chatMessage, setChatMessage, handleSendChat,
   connectionGrade, isOffline
 }: ArenaPageProps) {
@@ -347,6 +410,11 @@ export default function ArenaPage({
   const [showSpinUI, setShowSpinUI] = useState(false);
   const [isFineAim, setIsFineAim] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(0.6);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [foulNotification, setFoulNotification] = useState<string | null>(null);
+  const [turnChanged, setTurnChanged] = useState(false);
+  const prevTurnRef = useRef(roomState?.currentTurn);
   const [isPortrait, setIsPortrait] = useState(() => window.innerHeight > window.innerWidth);
   const overlayTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -503,8 +571,14 @@ export default function ArenaPage({
   }).length : 0;
 
   useEffect(() => {
-    if (isGameOver) poolAudio.playWin();
-  }, [isGameOver]);
+    if (isGameOver) {
+      if (isWinner) {
+        poolAudio.playWin();
+      } else {
+        poolAudio.playLose();
+      }
+    }
+  }, [isGameOver, isWinner]);
 
   const prevTimerRef = useRef(timerVal);
   useEffect(() => {
@@ -513,6 +587,38 @@ export default function ArenaPage({
     }
     prevTimerRef.current = timerVal;
   }, [timerVal, isMyTurn]);
+
+  // Turn change sound
+  useEffect(() => {
+    if (prevTurnRef.current && prevTurnRef.current !== roomState?.currentTurn && roomState?.status === 'playing') {
+      poolAudio.playTurnChange();
+      setTurnChanged(true);
+      setTimeout(() => setTurnChanged(false), 800);
+    }
+    prevTurnRef.current = roomState?.currentTurn;
+  }, [roomState?.currentTurn, roomState?.status]);
+
+  // Foul notification detection
+  useEffect(() => {
+    if (roomState?.log && roomState.log.length > 0) {
+      const lastLog = roomState.log[roomState.log.length - 1];
+      if (lastLog.toLowerCase().includes('foul') || lastLog.toLowerCase().includes('scratch')) {
+        setFoulNotification(lastLog);
+        poolAudio.playFoul();
+        setTimeout(() => setFoulNotification(null), 3000);
+      }
+    }
+  }, [roomState?.log]);
+
+  // Volume sync
+  useEffect(() => {
+    poolAudio.volume = volume;
+  }, [volume]);
+
+  const toggleMute = useCallback(() => {
+    const newMuted = poolAudio.toggle();
+    setIsMuted(newMuted);
+  }, []);
 
   if (!roomState) {
     return (
@@ -576,11 +682,15 @@ export default function ArenaPage({
       <header
         className={`${isMobile ? `absolute top-0 inset-x-0 transition-opacity duration-300 ${headerVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}` : 'relative'} z-40 bg-gradient-to-b from-black/80 to-transparent px-2 md:px-4 shrink-0`}
         style={{ paddingTop: isMobile ? '2px' : 'calc(var(--sat) + 4px)', paddingBottom: isMobile ? '2px' : '6px' }}
+        role="banner"
+        aria-label={language === 'ar' ? 'معلومات اللعبة' : 'Game Information'}
       >
             <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
               
               {/* Left Player (Me) - compact: avatar + name only */}
-              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}
+                role="status" aria-label={`${myPlayer?.username || 'You'} - ${myPocketed.length} balls pocketed${isMyTurn ? ' - your turn' : ''}`}
+              >
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{myPlayer?.username || 'You'}</span>
@@ -589,7 +699,7 @@ export default function ArenaPage({
               </div>
 
               {/* Center Timer */}
-              <div className="flex flex-col items-center shrink-0 px-1 md:px-2">
+              <div className="flex flex-col items-center shrink-0 px-1 md:px-2" role="timer" aria-label={`${timerVal} seconds remaining`} aria-live="polite">
                 <span className={`text-sm md:text-lg font-black font-mono leading-none ${timerVal <= 10 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
                   {timerVal}
                 </span>
@@ -599,7 +709,9 @@ export default function ArenaPage({
               </div>
 
               {/* Right Player (Opponent) - compact: avatar + name only */}
-              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}>
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}
+                role="status" aria-label={`${opponent?.username || 'Waiting'} - ${opponentPocketed.length} balls pocketed${!isMyTurn && roomState.status === 'playing' ? ' - their turn' : ''}`}
+              >
                 <div className="flex flex-col items-end min-w-0 flex-1">
                   <span className="text-[9px] md:text-xs font-bold text-amber-50 truncate">{opponent?.username || 'Waiting...'}</span>
                   <span className="text-[6px] md:text-[8px] text-white/30 font-mono">{opponentPocketed.length} {opponentPocketed.length === 1 ? 'ball' : 'balls'}</span>
@@ -608,22 +720,46 @@ export default function ArenaPage({
               </div>
 
               {/* Quit button - always visible */}
-              <button onClick={onQuitRoom} className="shrink-0 p-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 transition">
+              <button onClick={onQuitRoom} className="shrink-0 p-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 transition" aria-label="Quit game">
                 <svg width={isMobile ? 12 : 16} height={isMobile ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
                 </svg>
               </button>
 
+              {/* Volume control */}
+              <div className="relative shrink-0">
+                <button onClick={toggleMute}
+                  onMouseEnter={() => !isMobile && setShowVolumeSlider(true)}
+                  onMouseLeave={() => !isMobile && setShowVolumeSlider(false)}
+                  className="p-1.5 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white/80 transition"
+                  aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
+                >
+                  {isMuted ? <VolumeX size={isMobile ? 12 : 14} /> : <Volume2 size={isMobile ? 12 : 14} />}
+                </button>
+                {showVolumeSlider && !isMobile && (
+                  <div className="absolute top-full right-0 mt-1 p-2 rounded-lg bg-[#1a1208] border border-amber-900/30 shadow-xl z-50"
+                    onMouseEnter={() => setShowVolumeSlider(true)}
+                    onMouseLeave={() => setShowVolumeSlider(false)}
+                  >
+                    <input type="range" min="0" max="100" value={Math.round(volume * 100)}
+                      onChange={(e) => setVolume(Number(e.target.value) / 100)}
+                      className="w-20 h-1 accent-amber-500 cursor-pointer"
+                    />
+                    <div className="text-[8px] text-amber-500 text-center mt-1 font-mono">{Math.round(volume * 100)}%</div>
+                  </div>
+                )}
+              </div>
+
             </div>
       </header>
 
       {/* Main - PoolTable fills everything */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative" role="main" aria-label={language === 'ar' ? 'طاولة اللعب' : 'Pool Table'}>
         <div className={`flex-1 relative ${showSidebar && isMobile ? 'hidden' : ''}`}>
           <PoolTable ref={tableRef}
             roomState={roomState} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
             myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
-            physicsFrames={physicsFrames} onClearFrames={() => setPhysicsFrames(null)}
+            physicsFrames={physicsFrames} physicsTotalSteps={physicsTotalSteps} onClearFrames={() => setPhysicsFrames(null)}
             opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
             isFineAim={isFineAim}
           />
@@ -637,9 +773,44 @@ export default function ArenaPage({
             </div>
           )}
 
-          {/* Spin control — bottom-right corner */}
-          <div className="absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right">
-            <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} />
+          {/* "YOUR TURN" overlay */}
+          {isMyTurn && roomState.status === 'playing' && turnChanged && (
+            <div className="absolute left-1/2 top-8 -translate-x-1/2 z-20 pointer-events-none">
+              <div className="px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 backdrop-blur-sm animate-pulse">
+                <span className="text-xs font-black font-mono text-amber-300 tracking-widest">
+                  {language === 'ar' ? 'دورك!' : 'YOUR TURN'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Ball group assignment display */}
+          {mySide && (
+            <div className="absolute top-2 left-2 z-10 pointer-events-none">
+              <div className={`px-2 py-0.5 rounded-full text-[8px] font-bold font-mono ${
+                mySide === 'solids'
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+              }`}>
+                {mySide === 'solids' ? '● SOLIDS' : '◐ STRIPES'}
+              </div>
+            </div>
+          )}
+
+          {/* Foul notification toast */}
+          {foulNotification && (
+            <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+              <div className="px-4 py-2 rounded-xl bg-rose-900/80 border border-rose-500/40 backdrop-blur-sm shadow-lg shadow-rose-500/20">
+                <span className="text-xs font-black font-mono text-rose-300 tracking-wider">
+                  ⚠ {foulNotification}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Spin control — bottom-right on desktop, bottom-center on mobile */}
+          <div className={`${isMobile ? 'absolute bottom-2 left-1/2 -translate-x-1/2 z-20' : 'absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right'}`}>
+            <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} isMobile={isMobile} />
           </div>
 
           {/* Mobile: Cue Stick Power Slider on left side */}
@@ -652,9 +823,9 @@ export default function ArenaPage({
             />
           )}
 
-          {/* Mobile: pocketed balls panel — compact, overlays table right edge */}
+          {/* Mobile: pocketed balls panel — compact, overlays table right edge, offset left of power slider */}
           {isMobile && (myPocketed.length > 0 || opponentPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-            <div className="absolute right-0.5 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 z-20 pointer-events-none">
               <div className="flex flex-col items-center gap-1 py-1.5 px-1 rounded-xl border border-[#2e0c04]/40 bg-gradient-to-b from-[#1a0702]/90 to-[#0d0301]/90 shadow-lg shadow-black/40 min-w-[30px]">
                 {myPocketed.length > 0 && (
                   <div className="flex flex-col items-center gap-0.5">
@@ -751,6 +922,7 @@ export default function ArenaPage({
       {isGameOver && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          role="dialog" aria-label="Game Over" aria-modal="true"
         >
           <motion.div initial={{ scale: 0.8, y: 30 }} animate={{ scale: 1, y: 0 }}
             className="relative p-6 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_60px_rgba(245,158,11,0.15)] max-w-xs w-full mx-4 text-center"
@@ -771,10 +943,23 @@ export default function ArenaPage({
                 <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'كرات الخصم' : 'Opponent'}</div>
                 <div className="text-lg font-black font-mono text-blue-400">{oppPocketCount}</div>
               </div>
+              {mySide && (
+                <>
+                  <div className="bg-black/50 rounded-lg border border-amber-900/30 p-2">
+                    <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'مجموعتي' : 'My Group'}</div>
+                    <div className="text-sm font-black font-mono text-amber-300">{mySide === 'solids' ? '● SOLIDS' : '◐ STRIPES'}</div>
+                  </div>
+                  <div className="bg-black/50 rounded-lg border border-amber-900/30 p-2">
+                    <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'المتبقي' : 'Remaining'}</div>
+                    <div className="text-sm font-black font-mono text-amber-300">{7 - myPocketCount}</div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex gap-2">
               <button onClick={handleRematch}
                 className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-black transition shadow-lg shadow-amber-500/20"
+                autoFocus
               >🔄 {language === 'ar' ? 'إعادة' : 'REMATCH'}</button>
               <button onClick={onQuitRoom}
                 className="flex-1 py-2.5 rounded-xl bg-black/60 border border-amber-900/40 hover:border-amber-700/60 text-amber-400 text-xs font-black transition"
@@ -800,7 +985,6 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     if (disabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     startYRef.current = e.clientY;
-    // Jump to position on tap
     if (trackRef.current) {
       const rect = trackRef.current.getBoundingClientRect();
       const relY = e.clientY - rect.top;
@@ -834,7 +1018,7 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   };
 
   return (
-    <div className="absolute left-1 top-1/2 -translate-y-1/2 z-30 pointer-events-none select-none">
+    <div className="absolute right-1 top-1/2 -translate-y-1/2 z-30 pointer-events-none select-none">
       <div
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -868,12 +1052,12 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
               }`}
                 style={{
                   boxShadow: shotPower > 0
-                    ? `0 0 8px ${
+                    ? `0 0 10px ${
                         shotPower > 70
-                          ? 'rgba(239,68,68,0.5)'
+                          ? 'rgba(239,68,68,0.6)'
                           : shotPower > 30
-                          ? 'rgba(245,158,11,0.5)'
-                          : 'rgba(52,211,153,0.5)'
+                          ? 'rgba(245,158,11,0.6)'
+                          : 'rgba(52,211,153,0.6)'
                       }`
                     : 'none',
                 }}

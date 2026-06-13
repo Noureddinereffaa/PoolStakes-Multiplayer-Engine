@@ -56,33 +56,33 @@ export function handleAuthenticate(ws: WebSocket, msg: { token?: string }): void
 // ── Join (authenticate + join specific room) ────────────────
 export async function handleJoin(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join' }>): Promise<void> {
   const { roomId, username, stake, token } = msg;
-  if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Token required.' })); return; }
+  if (!token) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Token required.' })); return; }
   const decoded = decodeToken(token);
-  if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
+  if (!decoded) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
   if (!enforceSingleSocket(decoded.id, ws)) return;
   activeSockets.add(ws);
 
   const result = await joinRoom(ws, roomId, decoded.id, username, stake);
   if (result.success) {
-    ws.send(JSON.stringify({ type: 'join_success', roomId }));
+    safeSend(ws, JSON.stringify({ type: 'join_success', roomId }));
   } else {
-    ws.send(JSON.stringify({ type: 'error', message: result.error || 'Failed to join room.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: result.error || 'Failed to join room.' }));
   }
 }
 
 // ── Create Room ──────────────────────────────────────────────
 export async function handleCreateRoom(ws: WebSocket, msg: Extract<SocketMessage, { type: 'create_room' }>): Promise<void> {
   const { stake, isPublic, token } = msg;
-  if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
+  if (!token) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
   const decoded = decodeToken(token);
-  if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
+  if (!decoded) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
   if (!enforceSingleSocket(decoded.id, ws)) return;
 
   const { room, code } = createRoom(ws, decoded.id, decoded.username, stake, isPublic !== false);
 
   const result = await joinRoom(ws, room.roomId, decoded.id, decoded.username, stake);
   if (result.success) {
-    ws.send(JSON.stringify({ type: 'room_created', roomId: room.roomId, roomCode: code }));
+    safeSend(ws, JSON.stringify({ type: 'room_created', roomId: room.roomId, roomCode: code }));
   }
   pushEventLog('room_created', { roomId: room.roomId, code, stake, isPublic });
 }
@@ -90,14 +90,14 @@ export async function handleCreateRoom(ws: WebSocket, msg: Extract<SocketMessage
 // ── Join Random (Quick Play) ─────────────────────────────────
 export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join_random' }>): Promise<void> {
   const { stake, username, token } = msg;
-  if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
+  if (!token) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
   const decoded = decodeToken(token);
-  if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
+  if (!decoded) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
   if (!enforceSingleSocket(decoded.id, ws)) return;
 
   // Check if already in queue
   if (isInQueue(ws, decoded.id)) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Already searching for a match.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Already searching for a match.' }));
     return;
   }
 
@@ -113,7 +113,7 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
   if (targetRoom) {
     const result = await joinRoom(ws, targetRoom.roomId, decoded.id, username, stake);
     if (!result.success) {
-      ws.send(JSON.stringify({ type: 'error', message: result.error || 'Failed to join.' }));
+      safeSend(ws, JSON.stringify({ type: 'error', message: result.error || 'Failed to join.' }));
     }
     return;
   }
@@ -121,10 +121,10 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
   // No existing room — add to matching queue
   const queued = await addToQueue(ws, decoded.id, username, stake);
   if (!queued) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Queue is full. Try again later.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Queue is full. Try again later.' }));
     return;
   }
-  ws.send(JSON.stringify({ type: 'searching', stake, queueSize: 1 }));
+  safeSend(ws, JSON.stringify({ type: 'searching', stake, queueSize: 1 }));
 
   // Try to match immediately
   const match = await tryMatch(stake);
@@ -144,8 +144,8 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
     if (!r1.success || !r2.success) {
       // If one failed, refund both and clean up
       cleanupRoom(roomId);
-      if (!r1.success) first.ws.send(JSON.stringify({ type: 'error', message: r1.error }));
-      if (!r2.success) second.ws.send(JSON.stringify({ type: 'error', message: r2.error }));
+      if (!r1.success) safeSend(first.ws, JSON.stringify({ type: 'error', message: r1.error }));
+      if (!r2.success) safeSend(second.ws, JSON.stringify({ type: 'error', message: r2.error }));
     }
   }
 }
@@ -153,21 +153,21 @@ export async function handleJoinRandom(ws: WebSocket, msg: Extract<SocketMessage
 // ── Join by Code ─────────────────────────────────────────────
 export async function handleJoinByCode(ws: WebSocket, msg: Extract<SocketMessage, { type: 'join_by_code' }>): Promise<void> {
   const { code, username, token } = msg;
-  if (!token) { ws.send(JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
+  if (!token) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Authentication required.' })); return; }
   const decoded = decodeToken(token);
-  if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
+  if (!decoded) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid token.' })); return; }
   if (!enforceSingleSocket(decoded.id, ws)) return;
 
   const result = await joinRoomByCode(ws, code, decoded.id, username);
   if (!result.success) {
-    ws.send(JSON.stringify({ type: 'room_not_found', message: result.error || `No room found with code: ${code}` }));
+    safeSend(ws, JSON.stringify({ type: 'room_not_found', message: result.error || `No room found with code: ${code}` }));
   }
 }
 
 // ── List Public Rooms ────────────────────────────────────────
 export function handleListRooms(ws: WebSocket, msg: Extract<SocketMessage, { type: 'list_rooms' }>): void {
   const rooms = getPublicRooms(msg.stake);
-  ws.send(JSON.stringify({ type: 'rooms_list', rooms }));
+  safeSend(ws, JSON.stringify({ type: 'rooms_list', rooms }));
 }
 
 // ── Cancel Waiting ───────────────────────────────────────────
@@ -176,15 +176,15 @@ export async function handleCancelWaiting(ws: WebSocket): Promise<void> {
   if (!mapping) {
     // Maybe in queue but not in a room yet
     await removeFromQueue(ws);
-    ws.send(JSON.stringify({ type: 'cancel_waiting_confirmed', playerId: undefined }));
+    safeSend(ws, JSON.stringify({ type: 'cancel_waiting_confirmed', playerId: undefined }));
     return;
   }
 
   const result = await cancelWaiting(ws, mapping.playerId);
   if (result.success) {
-    ws.send(JSON.stringify({ type: 'cancel_waiting_confirmed', playerId: mapping.playerId }));
+    safeSend(ws, JSON.stringify({ type: 'cancel_waiting_confirmed', playerId: mapping.playerId }));
   } else {
-    ws.send(JSON.stringify({ type: 'error', message: result.reason || 'Failed to cancel.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: result.reason || 'Failed to cancel.' }));
   }
 }
 
@@ -194,8 +194,8 @@ export async function handleSetAiOpponent(ws: WebSocket, msg: Extract<SocketMess
   if (!mapping) return;
   const { roomId } = mapping;
   const room = activeRooms.get(roomId);
-  if (!room || room.players.length !== 1) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid room state to add AI opponent.' })); return; }
-  if (room.status !== 'waiting') { ws.send(JSON.stringify({ type: 'error', message: 'Can only add AI in waiting state.' })); return; }
+  if (!room || room.players.length !== 1) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid room state to add AI opponent.' })); return; }
+  if (room.status !== 'waiting') { safeSend(ws, JSON.stringify({ type: 'error', message: 'Can only add AI in waiting state.' })); return; }
 
   const humanPlayer = room.players[0];
   const diffLevel = msg.difficulty || 'medium';
@@ -248,7 +248,7 @@ export function handlePreviewAim(ws: WebSocket, msg: Extract<SocketMessage, { ty
   if (room.currentTurn !== playerId) return;
   for (const client of clientsByRoom.get(roomId) || []) {
     if (client !== ws && client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'preview_aim', angle: msg.angle, power: msg.power, spinX: msg.spinX, spinY: msg.spinY }));
+      safeSend(client, JSON.stringify({ type: 'preview_aim', angle: msg.angle, power: msg.power, spinX: msg.spinX, spinY: msg.spinY }));
     }
   }
 }
@@ -259,19 +259,19 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
   if (!mapping) return;
   const { roomId, playerId } = mapping;
   const room = activeRooms.get(roomId);
-  if (!room || room.status !== 'playing') { ws.send(JSON.stringify({ type: 'error', message: 'Shot invalid: Game not in play state.' })); return; }
-  if (room.currentTurn !== playerId) { ws.send(JSON.stringify({ type: 'error', message: 'Cheat safeguard: Not your active turn!' })); return; }
-  if (animatingRoomIds.has(roomId)) { ws.send(JSON.stringify({ type: 'error', message: 'Shot ignored — room is still animating.' })); return; }
-  if (room.disconnectedPlayerIds?.includes(playerId)) { ws.send(JSON.stringify({ type: 'error', message: 'Cannot shoot while disconnected.' })); return; }
-  if (room.scratchOccurred) { ws.send(JSON.stringify({ type: 'error', message: 'Must reset cue ball before shooting (ball-in-hand).' })); return; }
+  if (!room || room.status !== 'playing') { safeSend(ws, JSON.stringify({ type: 'error', message: 'Shot invalid: Game not in play state.' })); return; }
+  if (room.currentTurn !== playerId) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Cheat safeguard: Not your active turn!' })); return; }
+  if (animatingRoomIds.has(roomId)) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Shot ignored — room is still animating.' })); return; }
+  if (room.disconnectedPlayerIds?.includes(playerId)) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Cannot shoot while disconnected.' })); return; }
+  if (room.scratchOccurred) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Must reset cue ball before shooting (ball-in-hand).' })); return; }
 
   const objectBallsLeft = room.balls.filter(b => b.id !== 0 && !b.isPocketed).length;
   const isBreakShot = objectBallsLeft === 15;
   animatingRoomIds.add(roomId);
 
   const shooterName = room.players.find(p => p.id === playerId)?.username || 'Unknown';
-  if (!isFinite(msg.power) || msg.power < 0 || msg.power > 100) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid shot power.' })); animatingRoomIds.delete(roomId); return; }
-  if (!isFinite(msg.angle)) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid shot angle.' })); animatingRoomIds.delete(roomId); return; }
+  if (!isFinite(msg.power) || msg.power < 0 || msg.power > 100) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid shot power.' })); animatingRoomIds.delete(roomId); return; }
+  if (!isFinite(msg.angle)) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid shot angle.' })); animatingRoomIds.delete(roomId); return; }
 
   const clampedAngle = ((msg.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   const clampedPower = Math.max(0, Math.min(100, msg.power));
@@ -335,7 +335,7 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
   if (framesSinceLastCapture > 0 || frames.length === 0) frames.push(captureFrame(room.balls));
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
-  const payload = JSON.stringify({ type: 'physics_frames', frames: compactFrames });
+  const payload = JSON.stringify({ type: 'physics_frames', frames: compactFrames, totalSteps: iterations });
   for (const client of clientsByRoom.get(roomId) || []) {
     safeSend(client, payload);
   }
@@ -371,12 +371,12 @@ export function handleResetCueBall(ws: WebSocket, msg: Extract<SocketMessage, { 
   const targetX = Math.max(minX, Math.min(msg.x, maxX)), targetY = Math.max(minY, Math.min(msg.y, maxY));
 
   if (room.ballInHandRestriction === 'behind_head_string' && targetX > HEAD_STRING_X - BALL_R) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Invalid placement: ball must be behind the head string.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid placement: ball must be behind the head string.' }));
     return;
   }
 
   if (room.balls.some(b => b.id !== 0 && !b.isPocketed && Math.hypot(targetX - b.x, targetY - b.y) < BALL_R * 2)) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Invalid placement: cannot place over another ball.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid placement: cannot place over another ball.' }));
     return;
   }
 
@@ -411,7 +411,7 @@ export function handleChat(ws: WebSocket, msg: Extract<SocketMessage, { type: 'c
   if (!message) return;
   const now = Date.now();
   if (now - (chatCooldowns.get(playerId) || 0) < 1000) {
-    ws.send(JSON.stringify({ type: 'error', message: 'Please wait before sending another message.' }));
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Please wait before sending another message.' }));
     return;
   }
   chatCooldowns.set(playerId, now);
@@ -431,7 +431,7 @@ export function handleRematch(ws: WebSocket): void {
       const room = activeRooms.get(roomId);
       if (!room || room.status !== 'gameover') return;
       if (rematchingRooms.has(roomId)) {
-        ws.send(JSON.stringify({ type: 'error', message: 'Rematch already in progress.' }));
+        safeSend(ws, JSON.stringify({ type: 'error', message: 'Rematch already in progress.' }));
         return;
       }
 
@@ -486,7 +486,7 @@ export function handleRematch(ws: WebSocket): void {
 // ── Reconnect ────────────────────────────────────────────────
 export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage, { type: 'reconnect' }>): Promise<void> {
   const decoded = decodeToken(msg.token);
-  if (!decoded) { ws.send(JSON.stringify({ type: 'error', message: 'Invalid token for reconnection.' })); return; }
+  if (!decoded) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid token for reconnection.' })); return; }
   if (!enforceSingleSocket(decoded.id, ws, false)) return;
 
   // First pass: scan activeRooms (rooms already in memory)
@@ -497,7 +497,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     cancelForfeitTimer(roomId);
 
     const player = room.players.find(p => p.id === decoded.id);
-    if (!player) { ws.send(JSON.stringify({ type: 'error', message: 'Player record not found.' })); return; }
+    if (!player) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Player record not found.' })); return; }
 
     // enforceSingleSocket already cleaned up old socket if needed
 
@@ -512,7 +512,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     sendFullState(ws, roomId);
     for (const client of clientsByRoom.get(roomId) || []) {
       if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: 'reconnect_notice', playerId: decoded.id }));
+        safeSend(client, JSON.stringify({ type: 'reconnect_notice', playerId: decoded.id }));
       }
     }
     broadcastRoom(roomId);
@@ -531,7 +531,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     cancelForfeitTimer(roomId);
 
     const player = room.players.find(p => p.id === decoded.id);
-    if (!player) { ws.send(JSON.stringify({ type: 'error', message: 'Player record not found.' })); return; }
+    if (!player) { safeSend(ws, JSON.stringify({ type: 'error', message: 'Player record not found.' })); return; }
 
     if (!clientsByRoom.has(roomId)) clientsByRoom.set(roomId, new Set());
     clientsByRoom.get(roomId)!.add(ws);
@@ -550,7 +550,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     sendFullState(ws, roomId);
     for (const client of clientsByRoom.get(roomId) || []) {
       if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: 'reconnect_notice', playerId: decoded.id }));
+        safeSend(client, JSON.stringify({ type: 'reconnect_notice', playerId: decoded.id }));
       }
     }
     broadcastRoom(roomId);
@@ -558,7 +558,7 @@ export async function handleReconnect(ws: WebSocket, msg: Extract<SocketMessage,
     return;
   }
 
-  ws.send(JSON.stringify({ type: 'error', message: 'No active disconnection found for rejoin.' }));
+  safeSend(ws, JSON.stringify({ type: 'error', message: 'No active disconnection found for rejoin.' }));
 }
 
 // ── Disconnect ───────────────────────────────────────────────
@@ -598,7 +598,7 @@ export async function handleDisconnect(ws: WebSocket): Promise<void> {
     const remainingPlayers = room.players.filter(p => p.id !== playerId && p.isConnected);
     const notice = JSON.stringify({ type: 'disconnect_notice', playerId, deadline: room.reconnectDeadlines[playerId] });
     for (const client of clientsByRoom.get(roomId) || []) {
-      if (client.readyState === WebSocket.OPEN) client.send(notice);
+      if (client.readyState === WebSocket.OPEN) safeSend(client, notice);
     }
     broadcastRoom(roomId);
 

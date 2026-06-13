@@ -4,6 +4,7 @@ import { Ball, RoomState, Difficulty } from '../types';
 import { poolAudio } from '../utils/audio';
 import { BallRotationData } from './PoolTable/rotation';
 import { getAdaptiveSettings } from '../utils/connectionQuality';
+import { triggerShootParticles } from './PoolTable/effects';
 
 const haptic = (ms: number) => { try { navigator.vibrate?.(ms); } catch (_) {} };
 
@@ -29,6 +30,7 @@ interface PoolTableProps {
   myPlayerId: string;
   isMyTurn: boolean;
   physicsFrames: Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null;
+  physicsTotalSteps: number | null;
   onClearFrames: () => void;
   opponentAim?: { angle: number; power: number; spinX?: number; spinY?: number } | null;
   onPreviewAim?: (angle: number, power: number, spinX: number, spinY: number) => void;
@@ -45,6 +47,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   myPlayerId,
   isMyTurn,
   physicsFrames,
+  physicsTotalSteps,
   onClearFrames,
   opponentAim,
   onPreviewAim,
@@ -129,7 +132,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   
   const aimInertiaVelocityRef = useRef(0);
   const impactFlashesRef = useRef<{x: number, y: number, startTime: number}[]>([]);
-  const qualityRef = useRef({ reducedParticles: false, disableShadows: false, reducedAnimations: false });
+  const qualityRef = useRef({ frameSkip: false, reducedParticles: false, lowResCanvas: false, disableShadows: false, reducedAnimations: false });
 
   useEffect(() => { aimAngleRef.current = aimAngle; }, [aimAngle]);
   useEffect(() => { shotPowerRef.current = shotPower; }, [shotPower]);
@@ -185,11 +188,12 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const lastBallsRef = useRef<string>(JSON.stringify(roomState.balls));
   const pullStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const isShiftHeldRef = useRef(false);
-  const DEAD_ZONE_PX = 3; // minimum drag distance before power registers
-  const AIM_DEAD_ZONE_PX = 2; // minimum ortho drag before aim adjusts (unified for touch/mouse)
-  const AIM_SENSITIVITY = 0.0010; // radians per pixel of ortho drag — smoother
+  const DEAD_ZONE_PX = 6; // minimum drag distance before power registers
+  const AIM_DEAD_ZONE_PX = 6; // minimum ortho drag before aim adjusts — filters hand tremor
+  const AIM_SENSITIVITY = 0.002; // radians per pixel of ortho drag — Miniclip responsive feel
   const SHIFT_MODIFIER = 0.25; // precision mode sensitivity multiplier
-  const SMOOTH_FACTOR = 0.10; // lerp factor for angle smoothing — more responsive, Miniclip feel
+  const SMOOTH_FACTOR = 0.15; // lerp factor for angle smoothing — responsive, Miniclip feel
+  const SMOOTH_FACTOR_HOVER = 0.10; // hover sensitivity — fast 1:1 tracking to find target ball
   const targetAimAngleRef = useRef(0);
   const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
   const prefersReducedMotionRef = useRef(false);
@@ -213,6 +217,16 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       }
     }
   }, [roomState.balls, isAnimating, waitingForSync]);
+
+  useEffect(() => {
+    if (isAnimating && physicsFrames) {
+      setAnimatedBalls(roomState.balls);
+      setIsAnimating(false);
+      setWaitingForSync(false);
+      lastBallsRef.current = JSON.stringify(roomState.balls);
+      onClearFrames();
+    }
+  }, [roomState.balls]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -252,12 +266,24 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   useEffect(() => {
     if (physicsFrames && physicsFrames.length > 0) {
+      const firstFrameCue = physicsFrames[0].find((b: any) => b.id === 0);
+      const currentCue = roomState.balls.find(b => b.id === 0);
+      if (firstFrameCue && currentCue) {
+        const dx = firstFrameCue.x - currentCue.x;
+        const dy = firstFrameCue.y - currentCue.y;
+        if (dx * dx + dy * dy > 1) {
+          setAnimatedBalls(roomState.balls);
+          onClearFrames();
+          return;
+        }
+      }
       strikeAnimRef.current = { active: false, power: 0, startTime: -1, angle: 0, duration: 0, hasStruck: false };
       setIsAnimating(true);
       setWaitingForSync(true);
       let lastCheckedIntegerIdx = -1;
       const initialBallsCopy = [...roomState.balls];
-      const basePlayMultiplier = physicsFrames.length > 350 ? 2.0 : 2.0;
+      const serverDivisor = (physicsTotalSteps || physicsFrames.length) > 350 ? 2.4 : 2.0;
+      const basePlayMultiplier = physicsFrames.length / Math.max(1, (physicsTotalSteps || physicsFrames.length) / serverDivisor);
       let animationFrameId: number;
       const animStartTime = performance.now();
       const STRIKE_ACCEL = 0;
@@ -299,10 +325,22 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               frame.forEach((bf) => {
                 const prevBf = prevFrame.find((b) => b.id === bf.id);
                   if (bf.isPocketed && prevBf && !prevBf.isPocketed) {
-                    poolAudio.playPocketIn(); haptic(30);
+                    poolAudio.playPocketIn();
+                    haptic(Math.min(80, Math.floor(30 + Math.random() * 20)));
+                    impactFlashesRef.current.push({ x: bf.x, y: bf.y, startTime: performance.now() });
                     const pCenters = [{ x: 22, y: 22 }, { x: 400, y: 18 }, { x: 778, y: 22 }, { x: 22, y: 378 }, { x: 400, y: 382 }, { x: 778, y: 378 }];
                     let closestP = pCenters[0]; let minDist = Infinity;
                     pCenters.forEach(p => { const d = Math.hypot(bf.x - p.x, bf.y - p.y); if (d < minDist) { minDist = d; closestP = p; } });
+                    for (let pi = 0; pi < 6; pi++) {
+                      const angle = Math.random() * Math.PI * 2;
+                      const speed = Math.random() * 3 + 1;
+                      chalkParticlesRef.current.push({
+                        x: closestP.x, y: closestP.y,
+                        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                        size: Math.random() * 2 + 1, opacity: 1.0,
+                        color: Math.random() > 0.5 ? 'rgba(251, 191, 36, 0.9)' : 'rgba(255, 255, 255, 0.8)',
+                      });
+                    }
                     const origBall = initialBallsCopy.find(b => b.id === bf.id);
                     sinkingBallsRef.current.push({ id: bf.id, ball: origBall ? { ...origBall, x: bf.x, y: bf.y } : { ...bf, color: '#34d399', type: 'solid', radius: 10 } as any, progress: 0, maxProgress: 40, pocketX: closestP.x, pocketY: closestP.y });
                   }
@@ -321,7 +359,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                         const speed1 = Math.sqrt((b1.x - prevB1.x) ** 2 + (b1.y - prevB1.y) ** 2);
                         const speed2 = Math.sqrt((b2.x - prevB2.x) ** 2 + (b2.y - prevB2.y) ** 2);
                         const totalSpeed = speed1 + speed2;
-                        poolAudio.playBallCollision(Math.max(0.15, totalSpeed)); haptic(Math.min(15, Math.floor(3 + totalSpeed * 5)));
+                        poolAudio.playBallCollision(Math.max(0.15, totalSpeed));
+                        haptic(Math.min(40, Math.floor(5 + totalSpeed * 8)));
+                        if (totalSpeed > 1.5) {
+                          impactFlashesRef.current.push({ x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2, startTime: performance.now() });
+                        }
                       }
                     }
                   }
@@ -338,7 +380,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
                   if ((bf.x <= minX + 0.05 && prevBf.x > minX + 0.05) || (bf.x >= maxX - 0.05 && prevBf.x < maxX - 0.05)) hitCushion = true;
                   if ((bf.y <= minY + 0.05 && prevBf.y > minY + 0.05) || (bf.y >= maxY - 0.05 && prevBf.y < maxY - 0.05)) hitCushion = true;
                   if (hitCushion) {
-                    poolAudio.playCushionHit(speed); haptic(Math.min(12, Math.floor(2 + speed * 5)));
+                    poolAudio.playCushionHit(speed);
+                    haptic(Math.min(30, Math.floor(3 + speed * 6)));
                   }
                 }
               });
@@ -486,13 +529,16 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed && !isAimLockedRef.current) {
         if (!isMobile.current) {
-          // ================= DESKTOP CLASSIC CONTROLS =================
+          // ================= DESKTOP: DIRECT AIM + DRAG POWER =================
+          // Aim = angle from cue ball to pointer (always, even while dragging)
+          // Power = vertical drag distance from initial click point
           if (isInitialDown) {
             pullStartPosRef.current = coords;
             setIsPulling(true);
             isPullingRef.current = true;
             setDragMode('pull');
             dragModeRef.current = 'pull';
+            // Set aim to current pointer position immediately
             if (!isAimLockedRef.current) {
               const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
               targetAimAngleRef.current = newAngle;
@@ -505,7 +551,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             const pullDy = coords.y - pullStartPosRef.current.y;
             const dragDist = Math.hypot(pullDx, pullDy);
             
-            // Power
+            // Power from total drag distance (with dead zone)
             const effectiveDrag = Math.max(0, dragDist - DEAD_ZONE_PX);
             const dragFactor = 2.4;
             const rawPower = Math.min(100, effectiveDrag / dragFactor);
@@ -514,23 +560,21 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             setShotPower(power);
             shotPowerRef.current = power;
             
-            // Aim Ortho Adjust (with deadzone for consistency)
+            // Aim always follows pointer (Miniclip-style direct control)
             if (!isAimLockedRef.current) {
-              const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
-              const effectiveOrtho = Math.abs(orthoDrag) > AIM_DEAD_ZONE_PX ? orthoDrag : 0;
-              const sens = isShiftHeldRef.current ? AIM_SENSITIVITY * SHIFT_MODIFIER : AIM_SENSITIVITY;
-              const newAngle = initialAimAngleRef.current + effectiveOrtho * sens;
+              const newAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
               targetAimAngleRef.current = newAngle;
-              const smoothed = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
+              const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
+              const smoothed = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
               setAimAngle(smoothed);
               aimAngleRef.current = smoothed;
             }
           } else if (!isAimLockedRef.current) {
-            // Hover logic
+            // Hover logic — fast 1:1 tracking to find target ball
             const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
             targetAimAngleRef.current = rawAngle;
             const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
-            const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+            const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR_HOVER * sens;
             setAimAngle(smoothed);
             aimAngleRef.current = smoothed;
           }
@@ -578,7 +622,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
           targetAimAngleRef.current = rawAngle;
           const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
-          const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR * sens;
+          const smoothed = aimAngleRef.current + (rawAngle - aimAngleRef.current) * SMOOTH_FACTOR_HOVER * sens;
           setAimAngle(smoothed);
           aimAngleRef.current = smoothed;
         }
@@ -588,12 +632,15 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
 
   const executeAuthorizedShot = (angle: number, power: number, sX: number, sY: number) => {
     if (!isMyTurnRef.current || isAnimatingRef.current) return;
-    // Shot Stick Snap Animation: short delay before hit for visual impact
+    // Shot Stick Snap Animation: 40ms anticipation delay before hit for visual impact
     strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: 40 };
     setIsAnimating(true);
+    const cueBall = animatedBallsRef.current.find(b => b.id === 0);
+    triggerShootParticles(power, cueBall, angle, chalkParticlesRef.current, feltRipplesRef.current);
+    impactShakeRef.current = Math.min(14.0, 2.0 + (power / 100) * 12.0);
     if (isMobile.current) {
       poolAudio.playCueHit(power);
-      haptic(30);
+      haptic(Math.min(80, Math.floor(10 + power * 0.7)));
     }
     onShoot(angle, power, sX, sY);
     setSpinX(0); setSpinY(0);

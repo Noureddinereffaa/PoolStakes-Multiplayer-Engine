@@ -9,7 +9,7 @@ import { handleDisconnect, handleReconnect, handleAuthenticate } from './gameAct
 import { getInitialBalls } from './physics';
 
 function makeMockWs(): WebSocket {
-  return { readyState: WebSocket.OPEN, send: vi.fn(), close: vi.fn(), on: vi.fn(), ping: vi.fn(), terminate: vi.fn() } as unknown as WebSocket;
+  return { readyState: WebSocket.OPEN, bufferedAmount: 0, send: vi.fn(), close: vi.fn(), on: vi.fn(), ping: vi.fn(), terminate: vi.fn() } as unknown as WebSocket;
 }
 
 function setupTwoPlayerRoom() {

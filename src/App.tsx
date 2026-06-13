@@ -171,6 +171,7 @@ export default function App() {
     roomState,
     physicsFrames,
     setPhysicsFrames,
+    physicsTotalSteps,
     opponentAim,
     isReconnecting,
     connectionGrade,
@@ -697,6 +698,7 @@ export default function App() {
                   isMyTurn={isMyTurn}
                   physicsFrames={physicsFrames}
                   setPhysicsFrames={setPhysicsFrames}
+                  physicsTotalSteps={physicsTotalSteps}
                   handleShoot={handleShoot}
                   handleResetCueBall={handleResetCueBall}
                   opponentAim={opponentAim}

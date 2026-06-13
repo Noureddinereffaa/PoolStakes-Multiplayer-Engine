@@ -14,7 +14,9 @@ const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame
 const caf = typeof cancelAnimationFrame !== 'undefined' ? cancelAnimationFrame : (id: number) => clearTimeout(id);
 
 interface AdaptiveQuality {
+  frameSkip: boolean;
   reducedParticles: boolean;
+  lowResCanvas: boolean;
   disableShadows: boolean;
   reducedAnimations: boolean;
 }
@@ -135,6 +137,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
     canvas.height = 400 * currentDPR;
     ctx2d.scale(currentDPR, currentDPR);
     ctx2d.imageSmoothingEnabled = true;
+
+    // Frame counter for frame skipping
+    let frameCounter = 0;
 
     // Render loop
     let lastFrameTime = performance.now();
@@ -479,6 +484,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         offCtx.fillStyle = napGrad;
         offCtx.fillRect(PX + 8, PY + 8, PLAY_W - 16, PLAY_H - 16);
 
+        // Felt radial vignette (premium pool table depth)
+        const feltVignette = offCtx.createRadialGradient(400, 200, 80, 400, 200, 400);
+        feltVignette.addColorStop(0, 'rgba(255,255,255,0.02)');
+        feltVignette.addColorStop(0.5, 'rgba(0,0,0,0)');
+        feltVignette.addColorStop(0.85, 'rgba(0,0,0,0.03)');
+        feltVignette.addColorStop(1, 'rgba(0,0,0,0.06)');
+        offCtx.fillStyle = feltVignette;
+        offCtx.fillRect(PX + 8, PY + 8, PLAY_W - 16, PLAY_H - 16);
+
         // Felt edge shadows (table depth effect) - smoother, more natural
         const edgeShadowTop = offCtx.createLinearGradient(PX, PY + 6, PX, PY + 28);
         edgeShadowTop.addColorStop(0, 'rgba(0,0,0,0.30)');
@@ -640,18 +654,46 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           offCtx.lineWidth = 3.8;
           offCtx.stroke();
 
-          // Pocket inner darkness (deep void) - smoother depth
+          // Pocket inner darkness (deep void) - layered concentric depth
           const voidGrad = offCtx.createRadialGradient(p.x, p.y, 1, p.x, p.y, s(20));
           voidGrad.addColorStop(0, '#000000');
-          voidGrad.addColorStop(0.15, '#000001');
-          voidGrad.addColorStop(0.35, '#020408');
-          voidGrad.addColorStop(0.60, '#050810');
-          voidGrad.addColorStop(0.85, '#080c18');
-          voidGrad.addColorStop(1, 'rgba(5,8,16,0.92)');
+          voidGrad.addColorStop(0.08, '#000001');
+          voidGrad.addColorStop(0.18, '#020408');
+          voidGrad.addColorStop(0.30, '#040810');
+          voidGrad.addColorStop(0.50, '#080e1a');
+          voidGrad.addColorStop(0.70, '#0c1420');
+          voidGrad.addColorStop(0.88, '#101a28');
+          voidGrad.addColorStop(1, 'rgba(12,18,28,0.92)');
           offCtx.beginPath();
           offCtx.arc(p.x, p.y, s(20), 0, Math.PI * 2);
           offCtx.fillStyle = voidGrad;
           offCtx.fill();
+
+          // Concentric depth rings (subtle layered effect)
+          offCtx.save();
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, s(20), 0, Math.PI * 2);
+          offCtx.clip();
+          for (let ring = 0; ring < 4; ring++) {
+            const ringR = s(5 + ring * 4.5);
+            const ringAlpha = 0.06 - ring * 0.012;
+            offCtx.beginPath();
+            offCtx.arc(p.x, p.y, ringR, 0, Math.PI * 2);
+            offCtx.strokeStyle = `rgba(160,120,60,${Math.max(0.01, ringAlpha)})`;
+            offCtx.lineWidth = 0.6;
+            offCtx.stroke();
+          }
+          // Warm inner glow (reflected light off pocket walls)
+          const warmGlow = offCtx.createRadialGradient(p.x, p.y, s(3), p.x, p.y, s(18));
+          warmGlow.addColorStop(0, 'rgba(60,40,15,0.12)');
+          warmGlow.addColorStop(0.3, 'rgba(40,25,10,0.06)');
+          warmGlow.addColorStop(0.6, 'rgba(20,12,5,0.02)');
+          warmGlow.addColorStop(1, 'rgba(0,0,0,0)');
+          offCtx.fillStyle = warmGlow;
+          offCtx.beginPath();
+          offCtx.arc(p.x, p.y, s(18), 0, Math.PI * 2);
+          offCtx.fill();
+          offCtx.restore();
 
           // Pocket Net (Crosshatch inside the void)
           offCtx.save();
@@ -764,9 +806,17 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
     const drawLoop = () => {
       // Adaptive quality settings (read at start of frame)
-      const quality = ctx.qualityRef?.current || { reducedParticles: false, disableShadows: false, reducedAnimations: false };
+      const quality = ctx.qualityRef?.current || { frameSkip: false, reducedParticles: false, lowResCanvas: false, disableShadows: false, reducedAnimations: false };
       const prefersReducedMotion = ctx.prefersReducedMotionRef?.current || false;
       const reducedAnimations = quality.reducedAnimations || prefersReducedMotion;
+      const frameSkip = quality.frameSkip;
+
+      // Frame skip for poor connections - skip every other frame
+      frameCounter++;
+      if (frameSkip && (frameCounter % 2) !== 0) {
+        animationId = raf(drawLoop);
+        return;
+      }
 
       // Atmospheric dust specks (ambient effect) - init once with quality
       if (ctx.dustSpecksRef.current.length === 0) {
@@ -836,8 +886,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
       ctx2d.save();
       if (snap.impactShake > 0.05) {
-        const sx = (Math.random() - 0.5) * snap.impactShake;
-        const sy = (Math.random() - 0.5) * snap.impactShake;
+        const shakeIntensity = snap.impactShake;
+        const aimDirX = Math.cos(snap.aimAngle);
+        const aimDirY = Math.sin(snap.aimAngle);
+        const biasStrength = 0.3;
+        const sx = (Math.random() - 0.5) * shakeIntensity * (1 + biasStrength) + aimDirX * shakeIntensity * biasStrength * 0.3;
+        const sy = (Math.random() - 0.5) * shakeIntensity * (1 + biasStrength) + aimDirY * shakeIntensity * biasStrength * 0.3;
         ctx2d.translate(sx, sy);
       }
       // Persist decayed shake value for next frame
@@ -854,7 +908,9 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         sb.progress += 1.2;
         if (sb.progress >= sb.maxProgress) continue;
         const t = sb.progress / sb.maxProgress;
-        const sx = sb.ball.x + (sb.pocketX - sb.ball.x) * t;
+        // Wobble effect in early phase (ball rattling before falling)
+        const wobblePhase = t < 0.5 ? Math.sin(t * 18) * (0.5 - t) * 3 : 0;
+        const sx = sb.ball.x + (sb.pocketX - sb.ball.x) * t + wobblePhase;
         const sy = sb.ball.y + (sb.pocketY - sb.ball.y) * t;
         const scale = 1 - t * 0.8;
         const alpha = 1 - t * t;
@@ -862,10 +918,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.save();
         ctx2d.globalAlpha = alpha;
         
-        // 3D drop shadow
+        // 3D drop shadow (perspective shift as ball approaches pocket)
         ctx2d.beginPath();
-        ctx2d.ellipse(sx + 4 * t, sy + 6 * t, r * 1.4, r * 1.0, 0, 0, Math.PI * 2);
-        ctx2d.fillStyle = `rgba(0,0,0,${0.3 * (1 - t)})`;
+        const shadowGrow = 1 + t * 0.6;
+        ctx2d.ellipse(
+          sx + 4 * t + wobblePhase * 0.3, sy + 6 * t + t * 2,
+          r * 1.4 * shadowGrow, r * 1.0 * (1 - t * 0.3),
+          wobblePhase * 0.02, 0, Math.PI * 2
+        );
+        ctx2d.fillStyle = `rgba(0,0,0,${0.3 * (1 - t) * (1 - t * 0.3)})`;
         ctx2d.fill();
         
         // Rotate while falling
@@ -891,21 +952,52 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         for (let i = ctx.impactFlashesRef.current.length - 1; i >= 0; i--) {
           const flash = ctx.impactFlashesRef.current[i];
           const elapsed = performance.now() - flash.startTime;
-          if (elapsed > 40) {
+          if (elapsed > 60) {
             ctx.impactFlashesRef.current.splice(i, 1);
             continue;
           }
-          const t = elapsed / 40; // 40ms flash
+          const t = elapsed / 60;
+          const fadeOut = 1 - t;
+          const expandRadius = 30 + t * 40;
           ctx2d.save();
           ctx2d.globalCompositeOperation = 'lighter';
-          const fGrad = ctx2d.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, 60 * (1 - t));
-          fGrad.addColorStop(0, `rgba(255, 255, 255, ${0.8 * (1 - t)})`);
-          fGrad.addColorStop(0.3, `rgba(255, 220, 180, ${0.4 * (1 - t)})`);
+          // Outer warm glow
+          const fGrad = ctx2d.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, expandRadius);
+          fGrad.addColorStop(0, `rgba(255, 255, 255, ${0.9 * fadeOut})`);
+          fGrad.addColorStop(0.15, `rgba(255, 240, 200, ${0.6 * fadeOut})`);
+          fGrad.addColorStop(0.4, `rgba(255, 200, 120, ${0.3 * fadeOut})`);
           fGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
           ctx2d.fillStyle = fGrad;
           ctx2d.beginPath();
-          ctx2d.arc(flash.x, flash.y, 60 * (1 - t), 0, Math.PI * 2);
+          ctx2d.arc(flash.x, flash.y, expandRadius, 0, Math.PI * 2);
           ctx2d.fill();
+          // Inner bright core
+          const coreR = expandRadius * 0.3;
+          const coreGrad = ctx2d.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, coreR);
+          coreGrad.addColorStop(0, `rgba(255, 255, 255, ${fadeOut})`);
+          coreGrad.addColorStop(0.5, `rgba(255, 230, 180, ${0.5 * fadeOut})`);
+          coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          ctx2d.fillStyle = coreGrad;
+          ctx2d.beginPath();
+          ctx2d.arc(flash.x, flash.y, coreR, 0, Math.PI * 2);
+          ctx2d.fill();
+          // Subtle crack lines radiating from collision (early in animation)
+          if (t < 0.4) {
+            const crackFade = (0.4 - t) / 0.4;
+            const crackLen = expandRadius * 0.8;
+            ctx2d.strokeStyle = `rgba(255, 240, 200, ${0.3 * crackFade})`;
+            ctx2d.lineWidth = 0.8;
+            for (let c = 0; c < 3; c++) {
+              const cAng = (c * 2.1 + 0.5) + flash.x * 0.01;
+              ctx2d.beginPath();
+              ctx2d.moveTo(flash.x, flash.y);
+              ctx2d.lineTo(
+                flash.x + Math.cos(cAng) * crackLen,
+                flash.y + Math.sin(cAng) * crackLen
+              );
+              ctx2d.stroke();
+            }
+          }
           ctx2d.restore();
         }
       }
@@ -942,14 +1034,31 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const specOffX = -0.40 + dxCenter * 0.12;
         const specOffY = -0.38 + dyCenter * 0.10;
 
-        // Ground contact shadow (keeps balls grounded) - skip if shadows disabled
+        // Ground contact shadow (directional, light-source tracked) - skip if shadows disabled
         if (!quality.disableShadows) {
-          const shadowGrad = ctx2d.createRadialGradient(px, py + 2, 0, px, py + 2, ballRadius * 0.65);
-          shadowGrad.addColorStop(0, 'rgba(0,0,0,0.18)');
-          shadowGrad.addColorStop(0.4, 'rgba(0,0,0,0.06)');
+          // Fixed overhead light source (slightly forward and left of center)
+          const lightX = 380, lightY = 160;
+          const shadowDirX = (px - lightX) * 0.012;
+          const shadowDirY = (py - lightY) * 0.008;
+          const shadowOffsetX = shadowDirX;
+          const shadowOffsetY = 2.5 + shadowDirY;
+          // Shadow size/opacity varies with distance from center
+          const shadowSpread = 0.50 + distFromCenter * 0.12;
+          const shadowOpacity = 0.20 - distFromCenter * 0.03;
+          const shadowGrad = ctx2d.createRadialGradient(
+            px + shadowOffsetX, py + shadowOffsetY, 0,
+            px + shadowOffsetX, py + shadowOffsetY, ballRadius * shadowSpread
+          );
+          shadowGrad.addColorStop(0, `rgba(0,0,0,${Math.max(0.08, shadowOpacity)})`);
+          shadowGrad.addColorStop(0.35, `rgba(0,0,0,${Math.max(0.04, shadowOpacity * 0.4)})`);
+          shadowGrad.addColorStop(0.7, `rgba(0,0,0,${Math.max(0.01, shadowOpacity * 0.12)})`);
           shadowGrad.addColorStop(1, 'rgba(0,0,0,0)');
           ctx2d.beginPath();
-          ctx2d.ellipse(px + 0.5, py + 2.5, ballRadius * 0.55, ballRadius * 0.28, 0, 0, Math.PI * 2);
+          ctx2d.ellipse(
+            px + shadowOffsetX, py + shadowOffsetY,
+            ballRadius * shadowSpread, ballRadius * 0.26,
+            shadowDirX * 0.04, 0, Math.PI * 2
+          );
           ctx2d.fillStyle = shadowGrad;
           ctx2d.fill();
         }
@@ -1086,6 +1195,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         const ux = rot.ux || [1, 0, 0];
         const uy = rot.uy || [0, 1, 0];
         const uz = rot.uz || [0, 0, 1];
+
+        const isBlack = b.id === 8;
 
         if (b.id === 0) {
           ctx2d.save();
@@ -1292,7 +1403,6 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           ctx2d.clip();
 
           const c = b.color;
-          const isBlack = b.id === 8;
 
           // Main color gradient with rich 3D shading
           const solidGrad = ctx2d.createRadialGradient(
@@ -1305,10 +1415,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           );
           if (isBlack) {
             solidGrad.addColorStop(0, '#3a3a3a');
-            solidGrad.addColorStop(0.10, '#282828');
-            solidGrad.addColorStop(0.30, '#1a1a1a');
-            solidGrad.addColorStop(0.55, '#0e0e0e');
-            solidGrad.addColorStop(0.80, '#060606');
+            solidGrad.addColorStop(0.08, '#2a2a2a');
+            solidGrad.addColorStop(0.22, '#1c1c1c');
+            solidGrad.addColorStop(0.40, '#101010');
+            solidGrad.addColorStop(0.65, '#060606');
+            solidGrad.addColorStop(0.85, '#020202');
             solidGrad.addColorStop(1, '#000000');
           } else {
             const brightColor = lightenColor(c, 42);
@@ -1414,20 +1525,23 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.restore();
 
         // Primary specular highlight (sharp, high-gloss, position-aware)
+        // 8-ball gets enhanced gloss (sharper, brighter)
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
+        const specSize = isBlack ? 0.22 : 0.28;
+        const specBright = isBlack ? 1.2 : 1.0;
         const specGrad = ctx2d.createRadialGradient(
           px + specOffX * ballRadius,
           py + specOffY * ballRadius,
           0,
           px + (specOffX + 0.15) * ballRadius,
           py + (specOffY + 0.15) * ballRadius,
-          ballRadius * 0.28
+          ballRadius * specSize
         );
-        specGrad.addColorStop(0, 'rgba(255,255,255,1.0)');
-        specGrad.addColorStop(0.03, 'rgba(255,255,255,0.95)');
-        specGrad.addColorStop(0.08, 'rgba(255,255,255,0.40)');
-        specGrad.addColorStop(0.15, 'rgba(255,255,255,0.12)');
+        specGrad.addColorStop(0, `rgba(255,255,255,${1.0 * specBright})`);
+        specGrad.addColorStop(0.03, `rgba(255,255,255,${0.95 * specBright})`);
+        specGrad.addColorStop(0.08, `rgba(255,255,255,${0.40 * specBright})`);
+        specGrad.addColorStop(0.15, `rgba(255,255,255,${0.12 * specBright})`);
         specGrad.addColorStop(0.25, 'rgba(255,255,255,0.03)');
         specGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
@@ -1460,9 +1574,11 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
         // Environment reflection (simulated room with warm ceiling and cool windows)
         // Position-aware: balls near edges see more of the room
+        // 8-ball gets boosted reflections (black surface shows reflections more)
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
-        const envIntensity = 0.18 + edgeFactor * 0.06;
+        const envBoost = isBlack ? 1.6 : 1.0;
+        const envIntensity = (0.18 + edgeFactor * 0.06) * envBoost;
         // Room ceiling light panel reflection (top area) - brighter near center
         const ceilingRefl = ctx2d.createRadialGradient(
           px + dxCenter * 0.5, py - ballRadius * (0.45 - dyCenter * 0.1), 0,
@@ -1511,6 +1627,19 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.fillStyle = warmGrad;
         ctx2d.fill();
         ctx2d.restore();
+
+        // Subtle ambient occlusion (contact shadow at ball bottom)
+        const aoGrad = ctx2d.createRadialGradient(
+          px, py + ballRadius * 0.65, 0,
+          px, py + ballRadius * 0.45, ballRadius * 0.55
+        );
+        aoGrad.addColorStop(0, 'rgba(0,0,0,0.12)');
+        aoGrad.addColorStop(0.4, 'rgba(0,0,0,0.04)');
+        aoGrad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx2d.beginPath();
+        ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
+        ctx2d.fillStyle = aoGrad;
+        ctx2d.fill();
 
         // Number Badges - improved 3D tracking
         if (b.id !== 0 && b.number) {
@@ -1785,14 +1914,14 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               ctx2d.stroke();
               ctx2d.restore();
 
-              // Precision center line
+              // Precision center line — thicker for mobile visibility
               ctx2d.save();
               const precGrad = ctx2d.createLinearGradient(cueBall.x, cueBall.y, contactX, contactY);
               precGrad.addColorStop(0, '#ffffff');
               precGrad.addColorStop(0.5, mainLaserColor);
               precGrad.addColorStop(1, `rgba(${amHaze[0]}, ${amHaze[1]}, ${amHaze[2]}, 0)`);
               ctx2d.strokeStyle = precGrad;
-              ctx2d.lineWidth = 1.0;
+              ctx2d.lineWidth = 1.8;
               ctx2d.lineCap = 'round';
               ctx2d.beginPath();
               ctx2d.moveTo(cueBall.x, cueBall.y);
@@ -1928,24 +2057,25 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 const normDirX = dirX / dirLen;
                 const normDirY = dirY / dirLen;
                 
-                // White Contact Dot on target ball surface (where the cue ball hits)
+                // White Contact Dot on target ball surface (where the cue ball hits) — DPR-scaled
                 const dotX = targetBallObj.x - normDirX * (targetBallObj.radius || 10);
                 const dotY = targetBallObj.y - normDirY * (targetBallObj.radius || 10);
+                const dotScale = Math.max(1, currentDPR * 0.8);
                 
                 ctx2d.save();
                 // Outer white glow
                 ctx2d.beginPath();
-                ctx2d.arc(dotX, dotY, 4.5, 0, Math.PI * 2);
+                ctx2d.arc(dotX, dotY, 4.5 * dotScale, 0, Math.PI * 2);
                 ctx2d.fillStyle = 'rgba(255, 255, 255, 0.25)';
                 ctx2d.fill();
                 // Solid white dot
                 ctx2d.beginPath();
-                ctx2d.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+                ctx2d.arc(dotX, dotY, 2.5 * dotScale, 0, Math.PI * 2);
                 ctx2d.fillStyle = 'rgba(255, 255, 255, 0.9)';
                 ctx2d.fill();
                 // Inner bright core
                 ctx2d.beginPath();
-                ctx2d.arc(dotX, dotY, 1.2, 0, Math.PI * 2);
+                ctx2d.arc(dotX, dotY, 1.2 * dotScale, 0, Math.PI * 2);
                 ctx2d.fillStyle = '#ffffff';
                 ctx2d.fill();
                 ctx2d.restore();
@@ -2921,8 +3051,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                   105;
               stickOpacity = 1.0;
             } else {
-              const STRIKE_ACCEL = 20;
-              const FOLLOW_FADE = 280;
+              const STRIKE_ACCEL = 30;
+              const FOLLOW_FADE = 200;
               const totalDuration =
                 STRIKE_ACCEL + FOLLOW_FADE;
 
@@ -2945,7 +3075,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                 const easeT = t * t * (3 - 2 * t); // smoothstep
                 stickDist =
                   chargeDist -
-                  easeT * (chargeDist - 8.0);
+                  easeT * (chargeDist - 6.0);
                 stickOpacity = 1.0;
               } else if (
                 elapsed < totalDuration
@@ -2965,14 +3095,14 @@ export function useBilliardsRenderer(ctx: RenderContext) {
                     16;
                 const followT = tFade * tFade;
                 stickDist =
-                  8.0 -
+                  6.0 -
                   Math.sin(
                     tFade * Math.PI * 0.5
                   ) * maxFollowThrough;
 
                 stickOpacity = Math.max(
                   0,
-                  Math.pow(1.0 - tFade, 1.6)
+                  Math.pow(1.0 - tFade, 1.8)
                 );
 
                 if (
@@ -3358,6 +3488,65 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             );
             ctx2d.restore();
           }
+        }
+      }
+
+      // 7.5. Render Chalk Particles, Felt Ripples, and Atmospheric Dust Specks
+      {
+        // Update & render chalk particles
+        const aliveChalk: ChalkParticle[] = [];
+        for (const cp of snap.chalkParticles) {
+          cp.x += cp.vx;
+          cp.y += cp.vy;
+          cp.vx *= 0.94;
+          cp.vy *= 0.94;
+          cp.vy += 0.02; // slight gravity
+          cp.opacity -= 0.025;
+          if (cp.opacity <= 0) continue;
+          ctx2d.save();
+          ctx2d.globalAlpha = cp.opacity;
+          ctx2d.beginPath();
+          ctx2d.arc(cp.x, cp.y, cp.size, 0, Math.PI * 2);
+          ctx2d.fillStyle = cp.color;
+          ctx2d.fill();
+          ctx2d.restore();
+          aliveChalk.push(cp);
+        }
+        ctx.chalkParticlesRef.current = aliveChalk;
+
+        // Update & render felt ripples
+        const aliveRipples: RippleData[] = [];
+        for (const rip of snap.feltRipples) {
+          rip.radius += 0.8;
+          rip.opacity -= 0.025;
+          if (rip.opacity <= 0 || rip.radius >= rip.maxRadius) continue;
+          ctx2d.save();
+          ctx2d.globalAlpha = rip.opacity;
+          ctx2d.beginPath();
+          ctx2d.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
+          ctx2d.strokeStyle = rip.color;
+          ctx2d.lineWidth = 1.2;
+          ctx2d.stroke();
+          ctx2d.restore();
+          aliveRipples.push(rip);
+        }
+        ctx.feltRipplesRef.current = aliveRipples;
+
+        // Update & render atmospheric dust specks
+        for (const ds of snap.dustSpecks) {
+          ds.x += ds.vx + Math.sin(frameDate * 0.0003 + ds.x * 0.01) * ds.speed;
+          ds.y += ds.vy + Math.cos(frameDate * 0.0003 + ds.y * 0.01) * ds.speed;
+          if (ds.x < 20) ds.x = 780;
+          if (ds.x > 780) ds.x = 20;
+          if (ds.y < 20) ds.y = 380;
+          if (ds.y > 380) ds.y = 20;
+          ctx2d.save();
+          ctx2d.globalAlpha = ds.alpha;
+          ctx2d.beginPath();
+          ctx2d.arc(ds.x, ds.y, ds.radius, 0, Math.PI * 2);
+          ctx2d.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx2d.fill();
+          ctx2d.restore();
         }
       }
 

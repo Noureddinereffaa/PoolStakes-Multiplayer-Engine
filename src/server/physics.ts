@@ -36,6 +36,7 @@ const S_IT      = 10;     // solver iterations - more accurate collision resolut
 
 const K_CURVE   = 0.035;  // English curve (side spin) - Miniclip match: controlled, not exaggerated
 const K_LONG    = 0.028;  // Draw/Follow (top/bottom spin) - Miniclip match: smooth action
+const K_SWERVE  = 0.012;  // Swerve: pre-contact curve from heavy side spin (Miniclip match)
 const SPIN_DEC  = 0.994;  // spin decay/frame - Miniclip match: spin fades naturally over shot travel
 
 // Ball-ball Coulomb impulse multiplier
@@ -167,19 +168,31 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
           const px = -nvy / nspd;
           const py =  nvx / nspd;
 
+          // Side spin → curve (english)
           const curve = sx * K_CURVE * nspd * dt;
           b.vx = nvx + px * curve;
           b.vy = nvy + py * curve;
 
+          // Top/bottom spin → follow/draw (longitudinal)
           const le = sy * K_LONG * nspd * dt;
           b.vx += (nvx / nspd) * le;
           b.vy += (nvy / nspd) * le;
+
+          // Swerve: heavy side spin causes pre-contact curve (perpendicular to velocity)
+          const swerveMag = Math.abs(sx);
+          if (swerveMag > 0.3) {
+            const swerveForce = K_SWERVE * (swerveMag - 0.3) * nspd * dt * Math.sign(sx);
+            b.vx += px * swerveForce;
+            b.vy += py * swerveForce;
+          }
         }
       }
 
       const sd = Math.pow(SPIN_DEC, dt);
-      b.spinX = (b.spinX || 0) * sd;
-      b.spinY = (b.spinY || 0) * sd;
+      if (spd > 0.01) {
+        b.spinX = (b.spinX || 0) * sd;
+        b.spinY = (b.spinY || 0) * sd;
+      }
     }
   }
 }
@@ -229,7 +242,10 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vy;
       const dt_t = MU_RT * Math.abs(vn);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vy -= sx * 0.5; b.spinX = -sx * 0.45;
+      const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      const railTransfer = 0.3 + 0.3 * Math.min(1, spd / 15);
+      const railRetain = 0.3 + 0.15 * Math.min(1, spd / 15);
+      b.vy -= sx * railTransfer; b.spinX = -sx * railRetain;
       hit = true;
     } else if (rail === 'right') {
       b.x = MAX_X;
@@ -238,7 +254,10 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vy;
       const dt_t = MU_RT * Math.abs(vn);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vy += sx * 0.5; b.spinX = -sx * 0.45;
+      const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      const railTransfer = 0.3 + 0.3 * Math.min(1, spd / 15);
+      const railRetain = 0.3 + 0.15 * Math.min(1, spd / 15);
+      b.vy += sx * railTransfer; b.spinX = -sx * railRetain;
       hit = true;
     } else if (rail === 'top') {
       b.y = MIN_Y;
@@ -247,7 +266,10 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vx;
       const dt_t = MU_RT * Math.abs(vn);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vx += sx * 0.5; b.spinX = -sx * 0.45;
+      const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      const railTransfer = 0.3 + 0.3 * Math.min(1, spd / 15);
+      const railRetain = 0.3 + 0.15 * Math.min(1, spd / 15);
+      b.vx += sx * railTransfer; b.spinX = -sx * railRetain;
       hit = true;
     } else if (rail === 'bottom') {
       b.y = MAX_Y;
@@ -256,7 +278,10 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
       const tang = b.vx;
       const dt_t = MU_RT * Math.abs(vn);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      b.vx -= sx * 0.5; b.spinX = -sx * 0.45;
+      const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      const railTransfer = 0.3 + 0.3 * Math.min(1, spd / 15);
+      const railRetain = 0.3 + 0.15 * Math.min(1, spd / 15);
+      b.vx -= sx * railTransfer; b.spinX = -sx * railRetain;
       hit = true;
     }
 
@@ -360,6 +385,16 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
         b2.vx -= jt * tx;
         b2.vy -= jt * ty;
 
+        // Collision-induced throw (Miniclip match: cut shots deflect object ball slightly offline)
+        if (iter === 0) {
+          const cosCut = Math.abs(rnx * (rvx / (Math.sqrt(rvx * rvx + rvy * rvy) || 1)) + rny * (rvy / (Math.sqrt(rvx * rvx + rvy * rvy) || 1)));
+          const throwAmount = 0.15 * (1 - cosCut) * Math.min(1, Math.sqrt(rvx * rvx + rvy * rvy) / 10);
+          b2.vx += tx * throwAmount * Math.sign(vt || 1);
+          b2.vy += ty * throwAmount * Math.sign(vt || 1);
+          b1.vx -= tx * throwAmount * Math.sign(vt || 1) * 0.5;
+          b1.vy -= ty * throwAmount * Math.sign(vt || 1) * 0.5;
+        }
+
         // Cue spin transfer (conservative model)
         if (iter === 0 && (b1.id === 0 || b2.id === 0)) {
           const cue    = b1.id === 0 ? b1 : b2;
@@ -369,9 +404,9 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
           const sy     = cue.spinY || 0;
           const spd    = Math.sqrt(b1.vx * b1.vx + b1.vy * b1.vy + b2.vx * b2.vx + b2.vy * b2.vy);
 
-          // Spin → velocity transfer proportional to relative speed (Miniclip match: gradual curve, full at max power)
+          // Spin → velocity transfer proportional to relative speed (Miniclip match: gradual curve, full at ~90% power)
           if (spd > 0.1) {
-            const transfer = Math.min(1.0, spd * 0.04);
+            const transfer = Math.min(1.0, spd * 0.025);
             tgt.vx += rnx * (sy * 1.2 * dir * transfer);
             tgt.vy += rny * (sy * 1.2 * dir * transfer);
             tgt.vx += tx  * (sx * 0.8 * dir * transfer);

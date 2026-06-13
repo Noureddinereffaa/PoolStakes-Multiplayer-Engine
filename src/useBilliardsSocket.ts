@@ -38,6 +38,7 @@ export function useBilliardsSocket({
   const [roomId, setRoomId] = useState('Vegas_Golden_Suite');
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [physicsFrames, setPhysicsFrames] = useState<Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null>(null);
+  const [physicsTotalSteps, setPhysicsTotalSteps] = useState<number | null>(null);
   const [opponentAim, setOpponentAim] = useState<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [connectionGrade, setConnectionGrade] = useState<string>('excellent');
@@ -145,6 +146,25 @@ export function useBilliardsSocket({
               reconnectAttemptRef.current = 0;
             }
             if (mountedRef.current) {
+              // Client-side state validation: compare local physics with server state
+              const localState = roomStateRef.current;
+              if (localState && localState.status === 'playing' && msg.state.status === 'playing') {
+                // Check for significant position discrepancies
+                let maxPosDiff = 0;
+                for (const serverBall of msg.state.balls) {
+                  const localBall = localState.balls.find(b => b.id === serverBall.id);
+                  if (localBall && !localBall.isPocketed && !serverBall.isPocketed) {
+                    const dx = localBall.x - serverBall.x;
+                    const dy = localBall.y - serverBall.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    maxPosDiff = Math.max(maxPosDiff, dist);
+                  }
+                }
+                // If discrepancy > 5 units (half ball radius), log warning
+                if (maxPosDiff > 5) {
+                  console.warn('[Client Validation] Significant position drift detected:', maxPosDiff.toFixed(2), 'units');
+                }
+              }
               setRoomState(msg.state);
               setOpponentAim(null);
             }
@@ -161,6 +181,7 @@ export function useBilliardsSocket({
                   frame.map(b => ({ id: b[0], x: b[1], y: b[2], isPocketed: b[3] === 1 }))
                 )
               );
+              setPhysicsTotalSteps((msg as any).totalSteps || null);
             }
             break;
           case 'preview_aim':
@@ -272,6 +293,7 @@ export function useBilliardsSocket({
     }
 
     setPhysicsFrames(null);
+    setPhysicsTotalSteps(null);
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -504,14 +526,10 @@ export function useBilliardsSocket({
   }, []);
 
   const handleShoot = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }));
-    } else {
-      offlineQueueRef.current.push({ type: 'shoot', payload: { type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 }, timestamp: Date.now() });
-      if (roomStateRef.current) {
-        pendingShotRef.current = { angle, power };
-        setPendingShotTick((t) => t + 1);
-      }
+    const sent = sendOrQueue({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 });
+    if (!sent && roomStateRef.current) {
+      pendingShotRef.current = { angle, power };
+      setPendingShotTick((t) => t + 1);
     }
   }, []);
 
@@ -528,9 +546,8 @@ export function useBilliardsSocket({
   }, []);
 
   const handleRematch = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'rematch' }));
-    } else if (roomStateRef.current?.players.some(p => p.id.startsWith('ai-'))) {
+    const sent = sendOrQueue({ type: 'rematch' });
+    if (!sent && roomStateRef.current?.players.some(p => p.id.startsWith('ai-'))) {
       // AI game offline rematch — reset balls locally
       if (mountedRef.current) {
         setRoomState((prev: any) => {
@@ -550,6 +567,7 @@ export function useBilliardsSocket({
           };
         });
         setPhysicsFrames(null);
+        setPhysicsTotalSteps(null);
       }
     }
   }, []);
@@ -573,6 +591,7 @@ export function useBilliardsSocket({
     if (mountedRef.current) {
       setRoomState(null);
       setPhysicsFrames(null);
+      setPhysicsTotalSteps(null);
       setRoomCreationCode(null);
       setIsSearching(false);
     }
@@ -667,6 +686,7 @@ export function useBilliardsSocket({
     roomState,
     physicsFrames,
     setPhysicsFrames,
+    physicsTotalSteps,
     opponentAim,
     isReconnecting,
     connectionGrade,
