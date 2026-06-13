@@ -4,17 +4,23 @@ interface PowerControlProps {
   isVisible: boolean;
   disabled: boolean;
   onPowerChange: (power: number) => void;
-  onDragStateChange: (isDragging: boolean) => void;
-  onShoot: () => void;
+  onDragStateChange?: (isDragging: boolean) => void;
+  onShoot?: () => void;
+  mode?: 'mobile' | 'desktop';
 }
 
-const MIN_POWER = 15;
-const MAX_DRAG_PX = 180;
+const MIN_POWER = 0;
+const MAX_DRAG_PX = 110;
 
 function dragToPower(dragUpPx: number): number {
   const t = Math.max(0, Math.min(1, dragUpPx / MAX_DRAG_PX));
-  const curved = t * t * (3 - 2 * t);
-  return Math.round(curved * 100);
+  return Math.round(t * 100);
+}
+
+function powerFromY(clientY: number, el: HTMLElement): number {
+  const rect = el.getBoundingClientRect();
+  const pct = ((rect.bottom - clientY) / rect.height) * 100;
+  return Math.max(0, Math.min(100, Math.round(pct)));
 }
 
 function powerColors(pct: number): { thumb: string; glow: string; fill: string } {
@@ -24,44 +30,58 @@ function powerColors(pct: number): { thumb: string; glow: string; fill: string }
 }
 
 export default function PowerControl({
-  isVisible, disabled, onPowerChange, onDragStateChange, onShoot,
+  isVisible, disabled, onPowerChange, onDragStateChange, onShoot, mode = 'mobile',
 }: PowerControlProps) {
   const [power, setPower] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
   const startYRef = useRef(0);
   const powerRef = useRef(0);
   const firedRef = useRef(false);
   const zoneRef = useRef<HTMLDivElement>(null);
+  const isDesktop = mode === 'desktop';
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (disabled) return;
     firedRef.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
     startYRef.current = e.clientY;
-    setPower(0);
-    powerRef.current = 0;
-    onPowerChange(0);
+    isDraggingRef.current = true;
     setIsDragging(true);
-    onDragStateChange(true);
-  }, [disabled, onPowerChange, onDragStateChange]);
+    if (isDesktop) {
+      if (zoneRef.current) {
+        const p = powerFromY(e.clientY, zoneRef.current);
+        powerRef.current = p;
+        setPower(p);
+        onPowerChange(p);
+      }
+    } else {
+      setPower(0);
+      powerRef.current = 0;
+      onPowerChange(0);
+    }
+    onDragStateChange?.(true);
+  }, [disabled, onPowerChange, onDragStateChange, isDesktop]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isDragging) return;
+    if (!isDraggingRef.current) return;
     const deltaY = startYRef.current - e.clientY;
     const newPower = dragToPower(deltaY);
     powerRef.current = newPower;
     setPower(newPower);
     onPowerChange(newPower);
-  }, [isDragging, onPowerChange]);
+  }, [onPowerChange]);
 
   const handlePointerUp = useCallback(() => {
-    if (!isDragging) return;
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
     setIsDragging(false);
-    onDragStateChange(false);
+    onDragStateChange?.(false);
+    if (isDesktop) return;
     const p = powerRef.current;
-    if (!firedRef.current && p >= MIN_POWER) {
+    if (!firedRef.current && p > 0) {
       firedRef.current = true;
-      onShoot();
+      onShoot?.();
       setPower(0);
       powerRef.current = 0;
       onPowerChange(0);
@@ -70,7 +90,7 @@ export default function PowerControl({
       powerRef.current = 0;
       onPowerChange(0);
     }
-  }, [isDragging, onShoot, onPowerChange, onDragStateChange]);
+  }, [onShoot, onPowerChange, onDragStateChange, isDesktop]);
 
   const showMinWarning = isDragging && power > 0 && power < MIN_POWER;
 
@@ -99,13 +119,15 @@ export default function PowerControl({
             <div className="absolute inset-y-2 inset-x-0.5 rounded-full bg-black/40" />
           </div>
 
-          {/* Minimum power threshold marker */}
-          <div
-            className="absolute left-0 right-0 z-10 pointer-events-none"
-            style={{ bottom: `${MIN_POWER}%`, height: 1 }}
-          >
-            <div className={`h-full w-full transition-opacity duration-300 ${showMinWarning ? 'bg-red-400 opacity-80' : 'bg-amber-500/20'}`} />
-          </div>
+          {/* Minimum power threshold marker (mobile only) */}
+          {!isDesktop && (
+            <div
+              className="absolute left-0 right-0 z-10 pointer-events-none"
+              style={{ bottom: `${MIN_POWER}%`, height: 1 }}
+            >
+              <div className={`h-full w-full transition-opacity duration-300 ${showMinWarning ? 'bg-red-400 opacity-80' : 'bg-amber-500/20'}`} />
+            </div>
+          )}
 
           {/* Power fill glow */}
           {power > 0 && (
@@ -166,13 +188,13 @@ export default function PowerControl({
       </div>
 
       {/* Labels */}
-      {isDragging && power >= MIN_POWER ? (
-        <span className="mt-1 text-[7px] font-mono font-bold text-amber-400 tracking-wider animate-pulse">SHOOT</span>
-      ) : showMinWarning ? (
-        <span className="mt-1 text-[6px] font-mono font-bold text-red-400 tracking-wider">+MORE</span>
+      {isDragging ? (
+        <span className="mt-1 text-[7px] font-mono font-bold text-amber-400 tracking-wider leading-tight text-center">
+          POWER{'\n'}{power}%
+        </span>
       ) : (
         <span className="mt-1 text-[6px] font-mono font-bold text-amber-600/50 tracking-[0.15em] uppercase leading-tight text-center">
-          DRAG{'\n'}UP
+          {isDesktop ? '' : 'DRAG\nUP'}
         </span>
       )}
     </div>

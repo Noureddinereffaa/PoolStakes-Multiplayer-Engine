@@ -3309,17 +3309,24 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             cueBall.y - aimDy * stickDist;
 
           // Shadow — offset stroke (replaces expensive shadowBlur)
-          const shadowOff = 18;
-          const sTx = stickTipX + aimDy * shadowOff + 3;
-          const sTy = stickTipY - aimDx * shadowOff + 4;
-          const sBx = stickBackX + aimDy * shadowOff + 3;
-          const sBy = stickBackY - aimDx * shadowOff + 4;
+          const shadowOff = 20;
+          const sTx = stickTipX + aimDy * shadowOff + 4;
+          const sTy = stickTipY - aimDx * shadowOff + 5;
+          const sBx = stickBackX + aimDy * shadowOff + 4;
+          const sBy = stickBackY - aimDx * shadowOff + 5;
           ctx2d.beginPath();
           ctx2d.moveTo(sBx, sBy);
           ctx2d.lineTo(sTx, sTy);
-          ctx2d.lineWidth = 6;
-          ctx2d.strokeStyle = 'rgba(0,0,0,0.10)';
+          ctx2d.lineWidth = 7;
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.12)';
           ctx2d.lineCap = 'round';
+          ctx2d.stroke();
+          // Secondary ambient shadow (wider, softer)
+          ctx2d.beginPath();
+          ctx2d.moveTo(sBx - aimDx * 4, sBy - aimDy * 4);
+          ctx2d.lineTo(sTx - aimDx * 4, sTy - aimDy * 4);
+          ctx2d.lineWidth = 14;
+          ctx2d.strokeStyle = 'rgba(0,0,0,0.04)';
           ctx2d.stroke();
 
           // Spin visual glow near tip
@@ -3433,22 +3440,29 @@ export function useBilliardsRenderer(ctx: RenderContext) {
               sx + stickNormX * w,
               sy + stickNormY * w
             );
-            // Shadow edge
+            // Shadow edge (deep)
             lG.addColorStop(0, color1);
-            lG.addColorStop(0.08, color1);
+            lG.addColorStop(0.06, color1);
             // Ramp up to lit face
-            lG.addColorStop(0.18, color2);
-            lG.addColorStop(0.30, color2);
-            // Specular highlight
-            const hp = 0.45 + Math.cos(activeAngle * 2 + 1.2) * 0.12;
-            lG.addColorStop(Math.max(0.20, hp - 0.04), color2);
-            lG.addColorStop(Math.max(0.20, hp), 'rgba(255,255,255,0.55)');
-            lG.addColorStop(Math.min(1, hp + 0.04), color2);
-            // Lit face
-            lG.addColorStop(0.65, color2);
+            lG.addColorStop(0.14, color2);
+            lG.addColorStop(0.26, color2);
+            // Primary specular highlight — sharper and brighter
+            const hp = 0.42 + Math.cos(activeAngle * 2 + 1.2) * 0.10;
+            const hw = 0.025; // narrower highlight
+            lG.addColorStop(Math.max(0.14, hp - hw * 3), color2);
+            lG.addColorStop(Math.max(0.14, hp - hw), 'rgba(255,255,255,0.65)');
+            lG.addColorStop(Math.max(0.14, hp), 'rgba(255,255,255,0.85)');
+            lG.addColorStop(Math.min(1, hp + hw), 'rgba(255,255,255,0.50)');
+            lG.addColorStop(Math.min(1, hp + hw * 3), color2);
+            // Mid-lit face
+            lG.addColorStop(0.60, color2);
+            // Soft secondary bounce light (from table reflection)
+            const bounce = 0.78 + Math.cos(activeAngle * 2 + 0.5) * 0.04;
+            lG.addColorStop(bounce - 0.02, 'rgba(180,120,60,0.08)');
+            lG.addColorStop(bounce + 0.02, 'rgba(180,120,60,0.04)');
             // Shadow side
-            lG.addColorStop(0.85, color2);
-            lG.addColorStop(0.95, color3);
+            lG.addColorStop(0.88, color2);
+            lG.addColorStop(0.96, color3);
             lG.addColorStop(1, color3);
             return lG;
           };
@@ -3472,11 +3486,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             Joint2Y + aimDy * ferruleLen;
 
           // Segment 1 — Butt (ebony/walnut), rich dark wood with subtle grain simulation
+          const grainOffset = Math.sin(performance.now() * 0.0008) * 0.02;
           const buttGrad = getCylinderGrad(
             stickBackX, stickBackY,
             Joint1X, Joint1Y,
             5.0,
-            '#0a0200', '#5a2210', '#1a0702'
+            '#0a0200', '#6a2812', '#1a0702'
           );
           drawSegment(
             stickBackX, stickBackY,
@@ -3484,6 +3499,21 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             5.0, 4.5,
             buttGrad
           );
+          // Butt grain overlay — subtle dark/light stripes along the wood
+          ctx2d.save();
+          ctx2d.globalAlpha = 0.08;
+          for (let g = 0; g < 5; g++) {
+            const gT = 0.15 + g * 0.17 + grainOffset;
+            const gx = stickBackX + aimDx * (stickLength * gT);
+            const gy = stickBackY + aimDy * (stickLength * gT);
+            ctx2d.beginPath();
+            ctx2d.moveTo(gx - stickNormX * 4.8, gy - stickNormY * 4.8);
+            ctx2d.lineTo(gx + stickNormX * 4.8, gy + stickNormY * 4.8);
+            ctx2d.lineWidth = 1.2;
+            ctx2d.strokeStyle = g % 2 === 0 ? 'rgba(180,80,30,0.3)' : 'rgba(10,2,0,0.4)';
+            ctx2d.stroke();
+          }
+          ctx2d.restore();
 
           // Decorative wrap/grip section at bottom of butt
           const wrapLen = 18;
@@ -3495,7 +3525,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             stickBackX, stickBackY,
             wrapStartX, wrapStartY,
             5.0,
-            '#1a0502', '#3a1508', '#1a0502'
+            '#0f0301', '#2a0d04', '#0f0301'
           );
           drawSegment(
             stickBackX, stickBackY,
@@ -3503,6 +3533,21 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             5.0, 5.0,
             wrapGrad
           );
+          // Wrap texture lines
+          ctx2d.save();
+          ctx2d.globalAlpha = 0.15;
+          for (let w = 0; w < 6; w++) {
+            const wT = w / 6;
+            const wx = stickBackX + aimDx * (wrapLen * wT);
+            const wy = stickBackY + aimDy * (wrapLen * wT);
+            ctx2d.beginPath();
+            ctx2d.moveTo(wx - stickNormX * 4.8, wy - stickNormY * 4.8);
+            ctx2d.lineTo(wx + stickNormX * 4.8, wy + stickNormY * 4.8);
+            ctx2d.lineWidth = 0.6;
+            ctx2d.strokeStyle = 'rgba(60,20,8,0.4)';
+            ctx2d.stroke();
+          }
+          ctx2d.restore();
 
           // Silver ring 1 (butt joint ring)
           const ring1Grad = getCylinderGrad(
@@ -3518,12 +3563,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             ring1Grad
           );
 
-          // Segment 2 — Maple shaft (lighter, warm wood)
+          // Segment 2 — Maple shaft (lighter, warm wood) with subtle grain
           const shaftGrad = getCylinderGrad(
             Joint1X + aimDx * 1, Joint1Y + aimDy * 1,
             Joint2X, Joint2Y,
             4.5,
-            '#633d0a', '#fef3c7', '#7a4d0e'
+            '#5a3508', '#fef3c7', '#6a3e0a'
           );
           drawSegment(
             Joint1X + aimDx * 1, Joint1Y + aimDy * 1,
@@ -3531,27 +3576,58 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             4.5, 3.0,
             shaftGrad
           );
+          // Shaft grain — fine longitudinal lines
+          ctx2d.save();
+          ctx2d.globalAlpha = 0.06;
+          for (let g = 0; g < 4; g++) {
+            const gOff = (g - 1.5) * 1.8;
+            ctx2d.beginPath();
+            ctx2d.moveTo(
+              Joint1X + aimDx * 1 + stickNormX * gOff,
+              Joint1Y + aimDy * 1 + stickNormY * gOff
+            );
+            ctx2d.lineTo(
+              Joint2X + stickNormX * gOff * 0.7,
+              Joint2Y + stickNormY * gOff * 0.7
+            );
+            ctx2d.lineWidth = 0.5;
+            ctx2d.strokeStyle = 'rgba(120,70,20,0.3)';
+            ctx2d.stroke();
+          }
+          ctx2d.restore();
 
-          // Silver ring 2 (shaft→ferrule)
+          // Silver ring 2 (shaft→ferrule) with shadow edges
+          const ring2Shadow = getCylinderGrad(
+            Joint2X - aimDx * 3, Joint2Y - aimDy * 3,
+            Joint2X - aimDx * 1, Joint2Y - aimDy * 1,
+            3.0,
+            '#1a1a2e', '#1a1a2e', '#0a0a15'
+          );
+          drawSegment(
+            Joint2X - aimDx * 3, Joint2Y - aimDy * 3,
+            Joint2X - aimDx * 1, Joint2Y - aimDy * 1,
+            3.0, 3.0,
+            ring2Shadow
+          );
           const ring2Grad = getCylinderGrad(
-            Joint2X - aimDx * 2, Joint2Y - aimDy * 2,
+            Joint2X - aimDx * 1, Joint2Y - aimDy * 1,
             Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
             3.0,
             '#334155', '#e2e8f0', '#1e293b'
           );
           drawSegment(
-            Joint2X - aimDx * 2, Joint2Y - aimDy * 2,
+            Joint2X - aimDx * 1, Joint2Y - aimDy * 1,
             Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
             3.0, 3.0,
             ring2Grad
           );
 
-          // Segment 3 — Ferrule (ivory/bone)
+          // Segment 3 — Ferrule (ivory/bone) with slight warm glow
           const ferruleGrad = getCylinderGrad(
             Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
             Joint3X, Joint3Y,
             3.0,
-            '#e2e8f0', '#fdfcf8', '#cbd5e1'
+            '#d4c8a8', '#fdf8f0', '#b8a88a'
           );
           drawSegment(
             Joint2X + aimDx * 2, Joint2Y + aimDy * 2,
@@ -3560,7 +3636,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             ferruleGrad
           );
 
-          // Segment 4 — Chalk Tip (blue, with small specular dot)
+          // Segment 4 — Chalk Tip (blue, textured look)
           const tipLen = 5;
           const tipX = Joint3X + aimDx * tipLen;
           const tipY = Joint3Y + aimDy * tipLen;
@@ -3568,7 +3644,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             Joint3X, Joint3Y,
             tipX, tipY,
             2.8,
-            '#1e3a8a', '#60a5fa', '#172554'
+            '#1a2d6e', '#4a8af0', '#142050'
           );
           drawSegment(
             Joint3X, Joint3Y,
@@ -3576,6 +3652,25 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             2.8, 2.6,
             tipGrad
           );
+
+          // Tip surface — chalky texture dots
+          ctx2d.save();
+          ctx2d.globalAlpha = 0.2;
+          for (let c = 0; c < 4; c++) {
+            const cAngle = c * 1.57 + performance.now() * 0.001;
+            const cRad = 1.2 + Math.sin(c * 2.3) * 0.6;
+            ctx2d.beginPath();
+            ctx2d.arc(
+              Joint3X + aimDx * 2.5 + stickNormX * Math.cos(cAngle) * cRad,
+              Joint3Y + aimDy * 2.5 + stickNormY * Math.cos(cAngle) * cRad,
+              0.3,
+              0,
+              Math.PI * 2
+            );
+            ctx2d.fillStyle = 'rgba(255,255,255,0.15)';
+            ctx2d.fill();
+          }
+          ctx2d.restore();
 
           // Tip highlight dot
           ctx2d.save();
@@ -3587,7 +3682,7 @@ export function useBilliardsRenderer(ctx: RenderContext) {
             0,
             Math.PI * 2
           );
-          ctx2d.fillStyle = 'rgba(255,255,255,0.4)';
+          ctx2d.fillStyle = 'rgba(255,255,255,0.5)';
           ctx2d.fill();
           ctx2d.restore();
 

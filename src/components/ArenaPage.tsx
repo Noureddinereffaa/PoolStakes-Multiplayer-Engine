@@ -818,6 +818,20 @@ export default function ArenaPage({
             opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
           />
 
+          {/* Desktop: Power slider — overlaid right side */}
+          {!isMobile && (
+            <div className="absolute right-0 top-0 h-full z-20 flex items-center pointer-events-none">
+              <div className="pointer-events-auto">
+                <PowerControl
+                  isVisible={isMyTurn && roomState.status === 'playing' && !isGameOver}
+                  disabled={!isMyTurn || roomState.status !== 'playing'}
+                  onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
+                  mode="desktop"
+                />
+              </div>
+            </div>
+          )}
+
           {/* AI summon centered overlay */}
           {roomState.players.length === 1 && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
@@ -866,41 +880,41 @@ export default function ArenaPage({
           <div className={`${isMobile ? 'absolute bottom-2 left-1/2 -translate-x-1/2 z-20' : 'absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right'}`}>
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} isMobile={isMobile} />
           </div>
-
-          {/* Mobile: pocketed balls panel — single column, no labels, attached right rail */}
-          {isMobile && (allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 pointer-events-none h-[280px] flex items-center">
-              <div className="rounded-r-none rounded-l-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/60 border-r-0 shadow-lg shadow-black/50 min-w-[40px] h-full flex flex-col items-center justify-end px-1.5 py-3"
-                style={{
-                  boxShadow: 'inset 3px 0 10px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.6)',
-                  borderTopLeftRadius: '12px',
-                  borderBottomLeftRadius: '12px',
-                }}
-              >
-                {/* Balls stack from bottom — newest at bottom */}
-                <div className="flex flex-col items-center gap-0.5 justify-end flex-1">
-                  {[...allPocketed].reverse().map((b, idx) => (
-                    <div key={b.id}
-                      className="transition-all duration-300"
-                      style={{
-                        animation: `fadeScaleIn 0.3s ease-out ${idx * 0.05}s both`,
-                      }}
-                    >
-                      <BallIcon id={b.id} size={20} />
-                    </div>
-                  ))}
-                </div>
-                {/* Empty state */}
-                {allPocketed.length === 0 && (
-                  <div className="flex flex-col items-center gap-1 py-1">
-                    <div className="w-4 h-4 rounded-full border border-dashed border-amber-800/20" />
-                    <span className="text-[4px] font-mono font-bold text-amber-800/30 tracking-[0.2em] uppercase">Pocketed</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
+
+        {/* Mobile: pocketed balls — safe zone rail, always visible, never overlays table */}
+        {isMobile && (allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+          <div className="flex-shrink-0 h-full z-10 flex items-stretch">
+            <div className="flex flex-col items-center justify-end gap-0.5 py-4 px-1.5 bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/70 shadow-lg shadow-black/50 min-w-[40px]"
+              style={{
+                boxShadow: 'inset 3px 0 10px rgba(0,0,0,0.5), 0 0 0 1px rgba(180,120,60,0.08), 0 8px 24px rgba(0,0,0,0.6)',
+                borderTopRightRadius: '0',
+                borderBottomRightRadius: '0',
+                maxHeight: '320px',
+                borderLeft: 'none',
+              }}
+            >
+              <div className="flex flex-col items-center gap-0.5 justify-end flex-1">
+                {[...allPocketed].reverse().map((b, idx) => (
+                  <div key={b.id}
+                    className="transition-all duration-300"
+                    style={{
+                      animation: `fadeScaleIn 0.3s ease-out ${idx * 0.05}s both`,
+                    }}
+                  >
+                    <BallIcon id={b.id} size={20} />
+                  </div>
+                ))}
+              </div>
+              {allPocketed.length === 0 && (
+                <div className="flex flex-col items-center gap-1 py-1">
+                  <div className="w-4 h-4 rounded-full border border-dashed border-amber-800/20" />
+                  <span className="text-[4px] font-mono font-bold text-amber-800/30 tracking-[0.2em] uppercase">Pocketed</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Desktop: Pocketed Balls Panel — premium right rail, single column */}
         {!isMobile && (

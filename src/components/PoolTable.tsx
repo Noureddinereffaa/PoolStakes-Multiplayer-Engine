@@ -201,7 +201,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const AIM_DEAD_ZONE_PX = 6; // minimum ortho drag before aim adjusts — filters hand tremor
   const SHIFT_MODIFIER = 0.15; // precision mode sensitivity multiplier (finer)
   const SMOOTH_FACTOR = 0.30; // lerp factor for angle smoothing during drag
-  const SMOOTH_FACTOR_HOVER = 0.18; // hover sensitivity — moderate tracking, responsive but smooth
+  const SMOOTH_FACTOR_HOVER = 0.28; // hover sensitivity — snappier tracking while maintaining smoothness
   const targetAimAngleRef = useRef(0);
   const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
   const prefersReducedMotionRef = useRef(false);
@@ -623,12 +623,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             sensTargetRef.current = 1.0;
             sensCurrentRef.current = 1.0;
             if (cueBall) {
-              const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-              const snapped = applyAimSnap(rawAngle, cueBall);
-              targetAimAngleRef.current = rawAngle;
-              setAimAngle(snapped);
-              aimAngleRef.current = snapped;
-              initialAimAngleRef.current = snapped;
+              // Keep current hover aim — no recalculation from click position to avoid jump
+              initialAimAngleRef.current = aimAngleRef.current;
+              targetAimAngleRef.current = aimAngleRef.current;
             }
           } else if (pullStartPosRef.current) {
             const pullDx = coords.x - pullStartPosRef.current.x;
@@ -657,7 +654,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             
             // ── Power from total drag distance ──
             const effectiveDrag = Math.max(0, dragDist - DEAD_ZONE_PX);
-            const dragFactor = 2.4;
+            const dragFactor = 1.8;
             const rawPower = Math.min(100, effectiveDrag / dragFactor);
             const t = rawPower / 100; const curvedPower = (t * t * (3 - 2 * t)) * 100;
             const power = Math.min(100, Math.max(0, Math.floor(curvedPower)));
