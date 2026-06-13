@@ -201,12 +201,12 @@ describe('powerToVelocity', () => {
   it('should return max velocity for power 100', () => {
     const v = powerToVelocity(100);
     expect(v).toBeGreaterThan(0);
-    expect(v).toBeLessThanOrEqual(26);
+    expect(v).toBeLessThanOrEqual(26 * 60);
   });
 
   it('should clamp out-of-range values', () => {
     expect(powerToVelocity(-50)).toBe(0);
-    expect(powerToVelocity(200)).toBeLessThanOrEqual(26);
+    expect(powerToVelocity(200)).toBeLessThanOrEqual(26 * 60);
   });
 });
 

@@ -163,7 +163,7 @@ export async function handleAiShoot(ws: WebSocket, msg: { angle: number; power: 
 
   const frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> = [captureFrame(match.balls)];
   let iterations = 0;
-  const maxSteps = 1200;
+  const maxSteps = 2400;
   const pocketed: number[] = [];
   let cuePocketed = false;
   const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };

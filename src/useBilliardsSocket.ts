@@ -654,7 +654,7 @@ export function useBilliardsSocket({
     mockFrames.push(captureFrame(balls));
 
     let iter = 0;
-    while (iter < 1200) {
+    while (iter < 2400) {
       simulatePhysicsStep(balls);
       mockFrames.push(captureFrame(balls));
       iter++;

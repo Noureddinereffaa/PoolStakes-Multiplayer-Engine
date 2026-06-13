@@ -297,7 +297,7 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
 
   const frames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> = [captureFrame(room.balls)];
   let iterations = 0;
-  const maxStepsLimit = 1200;
+  const maxStepsLimit = 2400;
   const ballsPocketedThisShot: number[] = [];
   let cueBallPocketed = false;
   const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };

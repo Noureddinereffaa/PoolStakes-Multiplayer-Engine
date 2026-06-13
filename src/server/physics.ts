@@ -64,7 +64,7 @@ export const PHYSICS = {
   /** Speed below which a ball is force-stopped */
   STOP_THRESHOLD:     0.01,
   /** Maximum allowed ball speed (safe-guard) */
-  MAX_SPEED:          40,
+  MAX_SPEED:          26 * 60,
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -168,9 +168,10 @@ export function getInitialBalls(): Ball[] {
 // ═══════════════════════════════════════════════════════════════
 export function powerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  if (p < 0.3) return Math.min(26, Math.pow(p / 0.3, 1.8) * 7.8);
-  if (p < 0.7) return Math.min(26, 7.8 + Math.pow((p - 0.3) / 0.4, 1.4) * 10.2);
-  return Math.min(26, 18 + Math.pow((p - 0.7) / 0.3, 1.1) * 8);
+  const cap = 26 * PHYSICS.SUB_STEPS;
+  if (p < 0.3) return Math.min(cap, Math.pow(p / 0.3, 1.8) * 7.8 * PHYSICS.SUB_STEPS);
+  if (p < 0.7) return Math.min(cap, (7.8 + Math.pow((p - 0.3) / 0.4, 1.4) * 10.2) * PHYSICS.SUB_STEPS);
+  return Math.min(cap, (18 + Math.pow((p - 0.7) / 0.3, 1.1) * 8) * PHYSICS.SUB_STEPS);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -504,8 +505,8 @@ export function simulatePhysicsStep(
   const cfg = PHYSICS;
   const dt = cfg.FIXED_DT;
   const subSteps = cfg.SUB_STEPS;
-  // Scale dt per sub-step so total time = 1 frame
-  const subDt = dt;
+  // Scale dt per sub-step so total time = dt
+  const subDt = dt / subSteps;
 
   for (let s = 0; s < subSteps; s++) {
     applyFrictionAndSpin(balls, subDt);
