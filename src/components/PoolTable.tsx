@@ -18,6 +18,7 @@ export interface PoolTableHandle {
   setSpinY: (v: number) => void;
   setShotPower: (v: number) => void;
   setIsAimLocked: (v: boolean) => void;
+  setIsPulling: (v: boolean) => void;
   setAimAngle: (v: number | ((prev: number) => number)) => void;
   handleShoot: () => void;
   hudNotification: string | null;
@@ -206,6 +207,28 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const prefersReducedMotionRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartAngleRef = useRef(0);
+
+  // ── Dynamic Sensitivity System ──────────────────────────
+  type InputMode = 'hover' | 'aiming' | 'power_drag' | 'precision';
+  const SENS = {
+    AIM_BASE:          0.0012,
+    AIM_SHRINK_AT:     200,
+    AIM_SHRINK_MAX:    0.70,
+    POWER_DRAG_RATIO:  0.058,
+    PRECISION_RATIO:   0.292,
+    SHIFT_RATIO:       0.15,
+    PRECISION_VEL:     0.12,
+    PRECISION_HYST:    0.20,
+    POWER_LOCK_AT:     80,
+    POWER_UNLOCK_AT:   40,
+    POWER_ANGLE_TOL:   0.5,
+    ORTHO_DZ:          6,
+    ORTHO_DZ_POWER:    24,
+  };
+  const inputModeRef = useRef<InputMode>('hover');
+  const mouseTraceRef = useRef<Array<{ x: number; y: number; t: number }>>([]);
+  const sensTargetRef = useRef(1.0);
+  const sensCurrentRef = useRef(1.0);
 
   // ── Aim Assist: magnetic snap toward target balls ────────────
   const SNAP_PIXEL_THRESHOLD = 18; // max perpendicular distance (px) from aim ray to ball center for snap activation
@@ -587,13 +610,18 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed && !isAimLockedRef.current) {
         if (!isMobile.current) {
-          // ================= DESKTOP: RELATIVE AIM + DRAG POWER =================
-          // Click to set base aim. Drag adjusts aim relative to base with low sensitivity.
-          // Power = total drag distance from click point.
-          // Professional: no accidental shots on click; fine control on drag.
+          // ================= DESKTOP: DYNAMIC SENSITIVITY SYSTEM =================
+          // Three input modes auto-detected from drag vector + mouse velocity:
+          //   AIMING     — normal drag. Sensitivity DECREASES with distance (inverted from typical)
+          //   POWER_DRAG — drag along aim line >80px. Aim NEAR-LOCKED (×0.058 sens).
+          //   PRECISION  — auto-detected via mouse velocity <0.12px/ms over 150ms window.
+          // Smooth transitions via lerp prevent sudden sensitivity jumps.
           if (isInitialDown) {
             pullStartPosRef.current = coords;
-            // Save current aim as base for relative adjustments
+            mouseTraceRef.current = [];
+            inputModeRef.current = 'aiming';
+            sensTargetRef.current = 1.0;
+            sensCurrentRef.current = 1.0;
             if (cueBall) {
               const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
               const snapped = applyAimSnap(rawAngle, cueBall);
@@ -602,13 +630,32 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               aimAngleRef.current = snapped;
               initialAimAngleRef.current = snapped;
             }
-            // Do NOT set isPulling/dragMode yet — wait for minimum drag distance
           } else if (pullStartPosRef.current) {
             const pullDx = coords.x - pullStartPosRef.current.x;
             const pullDy = coords.y - pullStartPosRef.current.y;
             const dragDist = Math.hypot(pullDx, pullDy);
             
-            // Power from total drag distance (with dead zone)
+            // ── Precision detection: mouse velocity over 150ms sliding window ──
+            const now = performance.now();
+            mouseTraceRef.current.push({ x: coords.x, y: coords.y, t: now });
+            while (mouseTraceRef.current.length > 0 && now - mouseTraceRef.current[0].t > 150) {
+              mouseTraceRef.current.shift();
+            }
+            let mouseVel = Infinity;
+            if (mouseTraceRef.current.length >= 3) {
+              let totalPx = 0;
+              for (let i = 1; i < mouseTraceRef.current.length; i++) {
+                totalPx += Math.hypot(
+                  mouseTraceRef.current[i].x - mouseTraceRef.current[i-1].x,
+                  mouseTraceRef.current[i].y - mouseTraceRef.current[i-1].y,
+                );
+              }
+              const span = now - mouseTraceRef.current[0].t;
+              if (span > 0) mouseVel = totalPx / span;
+            }
+            const isPrecisionMove = mouseVel < SENS.PRECISION_VEL;
+            
+            // ── Power from total drag distance ──
             const effectiveDrag = Math.max(0, dragDist - DEAD_ZONE_PX);
             const dragFactor = 2.4;
             const rawPower = Math.min(100, effectiveDrag / dragFactor);
@@ -617,23 +664,59 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             setShotPower(power);
             shotPowerRef.current = power;
             
-            // Activate pulling state only after minimum drag threshold
+            // ── Drag mode detection ──
+            const pullAngle = Math.atan2(pullDy, pullDx);
+            let angleDiff = Math.abs(pullAngle - initialAimAngleRef.current);
+            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+            const isAlongAim = angleDiff < SENS.POWER_ANGLE_TOL || angleDiff > Math.PI - SENS.POWER_ANGLE_TOL;
+            const isPowerDrag = dragDist > SENS.POWER_LOCK_AT && isAlongAim;
+            const isExitPower = dragDist < SENS.POWER_UNLOCK_AT || !isAlongAim;
+            
+            // Update pulling + drag mode
             if (dragDist > DEAD_ZONE_PX && !isPullingRef.current) {
               setIsPulling(true);
               isPullingRef.current = true;
-              setDragMode('pull');
-              dragModeRef.current = 'pull';
+            }
+            if (isPullingRef.current) {
+              if (isPowerDrag) {
+                if (inputModeRef.current !== 'power_drag') inputModeRef.current = 'power_drag';
+                setDragMode('pull'); dragModeRef.current = 'pull';
+              } else if (isExitPower && inputModeRef.current === 'power_drag') {
+                inputModeRef.current = isPrecisionMove ? 'precision' : 'aiming';
+                setDragMode('rotate'); dragModeRef.current = 'rotate';
+              }
             }
             
-            // Relative aim with adaptive sensitivity (like mobile)
+            // ── Aim adjustment with dynamic sensitivity ──
             if (!isAimLockedRef.current) {
-              const tAdapt = Math.min(dragDist, 300) / 300;
-              const baseSens = isShiftHeldRef.current ? 0.0008 : 0.0012;
-              const maxSens = isShiftHeldRef.current ? 0.004 : 0.006;
-              const adapt = baseSens + tAdapt * (maxSens - baseSens);
+              // Determine target mode multiplier
+              let targetMult: number;
+              if (inputModeRef.current === 'power_drag') {
+                targetMult = SENS.POWER_DRAG_RATIO;
+              } else if (isPrecisionMove) {
+                targetMult = SENS.PRECISION_RATIO;
+                inputModeRef.current = 'precision';
+              } else if (inputModeRef.current === 'precision' && mouseVel > SENS.PRECISION_HYST) {
+                inputModeRef.current = 'aiming';
+                targetMult = 1.0 - Math.min(dragDist, SENS.AIM_SHRINK_AT) / SENS.AIM_SHRINK_AT * SENS.AIM_SHRINK_MAX;
+              } else {
+                // AIMING: sensitivity DECREASES with drag distance
+                const tDrag = Math.min(dragDist, SENS.AIM_SHRINK_AT) / SENS.AIM_SHRINK_AT;
+                targetMult = 1.0 - tDrag * SENS.AIM_SHRINK_MAX;
+              }
+              if (isShiftHeldRef.current) targetMult *= SENS.SHIFT_RATIO;
+              
+              // Smooth transitions (lerp toward target)
+              sensTargetRef.current = targetMult;
+              sensCurrentRef.current += (sensTargetRef.current - sensCurrentRef.current) * 0.15;
+              
+              // Orthogonal component for aim rotation
               const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
-              const effectiveOrtho = Math.abs(orthoDrag) > AIM_DEAD_ZONE_PX ? orthoDrag : 0;
-              const newAngle = initialAimAngleRef.current + effectiveOrtho * adapt;
+              const deadZone = inputModeRef.current === 'power_drag' ? SENS.ORTHO_DZ_POWER : SENS.ORTHO_DZ;
+              const effectiveOrtho = Math.abs(orthoDrag) > deadZone ? orthoDrag : 0;
+              
+              const effectiveSens = SENS.AIM_BASE * sensCurrentRef.current;
+              const newAngle = initialAimAngleRef.current + effectiveOrtho * effectiveSens;
               const targetAngle = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
               const snapped = cueBall ? applyAimSnap(targetAngle, cueBall) : targetAngle;
               setAimAngle(snapped);
@@ -769,13 +852,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       return;
     }
 
-    if (dragModeRef.current === 'pull' && isPullingRef.current) {
+    if (isPullingRef.current) {
       const p = shotPowerRef.current;
       setIsPulling(false);
       isPullingRef.current = false;
       setDragMode(null);
       dragModeRef.current = null;
       pullStartPosRef.current = null;
+      inputModeRef.current = 'hover';
       if (p >= 5 && isMyTurnRef.current && !isAnimatingRef.current && !hasShotThisTurnRef.current) {
         executeAuthorizedShot(aimAngleRef.current, p, spinXRef.current, spinYRef.current);
       } else {
@@ -829,6 +913,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     spinX, spinY, shotPower, isAimLocked, aimAngle,
     setSpinX, setSpinY, setShotPower: (v: number) => { setShotPower(v); shotPowerRef.current = v; },
     setIsAimLocked: (v: boolean) => { setIsAimLocked(v); isAimLockedRef.current = v; },
+    setIsPulling: (v: boolean) => { setIsPulling(v); isPullingRef.current = v; },
     setAimAngle: (v: number | ((prev: number) => number)) => {
       if (typeof v === 'function') {
         setAimAngle((prev) => { const n = v(prev); aimAngleRef.current = n; return n; });

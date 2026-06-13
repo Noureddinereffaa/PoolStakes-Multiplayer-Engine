@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   getInitialBalls, simulatePhysicsStep, simulateOneFrame,
   BALL_R, TABLE_W, TABLE_H, CUSHION,
-  isAnyBallMoving, captureFrame, powerToVelocity,
+  isAnyBallMoving, captureFrame, powerToVelocity, breakPowerToVelocity,
   MIN_X, MAX_X, MIN_Y, MAX_Y,
   HEAD_STRING_X, FOOT_SPOT_X, FOOT_SPOT_Y,
 } from './physics';
@@ -201,12 +201,36 @@ describe('powerToVelocity', () => {
   it('should return max velocity for power 100', () => {
     const v = powerToVelocity(100);
     expect(v).toBeGreaterThan(0);
-    expect(v).toBeLessThanOrEqual(26 * 60);
+    expect(v).toBeLessThanOrEqual(42 * 60);
   });
 
   it('should clamp out-of-range values', () => {
     expect(powerToVelocity(-50)).toBe(0);
-    expect(powerToVelocity(200)).toBeLessThanOrEqual(26 * 60);
+    expect(powerToVelocity(200)).toBeLessThanOrEqual(42 * 60);
+  });
+});
+
+describe('breakPowerToVelocity', () => {
+  it('should return greater velocity than normal at 100% power', () => {
+    const normal = powerToVelocity(100);
+    const brk = breakPowerToVelocity(100);
+    expect(brk).toBeGreaterThan(normal);
+  });
+
+  it('should be half of normal at 0% power', () => {
+    expect(breakPowerToVelocity(0)).toBeCloseTo(powerToVelocity(0) * 0.5, 5);
+  });
+
+  it('should equal normal at 50% power', () => {
+    const normal = powerToVelocity(50);
+    const brk = breakPowerToVelocity(50);
+    expect(brk).toBeCloseTo(normal, 0);
+  });
+
+  it('should be 1.5x normal at 100% power', () => {
+    const normal = powerToVelocity(100);
+    const brk = breakPowerToVelocity(100);
+    expect(brk).toBeCloseTo(normal * 1.5, -1);
   });
 });
 

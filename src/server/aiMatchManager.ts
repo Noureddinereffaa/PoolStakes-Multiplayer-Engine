@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { Ball, Player, Difficulty } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, breakPowerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
 import { evaluateShotRules, triggerAiShot, findValidCueBallPosition } from './gameLogic';
 import { pushEventLog } from './state';
 
@@ -157,7 +157,7 @@ export async function handleAiShoot(ws: WebSocket, msg: { angle: number; power: 
   cueBall.spinX = Math.max(-1, Math.min(1, msg.spinX || 0));
   cueBall.spinY = Math.max(-1, Math.min(1, msg.spinY || 0));
 
-  const force = powerToVelocity(clampedPower);
+  const force = isBreakShot ? breakPowerToVelocity(clampedPower) : powerToVelocity(clampedPower);
   cueBall.vx = Math.cos(clampedAngle) * force;
   cueBall.vy = Math.sin(clampedAngle) * force;
 

@@ -46,10 +46,10 @@ describe('AI helper functions', () => {
       expect(powerToVelocity(0)).toBe(0);
     });
 
-    it('should produce max ~26 for 100 power', () => {
+    it('should produce correct velocities for 100 power', () => {
       const v = powerToVelocity(100);
       expect(v).toBeGreaterThan(20);
-      expect(v).toBeLessThanOrEqual(26);
+      expect(v).toBeLessThanOrEqual(42 * 60);
     });
 
     it('should be monotonically increasing', () => {
@@ -63,7 +63,7 @@ describe('AI helper functions', () => {
 
     it('should clamp values at 0 and 100', () => {
       expect(powerToVelocity(-10)).toBe(0);
-      expect(powerToVelocity(150)).toBeLessThanOrEqual(26);
+      expect(powerToVelocity(150)).toBeLessThanOrEqual(42 * 60);
     });
   });
 

@@ -34,9 +34,9 @@ export const PHYSICS = {
   /** Rolling friction coefficient (exponential decay) */
   FRICTION_ROLL:      0.55,
   /** Sliding friction coefficient (applied when sliding) */
-  FRICTION_SLIDE:     0.85,
+  FRICTION_SLIDE:     0.70,
   /** Speed threshold for slide→roll transition */
-  SLIDE_ROLL_SPEED:   0.8,
+  SLIDE_ROLL_SPEED:   1.0,
 
   // ── Collision ─────────────────────────────────────────
   /** Coefficient of restitution: ball→ball */
@@ -64,7 +64,7 @@ export const PHYSICS = {
   /** Speed below which a ball is force-stopped */
   STOP_THRESHOLD:     0.01,
   /** Maximum allowed ball speed (safe-guard) */
-  MAX_SPEED:          26 * 60,
+  MAX_SPEED:          4000,
 } as const;
 
 // ═══════════════════════════════════════════════════════════════
@@ -168,10 +168,18 @@ export function getInitialBalls(): Ball[] {
 // ═══════════════════════════════════════════════════════════════
 export function powerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  const cap = 26 * PHYSICS.SUB_STEPS;
-  if (p < 0.3) return Math.min(cap, Math.pow(p / 0.3, 1.8) * 7.8 * PHYSICS.SUB_STEPS);
-  if (p < 0.7) return Math.min(cap, (7.8 + Math.pow((p - 0.3) / 0.4, 1.4) * 10.2) * PHYSICS.SUB_STEPS);
-  return Math.min(cap, (18 + Math.pow((p - 0.7) / 0.3, 1.1) * 8) * PHYSICS.SUB_STEPS);
+  // Quartic-dominant: 92% p^4 + 8% linear
+  // Ultra-gentle at low end (10%→~21 units/sec), EXPLOSIVE at high end (100%→2520 units/sec)
+  // Each 10% drag increment gives a distinct, perceptible power increase.
+  const cap = 42 * PHYSICS.SUB_STEPS;
+  const v = cap * (0.08 * p + 0.92 * p * p * p * p);
+  return Math.min(cap, v);
+}
+
+export function breakPowerToVelocity(powerPercent: number): number {
+  const p = Math.max(0, Math.min(100, powerPercent)) / 100;
+  const multiplier = 0.5 + p;
+  return powerToVelocity(powerPercent) * multiplier;
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -12,6 +12,7 @@ import {
   vibrate
 } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
+import PowerControl from './PowerControl';
 import {
   Minimize, Maximize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, X, Users, Bot, Volume2, VolumeX,
 } from 'lucide-react';
@@ -797,13 +798,14 @@ export default function ArenaPage({
 
       {/* Main - PoolTable fills everything */}
       <div className="flex-1 flex overflow-hidden relative" role="main" aria-label={language === 'ar' ? 'طاولة اللعب' : 'Pool Table'}>
-        {/* Mobile: Power Slider — full-height rail outside table */}
+        {/* Mobile: Power Control — right-side vertical drag zone */}
         {isMobile && (
           <div className="flex-shrink-0 h-full z-30 flex items-center">
-            <CueStickSlider
-              shotPower={shotPower}
-              disabled={!isMyTurn}
+            <PowerControl
+              isVisible={isMyTurn && roomState.status === 'playing' && !isGameOver}
+              disabled={!isMyTurn || roomState.status !== 'playing'}
               onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
+              onDragStateChange={(d: boolean) => { tableRef.current?.setIsPulling(d); }}
               onShoot={handleShootClick}
             />
           </div>
@@ -1014,146 +1016,5 @@ export default function ArenaPage({
   );
 }
 
-/* ─── Mobile Power Slider: pull to charge, release to shoot ─── */
-function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
-  shotPower: number; disabled: boolean; onPowerChange: (p: number) => void; onShoot: () => void;
-}) {
-  const [dragging, setDragging] = useState(false);
-  const powerRef = useRef(shotPower);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const lastHapticThresholdRef = useRef(-1);
-  const firedRef = useRef(false);
 
-  const getPowerFromY = (clientY: number): number => {
-    if (!trackRef.current) return shotPower;
-    const rect = trackRef.current.getBoundingClientRect();
-    const relY = clientY - rect.top;
-    const rawPct = Math.max(0, Math.min(100, ((rect.height - relY) / rect.height) * 100));
-    const t = rawPct / 100; const curved = Math.round((t * t * (3 - 2 * t)) * 100);
-    return Math.max(0, Math.min(100, curved));
-  };
-
-  const applyHaptic = (power: number) => {
-    const thresholds = [25, 50, 75, 100];
-    for (const t of thresholds) {
-      if (power >= t && lastHapticThresholdRef.current < t) {
-        try { navigator.vibrate?.(5); } catch (_) {}
-        lastHapticThresholdRef.current = t;
-        break;
-      }
-    }
-    if (power < thresholds[0]) lastHapticThresholdRef.current = -1;
-  };
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (disabled) return;
-    firedRef.current = false;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const p = getPowerFromY(e.clientY);
-    powerRef.current = p;
-    onPowerChange(p);
-    applyHaptic(p);
-    setDragging(true);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragging || !trackRef.current) return;
-    const p = getPowerFromY(e.clientY);
-    powerRef.current = p;
-    onPowerChange(p);
-    applyHaptic(p);
-  };
-
-  const handlePointerUp = () => {
-    if (!dragging) return;
-    setDragging(false);
-    lastHapticThresholdRef.current = -1;
-    if (!firedRef.current && powerRef.current >= 5) {
-      firedRef.current = true;
-      onShoot();
-      // Reset power to 0 after shot
-      onPowerChange(0);
-    }
-  };
-
-  const powerColor = shotPower > 70 ? 'from-red-500 to-rose-600' : shotPower > 30 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-green-500';
-  const powerGlow = shotPower > 70 ? 'rgba(239,68,68,0.5)' : shotPower > 30 ? 'rgba(245,158,11,0.5)' : 'rgba(52,211,153,0.5)';
-
-  return (
-    <div
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-      className={`h-full w-14 flex flex-col items-center justify-center py-3 select-none ${disabled ? 'opacity-20' : ''}`}
-      style={{ touchAction: 'none' }}
-    >
-      {/* Premium rail panel — full table height */}
-      <div className="flex-1 w-full rounded-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/80 relative overflow-hidden"
-        style={{
-          boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.08), 6px 0 24px rgba(0,0,0,0.7)',
-        }}
-      >
-        {/* Track area — fills panel height with inset padding */}
-        <div ref={trackRef} className="absolute inset-y-3 inset-x-1 cursor-pointer">
-          {/* Deep groove */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-b from-[#0a0502] via-[#1a0a04] to-[#0a0502]"
-            style={{ boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.9), inset 0 -1px 3px rgba(180,120,60,0.12)' }}
-          >
-            <div className="absolute inset-y-2 inset-x-0.5 rounded-full bg-black/40" />
-          </div>
-
-          {/* Power fill glow */}
-          {shotPower > 0 && (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-2.5 rounded-full opacity-75 transition-none"
-              style={{
-                height: `${shotPower}%`,
-                background: `linear-gradient(to top, ${powerGlow}, transparent)`,
-                marginBottom: 2,
-                boxShadow: `0 0 12px ${powerGlow}`,
-              }}
-            />
-          )}
-
-          {/* Center rail line */}
-          <div className="absolute left-1/2 -translate-x-1/2 top-3 bottom-3 w-[2.5px] rounded-full bg-gradient-to-b from-amber-300/12 via-amber-500/45 to-amber-300/12"
-            style={{ boxShadow: '0 0 3px rgba(180,120,60,0.3)' }}
-          />
-
-          {/* Thumb */}
-          <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
-            style={{ bottom: `${Math.max(0, shotPower)}%`, marginBottom: -15 }}
-          >
-            <div className={`relative w-8 h-8 rounded-full bg-gradient-to-br ${powerColor} border-2 ${
-              shotPower > 70 ? 'border-red-300' : shotPower > 30 ? 'border-amber-300' : 'border-emerald-300'
-            }`}
-              style={{
-                boxShadow: dragging
-                  ? `0 0 24px ${powerGlow}, 0 3px 10px rgba(0,0,0,0.6), inset 0 1.5px 0 rgba(255,255,255,0.3)`
-                  : `0 0 12px ${powerGlow}, 0 3px 8px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.2)`,
-              }}
-            >
-              <div className="absolute inset-[3px] rounded-full bg-white/15" />
-              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black font-mono text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
-                {shotPower}
-              </span>
-            </div>
-          </div>
-
-          {/* Tick marks */}
-          <div className="absolute inset-y-3 right-0 flex flex-col justify-between pointer-events-none">
-            {[100, 75, 50, 25, 0].map((val) => (
-              <div key={val} className="flex items-center">
-                <div className={`h-px ${val <= shotPower ? 'bg-white/35 w-1.5' : 'bg-white/10 w-1'}`} />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Power label */}
-      <span className="mt-1 text-[7px] font-mono font-bold text-amber-600/60 tracking-[0.15em] uppercase">PWR</span>
-    </div>
-  );
-}
 

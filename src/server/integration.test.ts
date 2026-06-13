@@ -191,6 +191,7 @@ describe('ghostBallAngle and powerToVelocity', () => {
     expect(powerToVelocity(0)).toBe(0);
     expect(powerToVelocity(50)).toBeGreaterThan(0);
     expect(powerToVelocity(100)).toBeGreaterThan(powerToVelocity(50));
-    expect(powerToVelocity(100)).toBe(26);
+    expect(powerToVelocity(100)).toBe(2520);
+    expect(powerToVelocity(100)).toBeLessThanOrEqual(42 * 60);
   });
 });

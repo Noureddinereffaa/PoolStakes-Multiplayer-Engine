@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { RoomState, SocketMessage } from '../types';
-import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
+import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, breakPowerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
 import {
   activeRooms, activeSockets, animatingRoomIds, clientsByRoom, playerRoomMap,
   userSockets, rematchingRooms, getOrCreateRoom, broadcastRoom,
@@ -291,7 +291,7 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
   cueBall.spinX = Math.max(-1, Math.min(1, msg.spinX || 0));
   cueBall.spinY = Math.max(-1, Math.min(1, msg.spinY || 0));
 
-  const forceMag = powerToVelocity(clampedPower);
+  const forceMag = isBreakShot ? breakPowerToVelocity(clampedPower) : powerToVelocity(clampedPower);
   cueBall.vx = Math.cos(clampedAngle) * forceMag;
   cueBall.vy = Math.sin(clampedAngle) * forceMag;
 
