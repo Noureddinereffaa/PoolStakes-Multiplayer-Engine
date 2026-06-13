@@ -198,10 +198,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const isShiftHeldRef = useRef(false);
   const DEAD_ZONE_PX = 6; // minimum drag distance before power registers
   const AIM_DEAD_ZONE_PX = 6; // minimum ortho drag before aim adjusts — filters hand tremor
-  const AIM_SENSITIVITY = 0.002; // radians per pixel of ortho drag — Miniclip responsive feel
-  const SHIFT_MODIFIER = 0.25; // precision mode sensitivity multiplier
-  const SMOOTH_FACTOR = 0.30; // lerp factor for angle smoothing — responsive, Miniclip feel
-  const SMOOTH_FACTOR_HOVER = 0.10; // hover sensitivity — fast 1:1 tracking to find target ball
+  const SHIFT_MODIFIER = 0.15; // precision mode sensitivity multiplier (finer)
+  const SMOOTH_FACTOR = 0.30; // lerp factor for angle smoothing during drag
+  const SMOOTH_FACTOR_HOVER = 0.18; // hover sensitivity — moderate tracking, responsive but smooth
   const targetAimAngleRef = useRef(0);
   const DRAG_ROTATION_SENSITIVITY = 0.006; // radians per pixel for mobile drag rotation
   const prefersReducedMotionRef = useRef(false);
@@ -588,17 +587,14 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const cueBall = animatedBallsRef.current.find((b) => b.id === 0);
       if (cueBall && !cueBall.isPocketed && !isAimLockedRef.current) {
         if (!isMobile.current) {
-          // ================= DESKTOP: DIRECT AIM + DRAG POWER =================
-          // Aim = angle from cue ball to pointer (always, even while dragging)
-          // Power = vertical drag distance from initial click point
+          // ================= DESKTOP: RELATIVE AIM + DRAG POWER =================
+          // Click to set base aim. Drag adjusts aim relative to base with low sensitivity.
+          // Power = total drag distance from click point.
+          // Professional: no accidental shots on click; fine control on drag.
           if (isInitialDown) {
             pullStartPosRef.current = coords;
-            setIsPulling(true);
-            isPullingRef.current = true;
-            setDragMode('pull');
-            dragModeRef.current = 'pull';
-            // Set aim to current pointer position immediately
-            if (!isAimLockedRef.current) {
+            // Save current aim as base for relative adjustments
+            if (cueBall) {
               const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
               const snapped = applyAimSnap(rawAngle, cueBall);
               targetAimAngleRef.current = rawAngle;
@@ -606,6 +602,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
               aimAngleRef.current = snapped;
               initialAimAngleRef.current = snapped;
             }
+            // Do NOT set isPulling/dragMode yet — wait for minimum drag distance
           } else if (pullStartPosRef.current) {
             const pullDx = coords.x - pullStartPosRef.current.x;
             const pullDy = coords.y - pullStartPosRef.current.y;
@@ -620,24 +617,34 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
             setShotPower(power);
             shotPowerRef.current = power;
             
-            // Aim always follows pointer (Miniclip-style direct control)
+            // Activate pulling state only after minimum drag threshold
+            if (dragDist > DEAD_ZONE_PX && !isPullingRef.current) {
+              setIsPulling(true);
+              isPullingRef.current = true;
+              setDragMode('pull');
+              dragModeRef.current = 'pull';
+            }
+            
+            // Relative aim with adaptive sensitivity (like mobile)
             if (!isAimLockedRef.current) {
-              const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
-              const snapped = applyAimSnap(rawAngle, cueBall);
-              targetAimAngleRef.current = rawAngle;
-              const fineAimSens = isFineAimRef.current ? 0.5 : 1;
-              const sens = (isShiftHeldRef.current ? SHIFT_MODIFIER : 1) * fineAimSens;
-              const smoothed = aimAngleRef.current + (snapped - aimAngleRef.current) * SMOOTH_FACTOR * sens;
-              setAimAngle(smoothed);
-              aimAngleRef.current = smoothed;
+              const tAdapt = Math.min(dragDist, 300) / 300;
+              const baseSens = isShiftHeldRef.current ? 0.0008 : 0.0012;
+              const maxSens = isShiftHeldRef.current ? 0.004 : 0.006;
+              const adapt = baseSens + tAdapt * (maxSens - baseSens);
+              const orthoDrag = -pullDx * Math.sin(initialAimAngleRef.current) + pullDy * Math.cos(initialAimAngleRef.current);
+              const effectiveOrtho = Math.abs(orthoDrag) > AIM_DEAD_ZONE_PX ? orthoDrag : 0;
+              const newAngle = initialAimAngleRef.current + effectiveOrtho * adapt;
+              const targetAngle = aimAngleRef.current + (newAngle - aimAngleRef.current) * SMOOTH_FACTOR;
+              const snapped = cueBall ? applyAimSnap(targetAngle, cueBall) : targetAngle;
+              setAimAngle(snapped);
+              aimAngleRef.current = snapped;
             }
           } else if (!isAimLockedRef.current) {
-            // Hover logic — fast 1:1 tracking to find target ball
+            // Hover logic — very slow, floaty tracking for professional aim preview
             const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
             const snapped = applyAimSnap(rawAngle, cueBall);
             targetAimAngleRef.current = rawAngle;
-            const fineAimSens = isFineAimRef.current ? 0.5 : 1;
-            const sens = (isShiftHeldRef.current ? SHIFT_MODIFIER : 1) * fineAimSens;
+            const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
             const smoothed = aimAngleRef.current + (snapped - aimAngleRef.current) * SMOOTH_FACTOR_HOVER * sens;
             setAimAngle(smoothed);
             aimAngleRef.current = smoothed;
@@ -698,8 +705,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           const rawAngle = Math.atan2(coords.y - cueBall.y, coords.x - cueBall.x);
           const snapped = applyAimSnap(rawAngle, cueBall);
           targetAimAngleRef.current = rawAngle;
-          const fineAimSens = isFineAimRef.current ? 0.5 : 1;
-          const sens = (isShiftHeldRef.current ? SHIFT_MODIFIER : 1) * fineAimSens;
+          const sens = isShiftHeldRef.current ? SHIFT_MODIFIER : 1;
           const smoothed = aimAngleRef.current + (snapped - aimAngleRef.current) * SMOOTH_FACTOR_HOVER * sens;
           setAimAngle(smoothed);
           aimAngleRef.current = smoothed;
@@ -780,7 +786,11 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     } else {
       setDragMode(null);
       dragModeRef.current = null;
+      setIsPulling(false);
+      isPullingRef.current = false;
       pullStartPosRef.current = null;
+      setShotPower(0);
+      shotPowerRef.current = 0;
     }
   };
 

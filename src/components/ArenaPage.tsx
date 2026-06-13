@@ -797,6 +797,17 @@ export default function ArenaPage({
 
       {/* Main - PoolTable fills everything */}
       <div className="flex-1 flex overflow-hidden relative" role="main" aria-label={language === 'ar' ? 'طاولة اللعب' : 'Pool Table'}>
+        {/* Mobile: Power Slider — full-height rail outside table */}
+        {isMobile && (
+          <div className="flex-shrink-0 h-full z-30 flex items-center">
+            <CueStickSlider
+              shotPower={shotPower}
+              disabled={!isMyTurn}
+              onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
+              onShoot={handleShootClick}
+            />
+          </div>
+        )}
         <div className={`flex-1 relative ${showSidebar && isMobile ? 'hidden' : ''}`}>
           <PoolTable ref={tableRef}
             roomState={roomState} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
@@ -853,18 +864,6 @@ export default function ArenaPage({
           <div className={`${isMobile ? 'absolute bottom-2 left-1/2 -translate-x-1/2 z-20' : 'absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right'}`}>
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} isMobile={isMobile} />
           </div>
-
-          {/* Mobile: Power Slider — pull to set power, release to shoot */}
-          {isMobile && (
-            <CueStickSlider
-              shotPower={shotPower}
-              disabled={!isMyTurn}
-              onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
-              onShoot={handleShootClick}
-            />
-          )}
-
-
 
           {/* Mobile: pocketed balls panel — single column, no labels, attached right rail */}
           {isMobile && (allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
@@ -1069,10 +1068,11 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     if (!dragging) return;
     setDragging(false);
     lastHapticThresholdRef.current = -1;
-    // Auto-shoot on release if power is valid
     if (!firedRef.current && powerRef.current >= 5) {
       firedRef.current = true;
       onShoot();
+      // Reset power to 0 after shot
+      onPowerChange(0);
     }
   };
 
@@ -1080,86 +1080,79 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
   const powerGlow = shotPower > 70 ? 'rgba(239,68,68,0.5)' : shotPower > 30 ? 'rgba(245,158,11,0.5)' : 'rgba(52,211,153,0.5)';
 
   return (
-    <div className="absolute left-2 bottom-14 z-30 pointer-events-none select-none">
-      <div
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        className={`pointer-events-auto relative ${disabled ? 'opacity-20' : ''}`}
-        style={{ touchAction: 'none' }}
+    <div
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className={`h-full w-14 flex flex-col items-center justify-center py-3 select-none ${disabled ? 'opacity-20' : ''}`}
+      style={{ touchAction: 'none' }}
+    >
+      {/* Premium rail panel — full table height */}
+      <div className="flex-1 w-full rounded-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/80 relative overflow-hidden"
+        style={{
+          boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.08), 6px 0 24px rgba(0,0,0,0.7)',
+        }}
       >
-        {/* Premium wood panel — rail-style, integrated with table */}
-        <div className="rounded-2xl bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/80 px-5 py-4 flex flex-col items-center gap-2"
-          style={{
-            boxShadow: 'inset 0 1px 0 rgba(180,120,60,0.08), 6px 0 24px rgba(0,0,0,0.7)',
-          }}
-        >
-          {/* Track container — enlarged */}
-          <div ref={trackRef} className="relative w-10 h-52 flex flex-col items-center cursor-pointer">
-            {/* Deep groove */}
-            <div className="absolute inset-y-0 inset-x-0 rounded-full bg-gradient-to-b from-[#0a0502] via-[#1a0a04] to-[#0a0502]"
+        {/* Track area — fills panel height with inset padding */}
+        <div ref={trackRef} className="absolute inset-y-3 inset-x-1 cursor-pointer">
+          {/* Deep groove */}
+          <div className="absolute inset-0 rounded-full bg-gradient-to-b from-[#0a0502] via-[#1a0a04] to-[#0a0502]"
+            style={{ boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.9), inset 0 -1px 3px rgba(180,120,60,0.12)' }}
+          >
+            <div className="absolute inset-y-2 inset-x-0.5 rounded-full bg-black/40" />
+          </div>
+
+          {/* Power fill glow */}
+          {shotPower > 0 && (
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-2.5 rounded-full opacity-75 transition-none"
               style={{
-                boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.9), inset 0 -1px 3px rgba(180,120,60,0.12)',
+                height: `${shotPower}%`,
+                background: `linear-gradient(to top, ${powerGlow}, transparent)`,
+                marginBottom: 2,
+                boxShadow: `0 0 12px ${powerGlow}`,
               }}
-            >
-              <div className="absolute inset-y-5 inset-x-1.5 rounded-full bg-black/40" />
-            </div>
-
-            {/* Power fill — wider glow */}
-            {shotPower > 0 && (
-              <div className="absolute bottom-0 w-3 rounded-full opacity-75"
-                style={{
-                  height: `${shotPower}%`,
-                  background: `linear-gradient(to top, ${powerGlow}, transparent)`,
-                  marginBottom: 3,
-                  boxShadow: `0 0 12px ${powerGlow}`,
-                }}
-              />
-            )}
-
-            {/* Groove rail line */}
-            <div className="absolute left-2 top-3 bottom-3 w-[2.5px] rounded-full bg-gradient-to-b from-amber-300/12 via-amber-500/45 to-amber-300/12"
-              style={{ boxShadow: '0 0 3px rgba(180,120,60,0.3)' }}
             />
+          )}
 
-            {/* Thumb — bigger, bolder */}
-            <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
+          {/* Center rail line */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-3 bottom-3 w-[2.5px] rounded-full bg-gradient-to-b from-amber-300/12 via-amber-500/45 to-amber-300/12"
+            style={{ boxShadow: '0 0 3px rgba(180,120,60,0.3)' }}
+          />
+
+          {/* Thumb */}
+          <div className="absolute left-1/2 -translate-x-1/2 pointer-events-none z-10 transition-none"
+            style={{ bottom: `${Math.max(0, shotPower)}%`, marginBottom: -15 }}
+          >
+            <div className={`relative w-8 h-8 rounded-full bg-gradient-to-br ${powerColor} border-2 ${
+              shotPower > 70 ? 'border-red-300' : shotPower > 30 ? 'border-amber-300' : 'border-emerald-300'
+            }`}
               style={{
-                bottom: `${Math.max(0, shotPower)}%`,
-                marginBottom: -18,
+                boxShadow: dragging
+                  ? `0 0 24px ${powerGlow}, 0 3px 10px rgba(0,0,0,0.6), inset 0 1.5px 0 rgba(255,255,255,0.3)`
+                  : `0 0 12px ${powerGlow}, 0 3px 8px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.2)`,
               }}
             >
-              <div className={`relative w-9 h-9 rounded-full bg-gradient-to-br ${powerColor} border-[2.5px] ${
-                shotPower > 70 ? 'border-red-300' : shotPower > 30 ? 'border-amber-300' : 'border-emerald-300'
-              }`}
-                style={{
-                  boxShadow: dragging
-                    ? `0 0 28px ${powerGlow}, 0 3px 10px rgba(0,0,0,0.6), inset 0 1.5px 0 rgba(255,255,255,0.3)`
-                    : `0 0 14px ${powerGlow}, 0 3px 8px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.2)`,
-                }}
-              >
-                <div className="absolute inset-[4px] rounded-full bg-white/15" />
-                <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black font-mono text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
-                  {shotPower}
-                </span>
-              </div>
-            </div>
-
-            {/* Tick marks */}
-            <div className="absolute inset-y-4 right-1 flex flex-col justify-between pointer-events-none">
-              {[100, 75, 50, 25, 0].map((val) => (
-                <div key={val} className="flex items-center">
-                  <div className={`h-px ${val <= shotPower ? 'bg-white/35 w-2' : 'bg-white/10 w-1.5'}`} />
-                </div>
-              ))}
+              <div className="absolute inset-[3px] rounded-full bg-white/15" />
+              <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black font-mono text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)]">
+                {shotPower}
+              </span>
             </div>
           </div>
 
-          {/* Power label */}
-          <span className="text-[7px] font-mono font-bold text-amber-600/70 tracking-[0.2em] uppercase">Power</span>
+          {/* Tick marks */}
+          <div className="absolute inset-y-3 right-0 flex flex-col justify-between pointer-events-none">
+            {[100, 75, 50, 25, 0].map((val) => (
+              <div key={val} className="flex items-center">
+                <div className={`h-px ${val <= shotPower ? 'bg-white/35 w-1.5' : 'bg-white/10 w-1'}`} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Power label */}
+      <span className="mt-1 text-[7px] font-mono font-bold text-amber-600/60 tracking-[0.15em] uppercase">PWR</span>
     </div>
   );
 }
