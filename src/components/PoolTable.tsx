@@ -367,8 +367,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
       const basePlayMultiplier = physicsFrames.length / Math.max(1, (physicsTotalSteps || physicsFrames.length) / serverDivisor);
       let animationFrameId: number;
       const animStartTime = performance.now();
-      const STRIKE_ACCEL = 30; // Matches renderer's cue pull-back duration — audio + physics start after visual wind-up
-      const physicsStartTime = animStartTime + STRIKE_ACCEL;
+      const STRIKE_ACCEL = 30; // Matches renderer's cue pull-back duration — ball eases in during wind-up
+      const physicsStartTime = animStartTime;
       animatedBallsRef.current = initialBallsCopy.map(b => {
         const fb = physicsFrames[0]?.find((f: any) => f.id === b.id);
         return fb ? { ...b, x: fb.x, y: fb.y, isPocketed: fb.isPocketed } : b;
@@ -378,7 +378,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
         if (strikeAnimRef.current && strikeAnimRef.current.active) {
           const strikeElapsed = strikeAnimRef.current.startTime !== -1 ? (performance.now() - strikeAnimRef.current.startTime) : 0;
           if (strikeElapsed < STRIKE_ACCEL && !strikeAnimRef.current.hasStruck) {
-            /* cue wind-up — physics is delayed by 40ms via physicsStartTime */
+            /* cue wind-up — ball eases in via time-warp below */
           } else if (!strikeAnimRef.current.hasStruck) {
             strikeAnimRef.current.hasStruck = true;
             poolAudio.playCueHit(strikeAnimRef.current.power); haptic(20);
@@ -390,7 +390,10 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           }
         }
         const elapsed = Math.max(0, now - physicsStartTime);
-        const targetFrameIdx = (elapsed / 16.667) * basePlayMultiplier;
+        const strikeProgress = Math.min(1, elapsed / STRIKE_ACCEL);
+        const timeScale = Math.sin(strikeProgress * Math.PI / 2);
+        const effectiveElapsed = elapsed * timeScale;
+        const targetFrameIdx = (effectiveElapsed / 16.667) * basePlayMultiplier;
         if (physicsFrames && targetFrameIdx < physicsFrames.length) {
           const indexFloor = Math.floor(targetFrameIdx);
           const indexCeil = Math.min(physicsFrames.length - 1, Math.ceil(targetFrameIdx));
