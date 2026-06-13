@@ -107,6 +107,18 @@ class SoundSynth {
     const now = ctx.currentTime;
     const vol = Math.min(0.85, Math.max(0.08, speedFactor)) * this._volume;
 
+    // Bass layer — deep thump for weight (Miniclip-style)
+    const bass = ctx.createOscillator();
+    const bassGain = ctx.createGain();
+    bass.type = 'sine';
+    bass.frequency.setValueAtTime(80, now);
+    bass.frequency.exponentialRampToValueAtTime(30, now + 0.08);
+    bassGain.gain.setValueAtTime(0.35 * vol, now);
+    bassGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    bass.connect(bassGain).connect(ctx.destination);
+    bass.start(now); bass.stop(now + 0.15);
+
+    // High crack — the sharp impact sound
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'sine';
@@ -115,6 +127,7 @@ class SoundSynth {
     gain.gain.setValueAtTime(0.6 * vol, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.012);
 
+    // Mid thud — body of the hit
     const thud = ctx.createOscillator();
     const thudGain = ctx.createGain();
     thud.type = 'triangle';
@@ -122,6 +135,18 @@ class SoundSynth {
     thud.frequency.exponentialRampToValueAtTime(80, now + 0.02);
     thudGain.gain.setValueAtTime(0.2 * vol, now);
     thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.025);
+
+    // Faux reverb — quick echo tail for spatial depth
+    const echo = ctx.createOscillator();
+    const echoGain = ctx.createGain();
+    echo.type = 'sine';
+    echo.frequency.setValueAtTime(600, now + 0.015);
+    echo.frequency.exponentialRampToValueAtTime(200, now + 0.04);
+    echoGain.gain.setValueAtTime(0, now);
+    echoGain.gain.setValueAtTime(0.12 * vol, now + 0.015);
+    echoGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    echo.connect(echoGain).connect(ctx.destination);
+    echo.start(now + 0.01); echo.stop(now + 0.07);
 
     osc.connect(gain).connect(ctx.destination);
     thud.connect(thudGain).connect(ctx.destination);

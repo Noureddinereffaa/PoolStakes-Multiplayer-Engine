@@ -55,6 +55,9 @@ interface RenderContext {
   magnifierCaptureRef?: HTMLCanvasElement | null;
   qualityRef?: RefObject<AdaptiveQuality>;
   prefersReducedMotionRef?: RefObject<boolean>;
+  isSnappingRef?: RefObject<boolean>;
+  snapTargetIdRef?: RefObject<number | null>;
+  pocketPathRef?: RefObject<{ x: number; y: number } | null>;
 }
 
 
@@ -143,6 +146,12 @@ export function useBilliardsRenderer(ctx: RenderContext) {
 
     // Render loop
     let lastFrameTime = performance.now();
+
+    // ── Camera Intelligence System ──
+    const camX = { current: 400 };
+    const camY = { current: 200 };
+    const camZoom = { current: 1.0 };
+
 
     const BALL_R = 10;
 
@@ -871,6 +880,8 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         impactFlashes: ctx.impactFlashesRef?.current || [],
         isFineAim: ctx.isFineAimRef?.current || false,
         aimVelocity: ctx.aimInertiaVelocityRef?.current || 0,
+        isSnapping: ctx.isSnappingRef?.current || false,
+        snapTargetId: ctx.snapTargetIdRef?.current ?? null,
       };
 
       // Decay impact camera shake based on real time (not frame rate dependent)
@@ -887,6 +898,65 @@ export function useBilliardsRenderer(ctx: RenderContext) {
       }
 
       ctx2d.save();
+
+      // ═══════════════════════════════════════════════════════════
+      //  Gentle Camera — floaty, alive, never hides the table
+      // ═══════════════════════════════════════════════════════════
+      const cueBallCam = snap.balls.find(b => b.id === 0);
+      const isAnimPhase = ctx.isAnimatingRef.current;
+      const isScratch = snap.isScratchPlacing;
+      let desiredX = 400, desiredY = 200, desiredZoom = 1.0;
+
+      if (isAnimPhase && cueBallCam && !cueBallCam.isPocketed) {
+        // Shot follow: float toward cue ball (35% blend from center)
+        desiredX = 400 + (cueBallCam.x - 400) * 0.35;
+        desiredY = 200 + (cueBallCam.y - 200) * 0.35;
+      } else if (isScratch && snap.placedPos) {
+        // Scratch: subtle zoom toward placement area
+        desiredX = snap.placedPos.x;
+        desiredY = snap.placedPos.y;
+        desiredZoom = 1.04;
+      } else if (snap.isMyTurn && !snap.isPulling && snap.roomState.status === 'playing') {
+        // Aiming: gentle drift toward cue ball (25% blend)
+        if (cueBallCam && !cueBallCam.isPocketed) {
+          desiredX = 400 + (cueBallCam.x - 400) * 0.25;
+          desiredY = 200 + (cueBallCam.y - 200) * 0.25;
+        }
+      } else if (snap.isPulling && cueBallCam && !cueBallCam.isPocketed) {
+        // Power pull: slightly more toward cue ball
+        desiredX = 400 + (cueBallCam.x - 400) * 0.3;
+        desiredY = 200 + (cueBallCam.y - 200) * 0.3;
+      }
+
+      // Turn-start gentle zoom pulse: 1.03x that fades over 700ms
+      if (!isAnimPhase && !isScratch && snap.isMyTurn && snap.roomState.status === 'playing') {
+        const turnElapsed = frameDate - snap.turnStartTimestamp;
+        if (turnElapsed > 0 && turnElapsed < 1500) {
+          const decayT = Math.min(1, turnElapsed / 700);
+          const pulse = (1.03 / desiredZoom - 1) * (1 - decayT);
+          desiredZoom *= (1 + pulse);
+        }
+      }
+
+      // Pocket linger: gentle nudge toward pocket (first 8 frames)
+      if (isAnimPhase && snap.sinkingBalls?.length) {
+        const newest = snap.sinkingBalls[snap.sinkingBalls.length - 1];
+        if (newest.progress < 8) {
+          desiredX = (desiredX + newest.pocketX * 0.5) / 1.5;
+          desiredY = (desiredY + newest.pocketY * 0.5) / 1.5;
+        }
+      }
+
+      // Smooth, floaty interpolation
+      const lerpCam = isAnimPhase ? 0.05 : 0.035;
+      camX.current += (desiredX - camX.current) * lerpCam;
+      camY.current += (desiredY - camY.current) * lerpCam;
+      camZoom.current += (desiredZoom - camZoom.current) * 0.04;
+      camZoom.current = Math.max(1.0, Math.min(1.12, camZoom.current));
+
+      ctx2d.translate(400 - camX.current * camZoom.current, 200 - camY.current * camZoom.current);
+      ctx2d.scale(camZoom.current, camZoom.current);
+
       if (snap.impactShake > 0.05) {
         const shakeIntensity = snap.impactShake;
         const aimDirX = Math.cos(snap.aimAngle);
@@ -1278,6 +1348,37 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           ctx2d.strokeStyle = 'rgba(255,255,255,0.20)';
           ctx2d.lineWidth = 0.5;
           ctx2d.stroke();
+
+          // Spin trail — small directional arrows around the cue ball showing spin direction
+          if (b.id === 0 && snap.isMyTurn && !snap.isPulling && !ctx.isAnimatingRef.current && !snap.strikeAnim?.active) {
+            const sxSpin = snap.spinX || 0;
+            const sySpin = snap.spinY || 0;
+            if (Math.abs(sxSpin) > 0.05 || Math.abs(sySpin) > 0.05) {
+              const spinMag = Math.sqrt(sxSpin * sxSpin + sySpin * sySpin);
+              const arrowCount = Math.min(6, 3 + Math.floor(spinMag * 4));
+              for (let a = 0; a < arrowCount; a++) {
+                const ang = (a / arrowCount) * Math.PI * 2 + frameDate * 0.001;
+                const dist = ballRadius + 4 + Math.sin(frameDate * 0.003 + a) * 1.5;
+                const ax = px + Math.cos(ang) * dist;
+                const ay = py + Math.sin(ang) * dist;
+                const perpX = -Math.sin(ang);
+                const perpY = Math.cos(ang);
+                const arrowSize = 2 + spinMag * 1.5;
+                const alpha = 0.15 + spinMag * 0.35;
+                ctx2d.save();
+                ctx2d.translate(ax, ay);
+                ctx2d.rotate(Math.atan2(perpY * sxSpin + perpX * sySpin, perpX * sxSpin - perpY * sySpin));
+                ctx2d.beginPath();
+                ctx2d.moveTo(arrowSize, 0);
+                ctx2d.lineTo(-arrowSize * 0.5, -arrowSize * 0.4);
+                ctx2d.lineTo(-arrowSize * 0.5, arrowSize * 0.4);
+                ctx2d.closePath();
+                ctx2d.fillStyle = `rgba(255, 200, 50, ${alpha})`;
+                ctx2d.fill();
+                ctx2d.restore();
+              }
+            }
+          }
         } else if (b.type === 'stripe') {
           ctx2d.save();
           ctx2d.beginPath();
@@ -1708,6 +1809,117 @@ export function useBilliardsRenderer(ctx: RenderContext) {
           });
         }
       });
+
+      // === Snap Target Indicator — Pocket-Based Prediction ===
+      if (snap.isSnapping && snap.snapTargetId !== null && !reducedAnimations) {
+        const snapBall = snap.balls.find(b => b.id === snap.snapTargetId);
+        const cueBallPred = snap.balls.find(b => b.id === 0);
+        if (snapBall && !snapBall.isPocketed && cueBallPred && !cueBallPred.isPocketed) {
+          const sbx = snapBall.x, sby = snapBall.y;
+          const sbr = snapBall.radius || 10;
+          const pulse = Math.sin(frameDate * 0.006) * 0.3 + 0.7;
+
+          // ── Trajectory Prediction ──
+          // Compute ghost ball position along aim ray at contact distance
+          const aimCos = Math.cos(snap.aimAngle);
+          const aimSin = Math.sin(snap.aimAngle);
+          const dxTB = sbx - cueBallPred.x;
+          const dyTB = sby - cueBallPred.y;
+          const projLen = dxTB * aimCos + dyTB * aimSin;
+          const perpDist = Math.abs(dxTB * aimSin - dyTB * aimCos);
+          const BR2 = sbr * 2;
+          let predictedPocket: { x: number; y: number } | null = null;
+          let trajectoryAngle = 0;
+
+          if (perpDist < BR2 && projLen > 0) {
+            const contactDist = projLen - Math.sqrt(Math.max(0, BR2 * BR2 - perpDist * perpDist));
+            const ghostX = cueBallPred.x + aimCos * contactDist;
+            const ghostY = cueBallPred.y + aimSin * contactDist;
+            // Target ball trajectory = direction from ghost ball to target ball
+            const trajX = sbx - ghostX;
+            const trajY = sby - ghostY;
+            const trajLen = Math.hypot(trajX, trajY);
+            if (trajLen > 0) {
+              trajectoryAngle = Math.atan2(trajY, trajX);
+              const normTrajX = trajX / trajLen;
+              const normTrajY = trajY / trajLen;
+              // Find best-matching pocket
+              const pockets = [
+                { x: 25, y: 25 }, { x: 400, y: 21 }, { x: 775, y: 25 },
+                { x: 25, y: 375 }, { x: 400, y: 379 }, { x: 775, y: 375 },
+              ];
+              let bestScore = -Infinity;
+              for (const p of pockets) {
+                const toPx = p.x - sbx, toPy = p.y - sby;
+                const pDist = Math.hypot(toPx, toPy);
+                if (pDist < 1) continue;
+                const alignment = (normTrajX * toPx + normTrajY * toPy) / pDist;
+                const distBonus = 1 - pDist / 600;
+                const score = alignment * 0.7 + distBonus * 0.3;
+                if (score > bestScore) { bestScore = score; predictedPocket = p; }
+              }
+            }
+          }
+
+          ctx2d.save();
+          // Glow rings
+          ctx2d.beginPath();
+          ctx2d.arc(sbx, sby, sbr + 4 + pulse * 2, 0, Math.PI * 2);
+          ctx2d.strokeStyle = `rgba(255, 200, 50, ${0.35 * pulse})`;
+          ctx2d.lineWidth = 2.5;
+          ctx2d.stroke();
+          ctx2d.beginPath();
+          ctx2d.arc(sbx, sby, sbr + 6 + pulse * 3, 0, Math.PI * 2);
+          ctx2d.strokeStyle = `rgba(255, 200, 50, ${0.12 * pulse})`;
+          ctx2d.lineWidth = 1.5;
+          ctx2d.stroke();
+
+          // Trajectory line to predicted pocket
+          if (predictedPocket) {
+            const pp = predictedPocket;
+            // Animated dashed trajectory
+            ctx2d.beginPath();
+            ctx2d.setLineDash([6, 5]);
+            ctx2d.lineDashOffset = -(frameDate / 20) % 11;
+            ctx2d.moveTo(sbx, sby);
+            ctx2d.lineTo(pp.x, pp.y);
+            ctx2d.strokeStyle = `rgba(255, 200, 50, ${0.35 * pulse})`;
+            ctx2d.lineWidth = 1.8;
+            ctx2d.stroke();
+            ctx2d.setLineDash([]);
+
+            // Pocket target ring
+            ctx2d.beginPath();
+            ctx2d.arc(pp.x, pp.y, 5 + pulse * 2, 0, Math.PI * 2);
+            ctx2d.strokeStyle = `rgba(255, 200, 50, ${0.3 * pulse})`;
+            ctx2d.lineWidth = 1.5;
+            ctx2d.stroke();
+            ctx2d.beginPath();
+            ctx2d.arc(pp.x, pp.y, 2, 0, Math.PI * 2);
+            ctx2d.fillStyle = `rgba(255, 200, 50, ${0.4 * pulse})`;
+            ctx2d.fill();
+
+            // Trajectory arrow at 60% of the line
+            const arrowT = 0.6;
+            const ax = sbx + (pp.x - sbx) * arrowT;
+            const ay = sby + (pp.y - sby) * arrowT;
+            ctx2d.save();
+            ctx2d.translate(ax, ay);
+            ctx2d.rotate(trajectoryAngle);
+            const arrSize = 5;
+            ctx2d.beginPath();
+            ctx2d.moveTo(arrSize, 0);
+            ctx2d.lineTo(-arrSize, -arrSize * 0.6);
+            ctx2d.lineTo(-arrSize, arrSize * 0.6);
+            ctx2d.closePath();
+            ctx2d.fillStyle = `rgba(255, 200, 50, ${0.4 * pulse})`;
+            ctx2d.fill();
+            ctx2d.restore();
+          }
+
+          ctx2d.restore();
+        }
+      }
 
       // 6. Draw Glowing Trajectory Laser Guide Lines & Cue Stick Shadow
       const isStrikingNow =

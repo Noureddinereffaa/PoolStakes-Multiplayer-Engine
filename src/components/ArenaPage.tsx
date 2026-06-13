@@ -840,6 +840,23 @@ export default function ArenaPage({
             </div>
           )}
 
+          {/* Desktop: Fine Aim toggle — precision mode for delicate shots */}
+          {!isMobile && (
+            <div className="absolute bottom-14 right-2 md:right-4 z-10 origin-bottom-right">
+              <button
+                onClick={() => setIsFineAim(v => !v)}
+                className={`px-2 py-1 rounded-lg text-[9px] font-mono font-bold transition-all border ${
+                  isFineAim
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+                    : 'bg-black/40 text-amber-600/60 border-amber-800/20 hover:border-amber-600/30 hover:text-amber-400/70'
+                }`}
+                style={{ touchAction: 'manipulation' }}
+              >
+                {isFineAim ? 'FINE AIM ON' : 'FINE AIM'}
+              </button>
+            </div>
+          )}
+
           {/* Spin control — bottom-right on desktop, bottom-center on mobile */}
           <div className={`${isMobile ? 'absolute bottom-2 left-1/2 -translate-x-1/2 z-20' : 'absolute bottom-1 right-1 md:bottom-3 md:right-3 z-10 origin-bottom-right'}`}>
             <SpinControl spinX={spinX} spinY={spinY} onChange={(x, y) => { setSpinX(x); setSpinY(y); }} disabled={!isMyTurn} isMobile={isMobile} />
@@ -855,8 +872,8 @@ export default function ArenaPage({
             />
           )}
 
-          {/* Mobile: SHOOT button — separate from slider, only when power is set, centered for thumb reach */}
-          {isMobile && isMyTurn && shotPower > 0 && (
+          {/* Mobile: SHOOT button — separate from slider, always visible during turn for instant action */}
+          {isMobile && isMyTurn && (
             <button onClick={handleShootClick}
               className="absolute left-1/2 -translate-x-1/2 bottom-3 z-30 pointer-events-auto w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 border-2 border-amber-300/60 shadow-[0_0_30px_rgba(245,158,11,0.5)] active:scale-90 transition-transform duration-75 flex items-center justify-center"
               style={{ touchAction: 'manipulation' }}
@@ -1058,7 +1075,7 @@ function CueStickSlider({ shotPower, disabled, onPowerChange, onShoot }: {
     const rect = trackRef.current.getBoundingClientRect();
     const relY = clientY - rect.top;
     const rawPct = Math.max(0, Math.min(100, ((rect.height - relY) / rect.height) * 100));
-    const curved = Math.round(Math.pow(rawPct / 100, 0.88) * 100);
+    const t = rawPct / 100; const curved = Math.round((t * t * (3 - 2 * t)) * 100);
     return Math.max(0, Math.min(100, curved));
   };
 
