@@ -42,47 +42,55 @@ export function triggerShootParticles(
   const hDy = Math.sin(bAngle);
 
   // Chalk puff — scales with power
-  const partCount = Math.min(14, Math.floor(5 + power * 0.12));
+  const partCount = Math.min(20, Math.floor(7 + power * 0.18));
   for (let i = 0; i < partCount; i++) {
     const spreadAngle = bAngle + (Math.random() - 0.5) * 1.3;
-    const speed = (Math.random() * 3.0 + 0.8) * (power / 100 + 0.5);
+    const speed = (Math.random() * 3.5 + 0.8) * (power / 100 + 0.5);
     chalkParticles.push({
       x: cueBall.x - hDx * 10,
       y: cueBall.y - hDy * 10,
       vx: Math.cos(spreadAngle) * speed,
       vy: Math.sin(spreadAngle) * speed,
-      size: Math.random() * 2.2 + 0.6,
+      size: Math.random() * 2.5 + 0.8,
       opacity: 0.95,
       color: 'rgba(59, 130, 246, 0.85)',
     });
   }
 
-  // Sparks — scale with power, more on hard shots
-  const sparkCount = power > 40 ? Math.min(8, Math.floor((power - 40) * 0.15)) : 0;
+  // Sparks — scale with power
+  const sparkCount = power > 30 ? Math.min(12, Math.floor((power - 30) * 0.18)) : 0;
   for (let i = 0; i < sparkCount; i++) {
     const spreadAngle = bAngle + Math.PI + (Math.random() - 0.5) * 2.0;
-    const speed = (Math.random() * 5.0 + 2.0) * (power / 100 + 0.3);
+    const speed = (Math.random() * 6.0 + 2.0) * (power / 100 + 0.3);
     chalkParticles.push({
       x: cueBall.x - hDx * 10,
       y: cueBall.y - hDy * 10,
       vx: Math.cos(spreadAngle) * speed,
       vy: Math.sin(spreadAngle) * speed,
-      size: Math.random() * 1.8 + 0.8,
+      size: Math.random() * 2.0 + 1.0,
       opacity: 1.0,
       color: Math.random() > 0.3 ? 'rgba(245, 158, 11, 0.95)' : 'rgba(255, 230, 150, 0.95)',
     });
   }
 
-  // Felt ripple — larger on power shots
-  const rippleRadius = 4 + power * 0.06;
-  const rippleMax = 28 + power * 0.2;
+  // Cue strike shockwave ring — larger, brighter on power shots
+  feltRipples.push({
+    x: cueBall.x,
+    y: cueBall.y,
+    radius: 2,
+    maxRadius: 18 + power * 0.35,
+    opacity: 0.9,
+    color: 'rgba(255, 255, 255, 0.6)',
+  });
+
+  // Chalk impact ripple (blue)
   feltRipples.push({
     x: cueBall.x - hDx * 10,
     y: cueBall.y - hDy * 10,
-    radius: rippleRadius,
-    maxRadius: rippleMax,
-    opacity: 0.85,
-    color: 'rgba(59, 130, 246, 0.5)',
+    radius: 4 + power * 0.08,
+    maxRadius: 30 + power * 0.3,
+    opacity: 0.75,
+    color: 'rgba(59, 130, 246, 0.45)',
   });
 }
 

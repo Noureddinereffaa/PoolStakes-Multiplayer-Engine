@@ -818,13 +818,13 @@ export default function ArenaPage({
             opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
           />
 
-          {/* Desktop: Power slider — overlaid right side */}
+          {/* Desktop: Power slider — overlaid left side */}
           {!isMobile && (
-            <div className="absolute right-0 top-0 h-full z-20 flex items-center pointer-events-none">
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 z-20 flex items-start pointer-events-none">
               <div className="pointer-events-auto">
                 <PowerControl
-                  isVisible={isMyTurn && roomState.status === 'playing' && !isGameOver}
-                  disabled={!isMyTurn || roomState.status !== 'playing'}
+                  isVisible={true}
+                  disabled={!isMyTurn || roomState.status !== 'playing' || isGameOver}
                   onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
                   mode="desktop"
                 />

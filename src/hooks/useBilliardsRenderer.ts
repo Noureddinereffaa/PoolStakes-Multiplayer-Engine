@@ -983,43 +983,44 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         for (let i = ctx.impactFlashesRef.current.length - 1; i >= 0; i--) {
           const flash = ctx.impactFlashesRef.current[i];
           const elapsed = performance.now() - flash.startTime;
-          if (elapsed > 60) {
+          const duration = 80;
+          if (elapsed > duration) {
             ctx.impactFlashesRef.current.splice(i, 1);
             continue;
           }
-          const t = elapsed / 60;
+          const t = elapsed / duration;
           const fadeOut = 1 - t;
-          const expandRadius = 30 + t * 40;
+          const expandRadius = 20 + t * 65;
           ctx2d.save();
           ctx2d.globalCompositeOperation = 'lighter';
           // Outer warm glow
           const fGrad = ctx2d.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, expandRadius);
-          fGrad.addColorStop(0, `rgba(255, 255, 255, ${0.9 * fadeOut})`);
-          fGrad.addColorStop(0.15, `rgba(255, 240, 200, ${0.6 * fadeOut})`);
-          fGrad.addColorStop(0.4, `rgba(255, 200, 120, ${0.3 * fadeOut})`);
-          fGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+          fGrad.addColorStop(0, `rgba(255, 255, 255, ${0.95 * fadeOut})`);
+          fGrad.addColorStop(0.12, `rgba(255, 240, 200, ${0.7 * fadeOut})`);
+          fGrad.addColorStop(0.35, `rgba(255, 200, 100, ${0.35 * fadeOut})`);
+          fGrad.addColorStop(1, 'rgba(255, 200, 100, 0)');
           ctx2d.fillStyle = fGrad;
           ctx2d.beginPath();
           ctx2d.arc(flash.x, flash.y, expandRadius, 0, Math.PI * 2);
           ctx2d.fill();
           // Inner bright core
-          const coreR = expandRadius * 0.3;
+          const coreR = expandRadius * 0.25;
           const coreGrad = ctx2d.createRadialGradient(flash.x, flash.y, 0, flash.x, flash.y, coreR);
           coreGrad.addColorStop(0, `rgba(255, 255, 255, ${fadeOut})`);
-          coreGrad.addColorStop(0.5, `rgba(255, 230, 180, ${0.5 * fadeOut})`);
+          coreGrad.addColorStop(0.4, `rgba(255, 235, 190, ${0.6 * fadeOut})`);
           coreGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
           ctx2d.fillStyle = coreGrad;
           ctx2d.beginPath();
           ctx2d.arc(flash.x, flash.y, coreR, 0, Math.PI * 2);
           ctx2d.fill();
-          // Subtle crack lines radiating from collision (early in animation)
-          if (t < 0.4) {
-            const crackFade = (0.4 - t) / 0.4;
-            const crackLen = expandRadius * 0.8;
-            ctx2d.strokeStyle = `rgba(255, 240, 200, ${0.3 * crackFade})`;
-            ctx2d.lineWidth = 0.8;
-            for (let c = 0; c < 3; c++) {
-              const cAng = (c * 2.1 + 0.5) + flash.x * 0.01;
+          // Crack lines radiating from collision (early in animation)
+          if (t < 0.45) {
+            const crackFade = (0.45 - t) / 0.45;
+            const crackLen = expandRadius * 0.85;
+            ctx2d.strokeStyle = `rgba(255, 235, 190, ${0.4 * crackFade})`;
+            ctx2d.lineWidth = 1.0;
+            for (let c = 0; c < 5; c++) {
+              const cAng = (c * 1.256 + 0.3) + flash.x * 0.008;
               ctx2d.beginPath();
               ctx2d.moveTo(flash.x, flash.y);
               ctx2d.lineTo(
@@ -1581,24 +1582,23 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         ctx2d.restore();
 
         // Primary specular highlight (sharp, high-gloss, position-aware)
-        // 8-ball gets enhanced gloss (sharper, brighter)
         ctx2d.save();
         ctx2d.globalCompositeOperation = 'lighter';
-        const specSize = isBlack ? 0.22 : 0.28;
-        const specBright = isBlack ? 1.2 : 1.0;
+        const specSize = isBlack ? 0.20 : 0.25;
+        const specBright = isBlack ? 1.4 : 1.15;
         const specGrad = ctx2d.createRadialGradient(
           px + specOffX * ballRadius,
           py + specOffY * ballRadius,
           0,
-          px + (specOffX + 0.15) * ballRadius,
-          py + (specOffY + 0.15) * ballRadius,
+          px + specOffX * ballRadius * 1.1,
+          py + specOffY * ballRadius * 1.1,
           ballRadius * specSize
         );
         specGrad.addColorStop(0, `rgba(255,255,255,${1.0 * specBright})`);
-        specGrad.addColorStop(0.03, `rgba(255,255,255,${0.95 * specBright})`);
-        specGrad.addColorStop(0.08, `rgba(255,255,255,${0.40 * specBright})`);
-        specGrad.addColorStop(0.15, `rgba(255,255,255,${0.12 * specBright})`);
-        specGrad.addColorStop(0.25, 'rgba(255,255,255,0.03)');
+        specGrad.addColorStop(0.02, `rgba(255,255,255,${0.98 * specBright})`);
+        specGrad.addColorStop(0.06, `rgba(255,255,255,${0.50 * specBright})`);
+        specGrad.addColorStop(0.12, `rgba(255,255,255,${0.15 * specBright})`);
+        specGrad.addColorStop(0.22, 'rgba(255,255,255,0.04)');
         specGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx2d.beginPath();
         ctx2d.arc(px, py, ballRadius, 0, Math.PI * 2);
@@ -3780,15 +3780,15 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         // Update & render felt ripples
         const aliveRipples: RippleData[] = [];
         for (const rip of snap.feltRipples) {
-          rip.radius += 0.8;
-          rip.opacity -= 0.025;
+          rip.radius += 1.0;
+          rip.opacity -= 0.018;
           if (rip.opacity <= 0 || rip.radius >= rip.maxRadius) continue;
           ctx2d.save();
           ctx2d.globalAlpha = rip.opacity;
           ctx2d.beginPath();
           ctx2d.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
           ctx2d.strokeStyle = rip.color;
-          ctx2d.lineWidth = 1.2;
+          ctx2d.lineWidth = Math.min(2.5, 0.8 + rip.radius * 0.04);
           ctx2d.stroke();
           ctx2d.restore();
           aliveRipples.push(rip);

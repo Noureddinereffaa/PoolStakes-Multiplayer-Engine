@@ -31,18 +31,22 @@ export const PHYSICS = {
   SUB_STEPS:          60,
 
   // ── Friction ──────────────────────────────────────────
-  /** Rolling friction coefficient (exponential decay) */
-  FRICTION_ROLL:      1.5,
+  /** Rolling friction coefficient (exponential decay).
+   *  Higher than SLIDE to create Coulomb-like braking at low speeds:
+   *  balls decelerate FASTER as they roll to a stop. */
+  FRICTION_ROLL:      4.0,
   /** Sliding friction coefficient (applied when sliding) */
   FRICTION_SLIDE:     2.0,
-  /** Speed threshold for slide→roll transition */
+  /** Speed threshold for slide→roll transition.
+   *  Below this, friction blends from SLIDE up to ROLL,
+   *  giving a natural "settle" feel. */
   SLIDE_ROLL_SPEED:   1.0,
 
   // ── Collision ─────────────────────────────────────────
-  /** Coefficient of restitution: ball→ball */
-  COR_BALL:           0.92,
-  /** Coefficient of restitution: ball→cushion */
-  COR_CUSHION:        0.75,
+  /** Coefficient of restitution: ball→ball (professional: 0.95–0.97) */
+  COR_BALL:           0.95,
+  /** Coefficient of restitution: ball→cushion (professional: 0.80–0.85) */
+  COR_CUSHION:        0.80,
   /** Coulomb friction tangential multiplier */
   MU_BALL:            0.01,
   /** Cushion tangential friction */
@@ -62,7 +66,7 @@ export const PHYSICS = {
 
   // ── Stability ─────────────────────────────────────────
   /** Speed below which a ball is force-stopped */
-  STOP_THRESHOLD:     0.01,
+  STOP_THRESHOLD:     0.1,
   /** Maximum allowed ball speed (safe-guard) */
   MAX_SPEED:          4000,
 } as const;
@@ -168,11 +172,10 @@ export function getInitialBalls(): Ball[] {
 // ═══════════════════════════════════════════════════════════════
 export function powerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  // Quadratic-dominant: 60% p² + 40% linear
-  // Gentle at low end (10%→~116 units/sec → ~58u travel), full at 100% (2520 → 1260u)
-  // Each 10% power increment gives a distinct, intuitive velocity increase.
+  // p^1.5 curve: intuitive where 50% drag → ~35% max distance (~half-table)
+  // Gentle at low end (10%→~40u tap), full at 100% (2520 → 1260u = 1.58 table lengths)
   const cap = 42 * PHYSICS.SUB_STEPS;
-  const v = cap * (0.4 * p + 0.6 * p * p);
+  const v = cap * Math.pow(p, 1.5);
   return Math.min(cap, v);
 }
 

@@ -391,7 +391,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
         }
         const elapsed = Math.max(0, now - physicsStartTime);
         const strikeProgress = Math.min(1, elapsed / STRIKE_ACCEL);
-        const timeScale = Math.sin(strikeProgress * Math.PI / 2);
+        const timeScale = strikeProgress * strikeProgress * strikeProgress;
         const effectiveElapsed = elapsed * timeScale;
         const targetFrameIdx = (effectiveElapsed / 16.667) * basePlayMultiplier;
         if (physicsFrames && targetFrameIdx < physicsFrames.length) {
