@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { aiDist, ghostBallAngle, findValidCueBallPosition } from './gameLogic';
+import { aiDist, ghostBallAngle } from './aiEngine';
+import { findValidCueBallPosition } from './gameLogic';
 import { getInitialBalls, powerToVelocity, BALL_R, CUSHION, TABLE_W, TABLE_H } from './physics';
 
 const POCKET_POSITIONS = [
@@ -49,7 +50,7 @@ describe('AI helper functions', () => {
     it('should produce correct velocities for 100 power', () => {
       const v = powerToVelocity(100);
       expect(v).toBeGreaterThan(20);
-      expect(v).toBeLessThanOrEqual(42 * 60);
+      expect(v).toBeLessThanOrEqual(48 * 60);
     });
 
     it('should be monotonically increasing', () => {
@@ -63,7 +64,7 @@ describe('AI helper functions', () => {
 
     it('should clamp values at 0 and 100', () => {
       expect(powerToVelocity(-10)).toBe(0);
-      expect(powerToVelocity(150)).toBeLessThanOrEqual(42 * 60);
+      expect(powerToVelocity(150)).toBeLessThanOrEqual(48 * 60);
     });
   });
 

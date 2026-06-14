@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  findValidCueBallPosition, aiDist, ghostBallAngle,
+  findValidCueBallPosition,
 } from './gameLogic';
+import { aiDist, ghostBallAngle } from './aiEngine';
 import { getInitialBalls, BALL_R, TABLE_W, TABLE_H, CUSHION } from './physics';
 
 describe('findValidCueBallPosition', () => {

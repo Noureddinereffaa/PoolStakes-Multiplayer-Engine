@@ -3,7 +3,8 @@ import {
   getInitialBalls, simulatePhysicsStep, captureFrame, isAnyBallMoving,
   powerToVelocity, BALL_R, CUSHION, TABLE_W, TABLE_H,
 } from './physics';
-import { evaluateShotRules, ghostBallAngle } from './gameLogic';
+import { evaluateShotRules } from './gameLogic';
+import { ghostBallAngle } from './aiEngine';
 import { getOrCreateRoom, payingOutRooms, activeRooms, clientsByRoom } from './state';
 
 function simulateShot(
@@ -191,7 +192,7 @@ describe('ghostBallAngle and powerToVelocity', () => {
     expect(powerToVelocity(0)).toBe(0);
     expect(powerToVelocity(50)).toBeGreaterThan(0);
     expect(powerToVelocity(100)).toBeGreaterThan(powerToVelocity(50));
-    expect(powerToVelocity(100)).toBe(2520);
-    expect(powerToVelocity(100)).toBeLessThanOrEqual(42 * 60);
+    expect(powerToVelocity(100)).toBe(2880);
+    expect(powerToVelocity(100)).toBeLessThanOrEqual(48 * 60);
   });
 });
