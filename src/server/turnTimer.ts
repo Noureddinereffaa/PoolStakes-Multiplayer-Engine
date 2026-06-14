@@ -1,5 +1,6 @@
 import { activeRooms, animatingRoomIds, broadcastRoom, clientsByRoom, pushRoomLog, pushEventLog, cleanupRoom, pauseRoomIfInactive } from './state';
-import { triggerAiShot, findValidCueBallPosition } from './gameLogic';
+import { findValidCueBallPosition } from './gameLogic';
+import { triggerAiShot } from './aiEngine';
 import { prisma } from './db';
 
 const ROOM_CLEANUP_TICKS = 300; // 5 minutes

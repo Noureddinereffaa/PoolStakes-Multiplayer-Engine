@@ -358,7 +358,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           return;
         }
       }
-      strikeAnimRef.current = { active: false, power: 0, startTime: -1, angle: 0, duration: 0, hasStruck: false };
+      if (!strikeAnimRef.current || !strikeAnimRef.current.active) {
+        strikeAnimRef.current = { active: false, power: 0, startTime: -1, angle: 0, duration: 0, hasStruck: false };
+      }
       sinkingBallsRef.current = [];
       setAnimPhase('animating');
       let lastCheckedIntegerIdx = -1;
@@ -382,6 +384,9 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
           } else if (!strikeAnimRef.current.hasStruck) {
             strikeAnimRef.current.hasStruck = true;
             poolAudio.playCueHit(strikeAnimRef.current.power); haptic(20);
+            impactShakeRef.current = Math.min(14.0, 2.0 + (strikeAnimRef.current.power / 100) * 12.0);
+            const cb = animatedBallsRef.current.find(b => b.id === 0);
+            triggerShootParticles(strikeAnimRef.current.power, cb, strikeAnimRef.current.angle, chalkParticlesRef.current, feltRipplesRef.current);
             isBreakShotRef.current = roomStateRef.current.balls.filter(b => b.id !== 0 && b.isPocketed).length === 0;
             if (isBreakShotRef.current) {
               setHudNotification('BREAK!');
@@ -830,9 +835,6 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
     // Shot Stick Snap Animation: 80ms anticipation delay before hit for visual impact
     strikeAnimRef.current = { active: true, power, startTime: performance.now(), angle, duration: 80 };
     setAnimPhase('animating');
-    const cueBall = animatedBallsRef.current.find(b => b.id === 0);
-    triggerShootParticles(power, cueBall, angle, chalkParticlesRef.current, feltRipplesRef.current);
-    impactShakeRef.current = Math.min(14.0, 2.0 + (power / 100) * 12.0);
     if (isMobile.current) {
       poolAudio.playCueHit(power);
       haptic(Math.min(80, Math.floor(10 + power * 0.7)));

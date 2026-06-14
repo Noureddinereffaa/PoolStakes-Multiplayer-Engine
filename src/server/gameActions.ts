@@ -10,7 +10,8 @@ import {
   registerRoomTimeout, getPublicRooms, withRoomLock, roomIndex, ensureRoomLoaded,
   safeSend
 } from './state';
-import { evaluateShotRules, triggerAiShot, concludeMatch } from './gameLogic';
+import { evaluateShotRules, concludeMatch } from './gameLogic';
+import { triggerAiShot } from './aiEngine';
 import { sendPushNotification } from './push';
 import { ensureLaravelUser, createPlayerFromUser, ensureMinimumBalance, getAiUser, createAiPlayer, lockRoomEscrow } from './room';
 import { addToQueue, removeFromQueue, tryMatch, isInQueue } from './services/matchingQueue';
@@ -362,6 +363,29 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
     if (room.status === 'playing' && room.currentTurn === 'ai-bot') triggerAiShot(room);
   }, animationDurationMs);
   registerRoomTimeout(roomId, timer);
+}
+
+// ── Call Pocket ──────────────────────────────────────────────
+export function handleCallPocket(ws: WebSocket, msg: Extract<SocketMessage, { type: 'call_pocket' }>): void {
+  const mapping = playerRoomMap.get(ws);
+  if (!mapping) return;
+  const { roomId, playerId } = mapping;
+  const room = activeRooms.get(roomId);
+  if (!room || room.status !== 'playing') return;
+  if (room.currentTurn !== playerId) {
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Not your turn!' }));
+    return;
+  }
+  
+  if (msg.pocketId < 0 || msg.pocketId > 5) {
+    safeSend(ws, JSON.stringify({ type: 'error', message: 'Invalid pocket ID.' }));
+    return;
+  }
+  
+  room.calledPocketId = msg.pocketId;
+  const shooterName = room.players.find(p => p.id === playerId)?.username || 'Unknown';
+  pushRoomLog(room, `${shooterName} called a pocket for the 8-Ball!`);
+  broadcastRoom(roomId);
 }
 
 // ── Reset Cue Ball ───────────────────────────────────────────

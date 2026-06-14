@@ -16,6 +16,7 @@ import {
   handleJoinRandom,
   handleCancelWaiting,
   handleAuthenticate,
+  handleCallPocket,
 } from './gameActions';
 import {
   isAiPlayer,
@@ -92,6 +93,9 @@ export async function routeWsMessage(ws: WebSocket, msg: SocketMessage): Promise
       break;
     case 'shoot':
       await handleShoot(ws, msg);
+      break;
+    case 'call_pocket':
+      handleCallPocket(ws, msg);
       break;
     case 'reset_cue_ball':
       handleResetCueBall(ws, msg);

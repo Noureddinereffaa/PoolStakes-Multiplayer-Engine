@@ -1,7 +1,8 @@
 import { WebSocket } from 'ws';
 import { Ball, Player, Difficulty } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, breakPowerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
-import { evaluateShotRules, triggerAiShot, findValidCueBallPosition } from './gameLogic';
+import { evaluateShotRules, findValidCueBallPosition } from './gameLogic';
+import { triggerAiShot } from './aiEngine';
 import { pushEventLog } from './state';
 
 // ── Types ──────────────────────────────────────────────

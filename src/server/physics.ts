@@ -29,18 +29,16 @@ export const PHYSICS = {
   FIXED_DT:           1 / 120,
   /** Sub-steps executed per call to simulatePhysicsStep */
   SUB_STEPS:          60,
+  /** Base Gravity for friction calculation */
+  GRAVITY:            980,
 
   // ── Friction ──────────────────────────────────────────
-  /** Rolling friction coefficient (exponential decay).
-   *  Higher than SLIDE to create Coulomb-like braking at low speeds:
-   *  balls decelerate FASTER as they roll to a stop. */
-  FRICTION_ROLL:      4.0,
-  /** Sliding friction coefficient (applied when sliding) */
-  FRICTION_SLIDE:     2.0,
-  /** Speed threshold for slide→roll transition.
-   *  Below this, friction blends from SLIDE up to ROLL,
-   *  giving a natural "settle" feel. */
-  SLIDE_ROLL_SPEED:   1.0,
+  /** Sliding friction coefficient */
+  MU_SLIDE:           0.20,
+  /** Rolling friction coefficient */
+  MU_ROLL:            0.015,
+  /** Speed threshold where slide transitions to roll */
+  SLIDE_ROLL_SPEED:   15.0,
 
   // ── Collision ─────────────────────────────────────────
   /** Coefficient of restitution: ball→ball (professional: 0.95–0.97) */
@@ -48,9 +46,9 @@ export const PHYSICS = {
   /** Coefficient of restitution: ball→cushion (professional: 0.80–0.85) */
   COR_CUSHION:        0.80,
   /** Coulomb friction tangential multiplier */
-  MU_BALL:            0.01,
+  MU_BALL:            0.015,
   /** Cushion tangential friction */
-  MU_CUSHION:         0.10,
+  MU_CUSHION:         0.15,
   /** Solver iterations for positional correction */
   SOLVER_ITERS:       10,
 
@@ -66,7 +64,7 @@ export const PHYSICS = {
 
   // ── Stability ─────────────────────────────────────────
   /** Speed below which a ball is force-stopped */
-  STOP_THRESHOLD:     0.1,
+  STOP_THRESHOLD:     0.02,
   /** Maximum allowed ball speed (safe-guard) */
   MAX_SPEED:          4000,
 } as const;
@@ -75,7 +73,7 @@ export const PHYSICS = {
 //  POCKETS
 // ═══════════════════════════════════════════════════════════════
 const POCKET_RADII = [24, 23, 24, 24, 23, 24];
-const POCKET_POS = [
+export const POCKET_POS = [
   { x: CUSHION + 4,           y: CUSHION + 4           },
   { x: TABLE_W / 2,           y: CUSHION + 2           },
   { x: TABLE_W - CUSHION - 4, y: CUSHION + 4           },
@@ -117,7 +115,7 @@ function wake(b: Ball): void {
 function checkSleep(b: Ball): void {
   if (b.isPocketed) return;
   const spdSq = b.vx * b.vx + b.vy * b.vy;
-  if (spdSq <= PHYSICS.STOP_THRESHOLD * PHYSICS.STOP_THRESHOLD) {
+  if (spdSq <= PHYSICS.STOP_THRESHOLD * PHYSICS.STOP_THRESHOLD && Math.abs(b.spinX || 0) < 0.01 && Math.abs(b.spinY || 0) < 0.01) {
     b.vx = 0;
     b.vy = 0;
     b.spinX = 0;
@@ -172,16 +170,15 @@ export function getInitialBalls(): Ball[] {
 // ═══════════════════════════════════════════════════════════════
 export function powerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  // p^1.5 curve: intuitive where 50% drag → ~35% max distance (~half-table)
-  // Gentle at low end (10%→~40u tap), full at 100% (2520 → 1260u = 1.58 table lengths)
-  const cap = 42 * PHYSICS.SUB_STEPS;
-  const v = cap * Math.pow(p, 1.5);
+  // p^1.8 curve: extreme precision on low power, very explosive max power
+  const cap = 48 * PHYSICS.SUB_STEPS;
+  const v = cap * Math.pow(p, 1.8);
   return Math.min(cap, v);
 }
 
 export function breakPowerToVelocity(powerPercent: number): number {
   const p = Math.max(0, Math.min(100, powerPercent)) / 100;
-  const multiplier = 0.5 + p;
+  const multiplier = 0.5 + p; // Bonus multiplier for break shots
   return powerToVelocity(powerPercent) * multiplier;
 }
 
@@ -198,20 +195,31 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
     const spd = Math.sqrt(spdSq);
 
     // ── Hard stop ──────────────────────────────────────
-    if (spd <= cfg.STOP_THRESHOLD) {
+    if (spd <= cfg.STOP_THRESHOLD && Math.abs(b.spinX || 0) < 0.01 && Math.abs(b.spinY || 0) < 0.01) {
       b.vx = 0; b.vy = 0;
       b.spinX = 0; b.spinY = 0;
       b.sleeping = true;
       continue;
     }
 
-    // ── Exponential friction decay ─────────────────────
-    // Blend between rolling and sliding friction based on speed
-    const t = Math.min(1, spd / cfg.SLIDE_ROLL_SPEED);
-    const frictionCoeff = cfg.FRICTION_ROLL + (cfg.FRICTION_SLIDE - cfg.FRICTION_ROLL) * t;
-    const decay = Math.exp(-frictionCoeff * dt);
-    b.vx *= decay;
-    b.vy *= decay;
+    // ── Linear Coulomb Friction (Realistic Settle) ──────
+    // Blend from sliding to rolling friction
+    let mu = cfg.MU_ROLL;
+    if (spd > cfg.SLIDE_ROLL_SPEED) {
+      const t = Math.min(1, (spd - cfg.SLIDE_ROLL_SPEED) / 100.0);
+      mu = cfg.MU_ROLL + (cfg.MU_SLIDE - cfg.MU_ROLL) * t;
+    }
+    const deceleration = mu * cfg.GRAVITY;
+    const speedDrop = deceleration * dt;
+
+    if (spd <= speedDrop) {
+      b.vx = 0;
+      b.vy = 0;
+    } else {
+      const ratio = (spd - speedDrop) / spd;
+      b.vx *= ratio;
+      b.vy *= ratio;
+    }
 
     // ── Cue ball spin effects ──────────────────────────
     if (b.id === 0 && spd > 0.05) {
@@ -365,6 +373,7 @@ function detectPockets(balls: Ball[]): void {
       const dy = b.y - p.y;
       if (dx * dx + dy * dy >= r * r) continue;
       b.isPocketed = true;
+      b.pocketedAtId = pi;  // record which pocket
       b.vx = 0; b.vy = 0;
       b.spinX = 0; b.spinY = 0;
       break;
@@ -547,7 +556,7 @@ export function simulateOneFrame(balls: Ball[], tracker?: { firstContactBallId: 
 // ═══════════════════════════════════════════════════════════════
 export function isAnyBallMoving(balls: Ball[]): boolean {
   const threshSq = PHYSICS.STOP_THRESHOLD * PHYSICS.STOP_THRESHOLD;
-  return balls.some(b => !b.isPocketed && !b.sleeping && (b.vx * b.vx + b.vy * b.vy > threshSq));
+  return balls.some(b => !b.isPocketed && !b.sleeping && (b.vx * b.vx + b.vy * b.vy > threshSq || Math.abs(b.spinX || 0) >= 0.01 || Math.abs(b.spinY || 0) >= 0.01));
 }
 
 export function wakeAllForShot(balls: Ball[]): void {

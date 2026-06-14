@@ -15,6 +15,7 @@ export interface Ball {
   vy: number;
   radius: number;
   isPocketed: boolean;
+  pocketedAtId?: number; // 0-5
   sleeping?: boolean; // true = velocity is 0, skip all physics (sleep state)
   type: 'cue' | 'black' | 'solid' | 'stripe';
   color: string;
@@ -65,6 +66,8 @@ export interface RoomState {
   lastActiveAt?: number;
   /** Indicates this room was restored from DB snapshot (lazy loaded) */
   isRestored?: boolean;
+  /** The ID of the pocket the player called for the 8-ball (0-5) */
+  calledPocketId?: number | null;
 }
 
 export interface GameConfig {
@@ -85,6 +88,7 @@ export type SocketMessage =
   | { type: 'leave' }
   | { type: 'preview_aim'; angle: number; power: number; spinX?: number; spinY?: number }
   | { type: 'shoot'; angle: number; power: number; spinX?: number; spinY?: number }
+  | { type: 'call_pocket'; pocketId: number }
   | { type: 'reset_cue_ball'; x: number; y: number }
   | { type: 'chat'; message: string }
   | { type: 'set_ai_opponent'; difficulty?: Difficulty }

@@ -40,6 +40,7 @@ export function useBilliardsSocket({
   const [physicsFrames, setPhysicsFrames] = useState<Array<Array<{ id: number; x: number; y: number; isPocketed: boolean }>> | null>(null);
   const [physicsTotalSteps, setPhysicsTotalSteps] = useState<number | null>(null);
   const [opponentAim, setOpponentAim] = useState<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
+  const lastLocalShotRef = useRef<number>(0);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [connectionGrade, setConnectionGrade] = useState<string>('excellent');
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -70,7 +71,7 @@ export function useBilliardsSocket({
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pongTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingShotRef = useRef<{ angle: number; power: number } | null>(null);
+  const pendingShotRef = useRef<{ angle: number; power: number; spinX?: number; spinY?: number } | null>(null);
   const roomStateRef = useRef<RoomState | null>(null);
   roomStateRef.current = roomState;
   const wasInActiveGameRef = useRef(false);
@@ -175,6 +176,10 @@ export function useBilliardsSocket({
             break;
           case 'physics_frames':
             if (mountedRef.current) {
+              // Ignore server frames if we recently predicted them locally (Client-Side Prediction)
+              if (Date.now() - lastLocalShotRef.current < 2000) {
+                break;
+              }
               setOpponentAim(null);
               setPhysicsFrames(
                 (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
@@ -526,15 +531,21 @@ export function useBilliardsSocket({
   }, []);
 
   const handleShoot = useCallback((angle: number, power: number, spinX?: number, spinY?: number) => {
-    const sent = sendOrQueue({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 });
-    if (!sent && roomStateRef.current) {
-      pendingShotRef.current = { angle, power };
+    sendOrQueue({ type: 'shoot', angle, power, spinX: spinX || 0, spinY: spinY || 0 });
+    // Client-Side Prediction: ALWAYS simulate locally instantly (0ms latency)
+    if (roomStateRef.current) {
+      lastLocalShotRef.current = Date.now();
+      pendingShotRef.current = { angle, power, spinX: spinX || 0, spinY: spinY || 0 };
       setPendingShotTick((t) => t + 1);
     }
   }, []);
 
   const handleResetCueBall = useCallback((x: number, y: number) => {
     sendOrQueue({ type: 'reset_cue_ball', x, y });
+  }, []);
+
+  const handleCallPocket = useCallback((pocketId: number) => {
+    sendOrQueue({ type: 'call_pocket', pocketId });
   }, []);
 
   const handleJoinAI = useCallback((difficulty: Difficulty = 'medium') => {
@@ -642,6 +653,8 @@ export function useBilliardsSocket({
 
     const angle = pending.angle;
     const power = pending.power;
+    const spinX = pending.spinX || 0;
+    const spinY = pending.spinY || 0;
     const balls: Ball[] = roomState.balls.map((b: any) => ({ ...b, vx: 0, vy: 0, spinX: 0, spinY: 0, sleeping: false }));
     const cueBall = balls.find(b => b.id === 0);
     if (!cueBall) return;
@@ -649,6 +662,8 @@ export function useBilliardsSocket({
     const forceMag = powerToVelocity(power);
     cueBall.vx = Math.cos(angle) * forceMag;
     cueBall.vy = Math.sin(angle) * forceMag;
+    cueBall.spinX = spinX;
+    cueBall.spinY = spinY;
 
     const mockFrames: Array<{ id: number; x: number; y: number; isPocketed: boolean }[]> = [];
     mockFrames.push(captureFrame(balls));
@@ -664,19 +679,21 @@ export function useBilliardsSocket({
     if (mountedRef.current) {
       setPhysicsFrames(mockFrames);
 
-      const nextTurn = roomState.currentTurn === roomState.players[0]?.id
-        ? (roomState.players[1]?.id || roomState.players[0].id)
-        : roomState.players[0]?.id;
+      if (isOffline) {
+        const nextTurn = roomState.currentTurn === roomState.players[0]?.id
+          ? (roomState.players[1]?.id || roomState.players[0].id)
+          : roomState.players[0]?.id;
 
-      setRoomState((prev: any) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          currentTurn: nextTurn,
-          balls: balls.map((b: Ball) => ({ ...b, vx: 0, vy: 0 })),
-          log: [...prev.log, `[Offline] Shot fired with ${power}% power.`]
-        };
-      });
+        setRoomState((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            currentTurn: nextTurn,
+            balls: balls.map((b: Ball) => ({ ...b, vx: 0, vy: 0 })),
+            log: [...prev.log, `[Offline] Shot fired with ${power}% power.`]
+          };
+        });
+      }
     }
   }, [roomState, pendingShotTick]);
 
@@ -698,6 +715,7 @@ export function useBilliardsSocket({
     handlePreviewAim,
     handleShoot,
     handleResetCueBall,
+    handleCallPocket,
     handleJoinAI,
     handleSendChat,
     handleRematch,

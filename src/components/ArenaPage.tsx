@@ -32,6 +32,7 @@ interface ArenaPageProps {
   physicsTotalSteps: number | null;
   handleShoot: (angle: number, power: number, spinX?: number, spinY?: number) => void;
   handleResetCueBall: (x: number, y: number) => void;
+  handleCallPocket: (pocketId: number) => void;
   opponentAim: { angle: number; power: number; spinX?: number; spinY?: number } | null | undefined;
   handlePreviewAim: (angle: number, power: number, spinX?: number, spinY?: number) => void;
   handleJoinAI: (difficulty?: Difficulty) => void;
@@ -419,7 +420,7 @@ function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage
 
 export default function ArenaPage({
   roomState, userSession, language, onQuitRoom, myPlayerObj, isMyTurn,
-  physicsFrames, setPhysicsFrames, physicsTotalSteps, handleShoot, handleResetCueBall, opponentAim,
+  physicsFrames, setPhysicsFrames, physicsTotalSteps, handleShoot, handleResetCueBall, handleCallPocket, opponentAim,
   handlePreviewAim, handleJoinAI, handleRematch, chatMessage, setChatMessage, handleSendChat,
   connectionGrade, isOffline
 }: ArenaPageProps) {
@@ -441,6 +442,8 @@ export default function ArenaPage({
 
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const [headerVisible, setHeaderVisible] = useState(true);
+  const [showCallPocket, setShowCallPocket] = useState(false);
+  const [calledPocketId, setCalledPocketId] = useState<number | null>(null);
 
   const toggleHeader = useCallback(() => setHeaderVisible(v => !v), []);
 
@@ -605,6 +608,11 @@ export default function ArenaPage({
     return (opponentSide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
   }).length : 0;
 
+  // Show Call Pocket dialog when it's my turn and 8-ball is my next target
+  const myGroupCleared = mySide ? roomState.balls.filter(b => !b.isPocketed && b.id !== 0 && b.id !== 8 && (mySide === 'solids' ? b.type === 'solid' : b.type === 'stripe')).length === 0 : false;
+  const eightBallAlive = !roomState.balls.find(b => b.id === 8)?.isPocketed;
+  const shouldCallPocket = isMyTurn && roomState.status === 'playing' && myGroupCleared && eightBallAlive && calledPocketId === null;
+
   useEffect(() => {
     if (isGameOver) {
       if (isWinner) {
@@ -644,6 +652,21 @@ export default function ArenaPage({
       }
     }
   }, [roomState?.log]);
+
+  // Reset calledPocketId when turn changes or game status changes
+  useEffect(() => {
+    if (!isMyTurn || roomState?.status !== 'playing') {
+      setCalledPocketId(null);
+      setShowCallPocket(false);
+    }
+  }, [isMyTurn, roomState?.status]);
+
+  // Auto-show call pocket dialog when needed
+  useEffect(() => {
+    if (shouldCallPocket && !showCallPocket) {
+      setShowCallPocket(true);
+    }
+  }, [shouldCallPocket, showCallPocket]);
 
   // Volume sync
   useEffect(() => {
@@ -873,6 +896,63 @@ export default function ArenaPage({
                   ⚠ {foulNotification}
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* ── CALL POCKET DIALOG ──────────────────────────── */}
+          {(showCallPocket || shouldCallPocket) && isMyTurn && roomState.status === 'playing' && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="relative p-5 rounded-2xl border border-amber-500/40 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_60px_rgba(245,158,11,0.2)] max-w-xs w-full mx-4 text-center">
+                <div className="text-3xl mb-1">🎱</div>
+                <div className="text-sm font-black font-mono text-amber-400 mb-1 tracking-wider">
+                  {language === 'ar' ? 'حدد الحفرة!' : 'CALL YOUR POCKET!'}
+                </div>
+                <div className="text-[10px] font-mono text-amber-600 mb-4">
+                  {language === 'ar' ? 'أين ستدخل الكرة الثامنة؟' : 'Where will the 8-ball drop?'}
+                </div>
+                {/* Table pocket layout — 2 rows of 3 */}
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  {[
+                    { id: 0, label: language === 'ar' ? 'يسار أعلى' : 'Top Left' },
+                    { id: 1, label: language === 'ar' ? 'وسط أعلى' : 'Top Center' },
+                    { id: 2, label: language === 'ar' ? 'يمين أعلى' : 'Top Right' },
+                    { id: 3, label: language === 'ar' ? 'يسار أسفل' : 'Bot Left' },
+                    { id: 4, label: language === 'ar' ? 'وسط أسفل' : 'Bot Center' },
+                    { id: 5, label: language === 'ar' ? 'يمين أسفل' : 'Bot Right' },
+                  ].map(pocket => (
+                    <button
+                      key={pocket.id}
+                      onClick={() => {
+                        setCalledPocketId(pocket.id);
+                        setShowCallPocket(false);
+                        handleCallPocket(pocket.id);
+                      }}
+                      className="flex flex-col items-center gap-1 py-3 px-2 rounded-xl border border-amber-700/40 bg-black/50 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all active:scale-95"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-gray-800 to-black border-2 border-amber-600/50 flex items-center justify-center shadow-inner text-xs font-black text-amber-500">
+                        {pocket.id + 1}
+                      </div>
+                      <span className="text-[8px] font-mono text-amber-600 leading-tight">{pocket.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[8px] font-mono text-amber-800">
+                  {language === 'ar' ? '⚠ اختيار الحفرة الخاطئة يعني الخسارة' : '⚠ Wrong pocket = instant loss'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Called pocket reminder badge */}
+          {calledPocketId !== null && isMyTurn && roomState.status === 'playing' && eightBallAlive && (
+            <div className="absolute top-2 right-2 z-10 pointer-events-auto">
+              <button
+                onClick={() => { setCalledPocketId(null); setShowCallPocket(true); }}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 hover:bg-amber-500/30 transition"
+              >
+                <span className="text-[8px] font-mono text-amber-400">🎱 Pocket #{calledPocketId + 1}</span>
+                <span className="text-[7px] text-amber-600">{language === 'ar' ? '(تغيير)' : '(change)'}</span>
+              </button>
             </div>
           )}
 

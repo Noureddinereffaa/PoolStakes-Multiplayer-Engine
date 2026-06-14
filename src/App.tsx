@@ -180,6 +180,7 @@ export default function App() {
     handlePreviewAim,
     handleShoot,
     handleResetCueBall,
+    handleCallPocket,
     handleJoinAI,
     handleSendChat,
     handleRematch,
@@ -701,6 +702,7 @@ export default function App() {
                   physicsTotalSteps={physicsTotalSteps}
                   handleShoot={handleShoot}
                   handleResetCueBall={handleResetCueBall}
+                  handleCallPocket={handleCallPocket}
                   opponentAim={opponentAim}
                   handlePreviewAim={handlePreviewAim}
                   handleJoinAI={handleJoinAI}
