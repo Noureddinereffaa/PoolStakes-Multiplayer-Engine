@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { Ball, Player, Difficulty } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, breakPowerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
+import { allocateShotId, pushEvent } from './physicsTelemetry';
 import { evaluateShotRules, findValidCueBallPosition } from './gameLogic';
 import { triggerAiShot } from './aiEngine';
 import { pushEventLog } from './state';
@@ -150,6 +151,9 @@ export async function handleAiShoot(ws: WebSocket, msg: { angle: number; power: 
   const clampedAngle = ((msg.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   const clampedPower = Math.max(0, Math.min(100, msg.power));
 
+  const shotId = allocateShotId();
+  pushEvent('shot_initiated', { roomId: mapping.roomId, playerId: mapping.playerId, power: clampedPower, angle: clampedAngle, spinX: msg.spinX, spinY: msg.spinY, isBreakShot, tableBallsLeft: match.balls.filter(b => b.id !== 0 && !b.isPocketed).length, source: 'aiMatchManager' }, shotId);
+
   match.log.push(isBreakShot ? `💥 ${shooterName} executes the BREAK SHOT!` : `${shooterName} shoots (Power: ${Math.round(clampedPower)}%)`);
 
   wakeAllForShot(match.balls);
@@ -167,7 +171,7 @@ export async function handleAiShoot(ws: WebSocket, msg: { angle: number; power: 
   const maxSteps = 2400;
   const pocketed: number[] = [];
   let cuePocketed = false;
-  const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
+  const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false, shotId };
   let lastCapture = match.balls.map(b => ({ x: b.x, y: b.y }));
   let framesSinceCapture = 0;
 
@@ -197,6 +201,14 @@ export async function handleAiShoot(ws: WebSocket, msg: { angle: number; power: 
   }
   frames.push(captureFrame(match.balls));
   forceSettleBalls(match.balls);
+
+  for (const b of match.balls) {
+    if (!b.isPocketed) {
+      pushEvent('ball_settled', { ballId: b.id, x: b.x, y: b.y, sleeping: b.sleeping }, shotId);
+    }
+  }
+
+  pushEvent('shot_complete', { roomId: mapping.roomId, playerId: mapping.playerId, totalSteps: iterations, framesCount: frames.length, ballsPocketed: pocketed, cueBallPocketed: cuePocketed, firstContactBallId: contactTracker.firstContactBallId, source: 'aiMatchManager' }, shotId);
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
   const totalSteps = iterations;

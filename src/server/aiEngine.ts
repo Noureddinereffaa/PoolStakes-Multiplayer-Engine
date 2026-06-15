@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { RoomState, Ball } from '../types';
 import { simulatePhysicsStep, powerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
+import { allocateShotId, pushEvent } from './physicsTelemetry';
 import { animatingRoomIds, clientsByRoom, broadcastRoom, pushRoomLog } from './state';
 import { evaluateShotRules } from './gameLogic';
 
@@ -503,6 +504,9 @@ export async function triggerAiShot(room: RoomState, opts?: {
     const objectBallsLeft = room.balls.filter(b => b.id !== 0 && !b.isPocketed).length;
     const isBreakShot = objectBallsLeft === 15;
 
+    const shotId = allocateShotId();
+    pushEvent('shot_initiated', { roomId: room.roomId, playerId: 'ai-bot', power: bestPower, angle: finalAngle, spinX: 0, spinY: 0, isBreakShot, tableBallsLeft: objectBallsLeft, source: 'aiEngine' }, shotId);
+
     wakeAllForShot(room.balls);
 
     const aiForce = powerToVelocity(bestPower);
@@ -516,7 +520,7 @@ export async function triggerAiShot(room: RoomState, opts?: {
     const maxStepsLimit = 1200;
     const ballsPocketed: number[] = [];
     let cueBallPocketed = false;
-    const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
+    const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false, shotId };
 
     resetYieldTimer();
     while (iterations < maxStepsLimit) {
@@ -539,6 +543,14 @@ export async function triggerAiShot(room: RoomState, opts?: {
       if (!isAnyBallMoving(room.balls)) break;
     }
     forceSettleBalls(room.balls);
+
+    for (const b of room.balls) {
+      if (!b.isPocketed) {
+        pushEvent('ball_settled', { ballId: b.id, x: b.x, y: b.y, sleeping: b.sleeping }, shotId);
+      }
+    }
+
+    pushEvent('shot_complete', { roomId: room.roomId, playerId: 'ai-bot', totalSteps: iterations, framesCount: frames.length, ballsPocketed, cueBallPocketed, firstContactBallId: contactTracker.firstContactBallId, source: 'aiEngine' }, shotId);
 
     const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
     for (const client of wssList) {

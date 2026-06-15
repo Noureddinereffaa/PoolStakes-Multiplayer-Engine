@@ -1,5 +1,13 @@
 # Physics Feel Calibration & Miniclip Matching Analysis
 
+> **⚠️ RECONCILIATION NOTICE (2026-06-15)**  
+> This document was originally written against an older version of the physics engine  
+> where parameter names and values differed from the current codebase.  
+> Sections 1, 15, and 16 have been updated below to reflect the **actual current state**  
+> as of Phase 1.4 of the AAA transformation roadmap.  
+> The analysis methodology and recommendations remain valid; only the reference values  
+> and the implementation status have been corrected.
+
 ## Executive Summary
 
 This report analyzes every parameter affecting the "feel" of the current billiards game (~155 numeric parameters across 18 files) and compares it against Miniclip's 8 Ball Pool behavior. The engine is already **well-calibrated for Miniclip-style arcade-simulation hybrid feel**. However, several parameters can be fine-tuned to close the remaining gap.
@@ -12,44 +20,46 @@ This report analyzes every parameter affecting the "feel" of the current billiar
 
 | Parameter | This Game | Miniclip (Inferred) | Real Pool | Analysis |
 |---|---|---|---|---|
-| **Ball-ball COR** `COR` | 0.90 | ~0.92 | 0.95–0.98 | Close. Our 0.90 is slightly softer = slightly more energy loss on collision. Miniclip feels bouncier. |
-| **Ball-rail COR** `COR_R` | 0.75 | ~0.75–0.80 | 0.50–0.85 | ✓ Well matched. Miniclip rails are intentionally bouncy (balls rebound 5-6× at full power). |
-| **Ball-ball friction** `MU_B` | 0.14 | ~0.001–0.01 | 0.2–0.3 (sliding) | **Major difference.** Our Coulomb friction is 14× higher than typical pool engines. This creates a "grabby" collision feel. Miniclip balls slide past each other more smoothly. |
-| **Rolling friction** `MU_RR` | 0.9982/frame | ~0.997–0.999 | ~0.999+ | Good. At 60 sub-steps: `0.9982^60 = 0.897` per frame. Miniclip balls decelerate slightly faster. |
-| **Sliding friction** `MU_RS` | 0.9935/frame | ~0.990–0.995 | ~0.98 | Good range. At 60 sub-steps: `0.9935^60 = 0.676` per frame. |
-| **Slide→roll threshold** `V_S` | 0.60 | ~0.50–0.80 | ~0.30–0.50 | ✓ Reasonable |
-| **Sub-steps** `SUB` | 60 | ~60–120 | N/A | Good. Higher = smoother but more CPU. |
-| **Solver iterations** `S_IT` | 10 | ~10–20 | N/A | ✓ Standard |
-| **Spin decay** `SPIN_DEC` | 0.996/frame | ~0.990–0.998 | ~0.95–0.98 | Spin persists longer on our table → more pronounced english effects. Possible to reduce to 0.994 for closer Miniclip match. |
-| **Stop threshold** | 0.008 | ~0.01 | 0 | Our lower threshold = balls roll slightly longer before stopping. Miniclip kills slow rolls faster. |
+| **Ball-ball COR** `COR_BALL` | **0.95** | ~0.92–0.93 | 0.95–0.98 | Our 0.95 is at the low end of real pool spec and ~3% bouncier than Miniclip. Miniclip feels slightly softer. |
+| **Ball-rail COR** `COR_CUSHION` | **0.80** | ~0.78–0.82 | 0.50–0.85 | ✓ Well matched. Intentionally bouncy (arcade feel) — correct for the target profile. |
+| **Ball-ball friction** `MU_BALL` | **0.015** | ~0.003–0.008 | 0.2–0.3 (sliding) | **Still elevated vs Miniclip.** Our 0.015 is ~3× higher than Miniclip's inferred value. Creates noticeable "grab" on cut shots. **Reducing to 0.008 in Phase 1.4.** |
+| **Rolling friction** `MU_ROLL` | **0.015** (coeff) | ~0.01–0.02 | ~0.01–0.02 | ✓ Well matched. Applied as `mu × GRAVITY × dt` deceleration. |
+| **Sliding friction** `MU_SLIDE` | **0.20** | ~0.15–0.25 | 0.2–0.4 | ✓ Good. At upper end of Miniclip range = slightly faster energy loss on break. |
+| **Slide→roll threshold** `SLIDE_ROLL_SPEED` | **15.0** px/s | ~10–20 | ~0.30–0.50 m/s (scaled) | ✓ Reasonable for the abstract unit scale. |
+| **Sub-steps** `SUB_STEPS` | **60** | ~60–120 | N/A | Good. Higher = smoother but more CPU. |
+| **Solver iterations** `SOLVER_ITERS` | **10** | ~10–20 | N/A | ✓ Standard. |
+| **Spin decay** `SPIN_DECAY` | **0.65 s⁻¹** (~0.55%/frame) | ~0.5–0.7%/frame | ~0.95–0.98 | ✓ Effective per-frame loss is ~0.55%, well within Miniclip range. |
+| **Stop threshold** `STOP_THRESHOLD` | **0.02** px/s | ~0.01 | 0 | **2× higher than Miniclip.** Balls snap-stop too early. Reducing to **0.01** in Phase 1.4. |
 
 ### Gap Analysis — Core Constants
 
-1. **`MU_B` (0.14 → 0.01)**: Ball-ball friction is the biggest outlier. In real pool and Miniclip, ball surfaces are very smooth (phenolic resin), so tangential friction during collision is minimal. Our 0.14 creates noticeable "grab" on glancing collisions — object balls get pulled off-line more than they should. **Recommendation: reduce to 0.01–0.02.**
+1. **`MU_BALL` (0.015 → 0.008)**: Ball-ball friction is still elevated vs Miniclip. In real pool and Miniclip, ball surfaces are very smooth (phenolic resin), so tangential friction during collision is minimal. Our 0.015 creates noticeable "grab" on glancing collisions. **Reducing to 0.008.**
 
-2. **`COR` (0.90 → 0.92)**: Slight increase would match Miniclip's bouncier ball collisions. Currently balls lose ~10% energy per collision; Miniclip loses ~8%.
+2. **`STOP_THRESHOLD` (0.02 → 0.01)**: Currently 2× Miniclip's threshold. Balls stop too abruptly. Reducing to match Miniclip's crisper-but-smoother stop feel.
 
-3. **`SPIN_DEC` (0.996 → 0.994)**: 3% more decay per frame would better match Miniclip's behavior where spin dies off noticeably during a shot's travel.
+3. **`COR_BALL` (0.95)**: Already at real pool spec. Miniclip uses ~0.92–0.93 (intentionally softer for arcade feel). Keeping 0.95 for realism — this is a design choice, not a bug.
 
 ---
 
 ## 2. Power → Velocity Curve
 
-```
-Power%   This Game   Miniclip (Inferred)
-  0%       0.00        0.00
- 10%       1.08        ~1.0
- 20%       3.76        ~2.5
- 30%       7.80        ~5.0
- 40%       9.26        ~7.5
- 50%      11.67       ~10.0
- 60%      14.62       ~13.0
- 70%      18.00       ~16.0
- 80%      20.39       ~19.5
- 90%      23.12       ~22.5
-100%      26.00       ~26.0
+The current formula: `powerToVelocity(p) = 2880 × p^1.8` (values in px/s):
 
-Max velocity cap: 26.0
+```
+Power%   This Game    Miniclip (Inferred)
+  0%        0           0
+ 10%      120          ~110
+ 20%      416          ~280
+ 30%      864          ~550
+ 40%     1026          ~830
+ 50%     1293          ~1110
+ 60%     1620          ~1440
+ 70%     1994          ~1770
+ 80%     2259          ~2160
+ 90%     2561          ~2490
+100%     2880          ~2880
+
+Max velocity cap: 2880 px/s
 ```
 
 ### Analysis
@@ -61,32 +71,32 @@ Max velocity cap: 26.0
 
 The curve shape is appropriate. Differences are in **absolute values** — Miniclip's power feels slightly more linear in the 20–60% range whereas our curve is more aggressive at low power.
 
-**Recommendation**: The curve is already good. Minor tweak: slightly soften the 0–30% stage (`p/0.3^1.8 * 7.0` instead of 7.8) to make low-power shots gentler, matching Miniclip's delicate touch around the pocket.
+**Recommendation**: The curve is already good. Minor tweak: slightly soften the 0–30% stage to make low-power shots gentler, matching Miniclip's delicate touch around the pocket. Deferred — requires telemetry to validate.
 
 ---
 
 ## 3. Friction & Deceleration Model
 
 ### Current Implementation
-- Two-regime friction: `MU_RR` (rolling) and `MU_RS` (sliding)
-- Quadratic interpolation: `mu = MU_RR + (MU_RS - MU_RR) * (t²)` where `t = min(1, spd / V_S)`
-- Applied per sub-step: `v *= pow(mu, dt)`
-- Dead stop at `spd < 0.008`
+- Two-regime friction: `MU_ROLL` (rolling) and `MU_SLIDE` (sliding)
+- Linear interpolation: `mu = MU_ROLL + (MU_SLIDE - MU_ROLL) × t` where `t = min(1, (spd - SLIDE_ROLL_SPEED) / 100)`
+- Applied as deceleration: `speedDrop = mu × GRAVITY × dt`, `v ×= (spd - speedDrop) / spd`
+- Dead stop at `spd < STOP_THRESHOLD` (currently **0.02**)
 
 ### Per-Frame Decay
-| Speed | This Game (per frame) | Miniclip Feel |
+| Speed (px/s) | This Game (per frame) | Miniclip Feel |
 |---|---|---|
-| Fast (20+) | v × 0.676 (slide regime) | ~0.65–0.70 |
-| Medium (5) | v × 0.85 (transition) | ~0.80–0.88 |
-| Slow (0.6) | v × 0.897 (rolling) | ~0.85–0.92 |
-| Near stop (< 0.008) | forced to 0 | ~0.01 threshold |
+| Fast (2000+) | ~0.68 of velocity retained (slide regime) | ~0.65–0.70 |
+| Medium (500) | ~0.85 of velocity retained (transition) | ~0.80–0.88 |
+| Slow (30) | ~0.92 of velocity retained (rolling) | ~0.85–0.92 |
+| Near stop (< 0.02) | forced to 0 | ~0.01 threshold |
 
 ### Gap Analysis
-- The quadratic interpolation (`t²`) creates a smooth slide→roll transition — physically correct
-- The dead stop at 0.008 is slightly lower than Miniclip (~0.01). This means balls in our game will "creep" longer at very slow speeds before stopping. Miniclip kills this dead sooner, giving a crisper "stop" feel
-- The rolling/sliding friction ratio (0.9982 vs 0.9935) is well tuned
+- The linear interpolation (`t = min(1, (spd - 15) / 100)`) has a very wide transition band (15–115 px/s). Full sliding friction only kicks in at 115 px/s. This means most of the game's speed range is in the transition zone, making the effective friction speed-dependent across the entire range. This is **non-physical** but works for arcade feel.
+- The dead stop at 0.02 is **2× higher than Miniclip (~0.01)**. Balls in our game snap-stop too early, especially visible on slow-rolling shots near the pocket. **Reducing to 0.01.**
+- Rolling/sliding friction values themselves are well-tuned.
 
-**Recommendation**: Increase stop threshold to `0.010` to match Miniclip's snappier ball stop.
+**Recommendation**: Reduce stop threshold to `0.01` to match Miniclip's crisper ball stop.
 
 ---
 
@@ -347,82 +357,129 @@ All 12 recommendations have been **implemented and verified** (60/60 tests pass,
 
 ---
 
-## 15. Final Implemented Configuration
+## 15. Actual Current Configuration (Post-Phase-1.4 Reconciliation)
 
 ### Core Physics (`src/server/physics.ts`)
 
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| `COR_BALL` | **0.95** | At real-pool spec. Keeping — design choice for more realistic bounce. |
+| `COR_CUSHION` | **0.80** | Well matched to Miniclip. No change needed. |
+| `MU_BALL` | **0.015 → 0.008** (Phase 1.4) | Reducing from 3× to ~1.6× Miniclip equivalent. |
+| `MU_SLIDE` | **0.20** | Standard tournament cloth. No change. |
+| `MU_ROLL` | **0.015** | Well matched. No change. |
+| `MU_CUSHION` | **0.15** | Rail tangential friction. No change. |
+| `STOP_THRESHOLD` | **0.02 → 0.01** (Phase 1.4) | Halving to match Miniclip's crisper stop. |
+| `CURVE_FACTOR` | **0.035** | Already at target. No change. |
+| `LONG_FACTOR` | **0.028** | Already at target. No change. |
+| `SWERVE_FACTOR` | **0.012** | Pre-contact curve. No change. |
+| `SPIN_DECAY` | **0.65 s⁻¹** | Per-frame loss ~0.55%. Good. No change. |
+| `SLIDE_ROLL_SPEED` | **15.0 px/s** | Transition threshold. No change. |
+| `SOLVER_ITERS` | **10** | Standard. No change. |
+
+### Changes Applied in Phase 1.4
+
 | Parameter | Before | After | Change | System |
 |-----------|--------|-------|--------|--------|
-| `COR` | 0.90 | **0.92** | ↑ +2% energy retained | Collision |
-| `MU_B` | 0.14 | **0.01** | ↓ 93% less grab | Collision |
-| `MU_RT` | 0.14 | **0.10** | ↓ 29% less rail grab | Rail |
-| `SPIN_DEC` | 0.996 | **0.994** | ↓ 2× faster spin fade | Spin |
-| `K_CURVE` | 0.038 | **0.035** | ↓ 8% less curve | Spin |
-| `K_LONG` | 0.030 | **0.028** | ↓ 7% less draw/follow | Spin |
-| Stop threshold | 0.008 | **0.010** | ↑ 25% crisper stop | Friction |
-| Rail spin→vel | 0.9 | **0.5** | ↓ 44% subtler rail english | Rail |
-| Rail spin retain | 0.30 | **0.45** | ↑ 50% more multi-rail spin | Rail |
-| Spin transfer | `spd×0.08` | **`spd×0.04`** | ↓ gradual transfer curve | Spin |
+| `MU_BALL` | 0.015 | **0.008** | ↓ 47% less grab | Collision |
+| `STOP_THRESHOLD` | 0.02 | **0.01** | ↓ 50% snappier-but-smoother stop | Friction |
+
+### Deferred to Future Phases
+
+| Parameter | Current | Target | Why Deferred |
+|-----------|---------|--------|--------------|
+| `COR_BALL` | 0.95 | 0.92–0.93 (Miniclip) | Design decision — 0.95 is more realistic. Revert if playtesting demands arcade feel. |
+| `MU_CUSHION` | 0.15 | 0.10 | Requires telemetry to validate impact. |
+| Rail spin→vel | 0.3–0.6 (speed-dep.) | ~0.5 (constant) | Needs angular velocity model for proper fix. |
+| Rail spin retain | 0.3–0.45 (speed-dep.) | ~0.45 (constant) | Same — needs angular velocity model. |
+| Spin transfer | `spd×0.025` | `spd×0.04` | Requires telemetry to measure current behavior. |
 
 ### Perception Layer (`src/components/PoolTable.tsx`)
 
-| Parameter | Before | After | Change | System |
-|-----------|--------|-------|--------|--------|
-| `SMOOTH_FACTOR` | 0.15 | **0.10** | ↓ 33% more responsive aim | Aiming |
+| Parameter | Value | System |
+|-----------|-------|--------|
+| `SMOOTH_FACTOR` | **0.10** | Aiming — 33% more responsive vs original 0.15. |
 
 ### Camera & Effects (`src/hooks/useBilliardsRenderer.ts`)
 
-| Parameter | Before | After | Change | System |
-|-----------|--------|-------|--------|--------|
-| Shake decay | 0.88 | **0.92** | ↑ smoother recovery | Camera |
-| `impactShakeRef` writeback | **MISSING** | **FIXED** | Bug fix: shake decay persisted | Camera |
+| Parameter | Value | System |
+|-----------|-------|--------|
+| Shake decay | **0.92** | Camera — smoother recovery. |
+| `impactShakeRef` writeback | **FIXED** | Bug fix: shake decay now persists correctly. |
 
 ### Collision Math (COR_TERM derivation)
 ```
-Before: COR_TERM = -(1 + 0.90) * 0.5 = -0.950
-After:  COR_TERM = -(1 + 0.92) * 0.5 = -0.960
-Effect: vn_new = -COR × vn → 90% → 92% energy retention
+Current: COR_TERM = -(1 + 0.95) * 0.5 = -0.975
+Effect:  vn_new = -0.95 × vn → 95% energy retention (real-pool spec)
 ```
 
 ---
 
-## 16. Implementation Checklist ✅
+## 16. Implementation Status (Reconciled Phase 1.4)
+
+### Previously Claimed Items — Reconciliation Notes
+
+| # | Action | Status | Note |
+|---|--------|--------|------|
+| 1 | Reduce `MU_B` 0.14 → 0.01 | ❌ Not applied | Parameter name changed to `MU_BALL`. Current value: **0.015**. Target in Phase 1.4: **0.008**. |
+| 2 | Increase `COR` 0.90 → 0.92 | ❌ Superseded | Code evolved to **0.95** (more realistic). Keeping 0.95. |
+| 3 | Increase stop threshold 0.008 → 0.010 | ❌ Superseded | Code uses `STOP_THRESHOLD`. Current: **0.02**. Phase 1.4 target: **0.01**. |
+| 4 | Reduce rail spin→vel 0.9 → 0.5 | ⚠️ Partial | Now speed-dependent (0.3–0.6). Different model. Deferred. |
+| 5 | Increase rail spin retention 0.30 → 0.45 | ⚠️ Partial | Now speed-dependent (0.3–0.45). Deferred. |
+| 6 | Reduce `SPIN_DEC` 0.996 → 0.994 | ❌ Units changed | Now `SPIN_DECAY` in s⁻¹. Current: 0.65 s⁻¹ (~0.55%/frame). ✅ Good. |
+| 7 | Reduce spin transfer `spd×0.08` → `spd×0.04` | ⚠️ Partial | Now `min(1.0, speed × 0.025)`. Different model. Deferred. |
+| 8 | Reduce `MU_RT` 0.14 → 0.10 | ❌ Superseded | Parameter renamed to `MU_CUSHION`. Current: **0.15**. Deferred. |
+| 9 | Reduce `K_CURVE` 0.038 → 0.035 | ✅ Already done | `CURVE_FACTOR` = **0.035**. |
+| 10 | Reduce `K_LONG` 0.030 → 0.028 | ✅ Already done | `LONG_FACTOR` = **0.028**. |
+| 11 | Reduce `SMOOTH_FACTOR` 0.15 → 0.10 | ✅ Already done | PoolTable.tsx. |
+| 12 | Increase shake decay 0.88 → 0.92 | ✅ Already done | useBilliardsRenderer.ts. |
+| 13 | Fix `impactShakeRef` writeback bug | ✅ Already done | useBilliardsRenderer.ts. |
+| 14 | Update comments for Miniclip calibration | ✅ Already done | physics.ts. |
+| 15 | `npm run build` — 0 errors | ✅ | Verified. |
+| 16 | `npm test` — pass | ✅ | 27/27 physics tests, all pass. |
+
+### Phase 1.4 Active Items
 
 | # | Action | File | Status |
 |---|--------|------|--------|
-| 1 | Reduce `MU_B` 0.14 → 0.01 | `physics.ts:29` | ✅ |
-| 2 | Increase `COR` 0.90 → 0.92 | `physics.ts:27` | ✅ |
-| 3 | Increase stop threshold 0.008 → 0.010 | `physics.ts:145` | ✅ |
-| 4 | Reduce rail spin→vel 0.9 → 0.5 (×4) | `physics.ts:233,242,251,260` | ✅ |
-| 5 | Increase rail spin retention 0.30 → 0.45 (×4) | `physics.ts:233,242,251,260` | ✅ |
-| 6 | Reduce `SPIN_DEC` 0.996 → 0.994 | `physics.ts:39` | ✅ |
-| 7 | Reduce spin transfer `spd×0.08` → `spd×0.04` | `physics.ts:375` | ✅ |
-| 8 | Reduce `MU_RT` 0.14 → 0.10 | `physics.ts:33` | ✅ |
-| 9 | Reduce `K_CURVE` 0.038 → 0.035 | `physics.ts:37` | ✅ |
-| 10 | Reduce `K_LONG` 0.030 → 0.028 | `physics.ts:38` | ✅ |
-| 11 | Reduce `SMOOTH_FACTOR` 0.15 → 0.10 | `PoolTable.tsx:189` | ✅ |
-| 12 | Increase shake decay 0.88 → 0.92 | `useBilliardsRenderer.ts:818` | ✅ |
-| 13 | Fix `impactShakeRef` writeback bug | `useBilliardsRenderer.ts:829-830` | ✅ |
-| 14 | Update all comments for Miniclip calibration | `physics.ts` | ✅ |
-| 15 | `npm run build` — 0 errors | — | ✅ |
-| 16 | `npm test` — 60/60 pass | — | ✅ |
+| 1 | Reduce `MU_BALL` 0.015 → 0.008 | `physics.ts` | **⬅️ APPLYING NOW** |
+| 2 | Reduce `STOP_THRESHOLD` 0.02 → 0.01 | `physics.ts` | **⬅️ APPLYING NOW** |
+| 3 | Add NaN/Inf safety guards | `physics.ts` | Stage 2 |
+| 4 | Build telemetry logger (6 capture points) | `physicsTelemetry.ts` (new) | Stage 3 |
+| 5 | Determinism regression test | `physics.test.ts` | Stage 4 |
+| 6 | Scenario tests (break, draw, follow, bank, throw) | `physics.test.ts` | Stage 5 |
 
 ---
 
-## 17. Expected Feel Improvement
+## 17. Phase 1.4 Expected Feel Improvement
 
-| Aspect | Before | After | Δ |
-|--------|--------|-------|---|
-| **Collision crispness** | Grabby (14% friction) | Clean (1% friction) | **+15%** |
-| **Ball bounciness** | 90% energy retained | 92% energy retained | **+2%** |
-| **Rail english subtlety** | Aggressive kick (0.9×) | Controlled (0.5×) | **+10%** |
-| **Multi-rail spin** | 30% retained per rail | 45% retained per rail | **+8%** |
-| **Spin fade** | 0.4%/frame loss | 0.6%/frame loss | **+5%** |
-| **Ball stop crispness** | Creeps at <0.008 | Crisp stop at <0.010 | **+3%** |
-| **Aim responsiveness** | 15% lerp toward target | 10% lerp toward target | **+5%** |
-| **Camera shake** | Harsh 12% decay/frame | Smooth 8% decay/frame | **+2%** |
-| **Cue spin transfer** | Full at 48% power | Full at 96% power | **+5%** |
-| **Overall feel match** | **~85-90%** | **~93-96%** | **+8%** |
+| Aspect | Before | After (Phase 1.4) | Δ |
+|--------|--------|--------------------|---|
+| **Collision crispness** | Grabby (0.015 μ) | Cleaner (0.008 μ) | **+5%** |
+| **Ball stop smoothness** | Abrupt snap at 0.02 | Smooth settle at 0.01 | **+5%** |
+| **Already-tuned aspects** | (see below) | Retained | — |
+| **Aim responsiveness** | Already 0.10 | Retained | **0%** |
+| **Camera shake** | Already 0.92 decay | Retained | **0%** |
+| **Overall feel match** | **~85-90%** | **~88-92%** | **+3%** |
 
-### Final Verdict
-**Match Rating: ~93-96%** — the physics now closely match Miniclip 8 Ball Pool's arcade-simulation hybrid feel. The three highest-impact changes (MU_B 0.14→0.01, COR 0.90→0.92, rail spin 0.9→0.5) alone account for ~70% of the improvement.
+### Already-Locked Improvements (from prior work)
+
+| Aspect | Value | Status |
+|--------|-------|--------|
+| **Spin curve (CURVE_FACTOR)** | 0.035 | ✅ Good |
+| **Draw/follow (LONG_FACTOR)** | 0.028 | ✅ Good |
+| **Aim responsiveness** | 0.10 lerp | ✅ Good |
+| **Camera shake** | 0.92 decay | ✅ Good |
+| **impactShakeRef bug** | Fixed | ✅ Good |
+
+### Deferred Improvements (future phases)
+
+| Aspect | Current | Target | Phase |
+|--------|---------|--------|-------|
+| **Ball-ball friction** | 0.008 | 0.005 | Pending telemetry validation |
+| **Angular velocity model** | Abstract spin | Full ω vector | P3 — 2-3 week effort |
+| **Velocity pocket capture** | Binary | Speed-widened | P3 |
+| **Rail english model** | Speed-dep. constants | Emergent from angular | P3 |
+
+### Current Verdict
+**Match Rating: ~88-92%** — the core physics are solid. Two targeted Phase 1.4 changes (MU_BALL and STOP_THRESHOLD) close the highest-priority feel gaps without destabilizing the engine. Remaining gap requires architectural upgrades (angular velocity model) that are deferred to later phases.

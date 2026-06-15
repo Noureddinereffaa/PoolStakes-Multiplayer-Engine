@@ -1,4 +1,5 @@
 import { Ball } from '../types';
+import * as tel from './physicsTelemetry';
 
 // ═══════════════════════════════════════════════════════════════
 //  TABLE GEOMETRY
@@ -45,8 +46,8 @@ export const PHYSICS = {
   COR_BALL:           0.95,
   /** Coefficient of restitution: ball→cushion (professional: 0.80–0.85) */
   COR_CUSHION:        0.80,
-  /** Coulomb friction tangential multiplier */
-  MU_BALL:            0.015,
+  /** Coulomb friction tangential multiplier (reduced from 0.015; Phase 1.4) */
+  MU_BALL:            0.008,
   /** Cushion tangential friction */
   MU_CUSHION:         0.15,
   /** Solver iterations for positional correction */
@@ -63,8 +64,8 @@ export const PHYSICS = {
   SPIN_DECAY:         0.65,
 
   // ── Stability ─────────────────────────────────────────
-  /** Speed below which a ball is force-stopped */
-  STOP_THRESHOLD:     0.02,
+  /** Speed below which a ball is force-stopped (reduced from 0.02; Phase 1.4) */
+  STOP_THRESHOLD:     0.01,
   /** Maximum allowed ball speed (safe-guard) */
   MAX_SPEED:          4000,
 } as const;
@@ -121,6 +122,18 @@ function checkSleep(b: Ball): void {
     b.spinX = 0;
     b.spinY = 0;
     b.sleeping = true;
+  }
+}
+
+/** Safety guard: reset NaN/Inf position, velocity, or spin to prevent cascade failure. */
+function guardBall(b: Ball): void {
+  if (b.isPocketed) return;
+  if (!isFinite(b.x) || !isFinite(b.y)) {
+    b.x = 100; b.y = 200; b.vx = 0; b.vy = 0; b.spinX = 0; b.spinY = 0; b.sleeping = true;
+    return;
+  }
+  if (!isFinite(b.vx) || !isFinite(b.vy) || !isFinite(b.spinX || 0) || !isFinite(b.spinY || 0)) {
+    b.vx = 0; b.vy = 0; b.spinX = 0; b.spinY = 0; b.sleeping = true;
   }
 }
 
@@ -282,7 +295,7 @@ function integrate(balls: Ball[], dt: number): void {
 // ═══════════════════════════════════════════════════════════════
 //  CUSHION / RAIL  (sub-step)
 // ═══════════════════════════════════════════════════════════════
-function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
+function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean; shotId?: number }): void {
   const cfg = PHYSICS;
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
@@ -317,39 +330,36 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
 
     if (rail === 'left' || rail === 'right') {
       b.x = rail === 'left' ? MIN_X : MAX_X;
-      const vn = b.vx;
+      const vnBefore = b.vx;
       const tang = b.vy;
-      // Normal reflection with restitution
-      b.vx = -vn * corCush;
-      // Tangential friction
-      const dt_t = cfg.MU_CUSHION * Math.abs(vn);
+      b.vx = -vnBefore * corCush;
+      const dt_t = cfg.MU_CUSHION * Math.abs(vnBefore);
       b.vy -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
-      // Spin influence: side spin → vertical deflection, top/back spin → horizontal boost
       const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
       const transfer = 0.3 + 0.3 * Math.min(1, spd / 15);
       b.vy += sx * transfer;
       b.spinX = -sx * (0.3 + 0.15 * Math.min(1, spd / 15));
-      // Top/back spin adds follow/draw off the rail
       if (Math.abs(sy) > 0.05) {
-        b.vx += sy * 0.15 * Math.sign(-vn);
+        b.vx += sy * 0.15 * Math.sign(-vnBefore);
       }
+      if (tracker?.shotId) tel.pushEvent('cushion_collision', tel.cushionData(b.id, rail, vnBefore, b.vx, spd), tracker.shotId);
     } else {
       b.y = rail === 'top' ? MIN_Y : MAX_Y;
-      const vn = b.vy;
+      const vnBefore = b.vy;
       const tang = b.vx;
-      b.vy = -vn * corCush;
-      const dt_t = cfg.MU_CUSHION * Math.abs(vn);
+      b.vy = -vnBefore * corCush;
+      const dt_t = cfg.MU_CUSHION * Math.abs(vnBefore);
       b.vx -= Math.sign(tang) * Math.min(Math.abs(tang), dt_t);
       const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
       const transfer = 0.3 + 0.3 * Math.min(1, spd / 15);
       b.vx -= sx * transfer;
       b.spinX = -sx * (0.3 + 0.15 * Math.min(1, spd / 15));
       if (Math.abs(sy) > 0.05) {
-        b.vy += sy * 0.15 * Math.sign(-vn);
+        b.vy += sy * 0.15 * Math.sign(-vnBefore);
       }
+      if (tracker?.shotId) tel.pushEvent('cushion_collision', tel.cushionData(b.id, rail, vnBefore, b.vy, spd), tracker.shotId);
     }
 
-    // Ensure ball stays inside after correction
     b.x = Math.max(MIN_X, Math.min(MAX_X, b.x));
     b.y = Math.max(MIN_Y, Math.min(MAX_Y, b.y));
 
@@ -362,7 +372,7 @@ function handleRails(balls: Ball[], tracker?: { firstContactBallId: number | nul
 // ═══════════════════════════════════════════════════════════════
 //  POCKET DETECTION  (sub-step)
 // ═══════════════════════════════════════════════════════════════
-function detectPockets(balls: Ball[]): void {
+function detectPockets(balls: Ball[], shotId?: number): void {
   for (let i = 0; i < balls.length; i++) {
     const b = balls[i];
     if (b.isPocketed || b.sleeping) continue;
@@ -373,9 +383,11 @@ function detectPockets(balls: Ball[]): void {
       const dy = b.y - p.y;
       if (dx * dx + dy * dy >= r * r) continue;
       b.isPocketed = true;
-      b.pocketedAtId = pi;  // record which pocket
+      b.pocketedAtId = pi;
+      const speed = Math.hypot(b.vx, b.vy);
       b.vx = 0; b.vy = 0;
       b.spinX = 0; b.spinY = 0;
+      if (shotId) tel.pushEvent('pocket_captured', tel.pocketData(b.id, pi, speed, Math.sqrt(dx*dx + dy*dy)), shotId);
       break;
     }
   }
@@ -384,7 +396,7 @@ function detectPockets(balls: Ball[]): void {
 // ═══════════════════════════════════════════════════════════════
 //  BALL–BALL COLLISION RESOLUTION  (solver iteration)
 // ═══════════════════════════════════════════════════════════════
-function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
+function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean; shotId?: number }): void {
   const n = balls.length;
   const MIN_D2 = (BALL_R * 2) ** 2;
   const cfg = PHYSICS;
@@ -503,6 +515,11 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
           else if (b2.id === 0) tracker.firstContactBallId = b1.id;
         }
 
+        // ── Ball collision telemetry (iter 0 only) ────
+        if (tracker?.shotId) {
+          tel.pushEvent('ball_collision', tel.collisionData(b1.id, b2.id, vn, 0, cfg.COR_BALL, d2), tracker.shotId);
+        }
+
         // Post-collision sleep
         checkSleep(b1);
         checkSleep(b2);
@@ -520,20 +537,20 @@ function resolveCollisions(balls: Ball[], tracker?: { firstContactBallId: number
 // ═══════════════════════════════════════════════════════════════
 export function simulatePhysicsStep(
   balls: Ball[],
-  tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }
+  tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean; shotId?: number }
 ): void {
   const cfg = PHYSICS;
   const dt = cfg.FIXED_DT;
   const subSteps = cfg.SUB_STEPS;
-  // Scale dt per sub-step so total time = dt
   const subDt = dt / subSteps;
 
   for (let s = 0; s < subSteps; s++) {
     applyFrictionAndSpin(balls, subDt);
     integrate(balls, subDt);
     handleRails(balls, tracker);
-    detectPockets(balls);
+    detectPockets(balls, tracker?.shotId);
     resolveCollisions(balls, tracker);
+    for (let i = 0; i < balls.length; i++) guardBall(balls[i]);
   }
 
   // Final safety clamp on all balls

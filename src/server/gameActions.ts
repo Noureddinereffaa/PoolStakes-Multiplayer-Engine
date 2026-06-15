@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import jwt from 'jsonwebtoken';
 import { RoomState, SocketMessage } from '../types';
 import { TABLE_W, TABLE_H, CUSHION, BALL_R, HEAD_STRING_X, getInitialBalls, simulatePhysicsStep, powerToVelocity, breakPowerToVelocity, isAnyBallMoving, captureFrame, forceSettleBalls, wakeAllForShot, resetYieldTimer, yieldIfNeeded } from './physics';
+import { allocateShotId, pushEvent, flushEvents } from './physicsTelemetry';
 import {
   activeRooms, activeSockets, animatingRoomIds, clientsByRoom, playerRoomMap,
   userSockets, rematchingRooms, getOrCreateRoom, broadcastRoom,
@@ -279,6 +280,9 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
   room.animVersion = (room.animVersion || 0) + 1;
   const currentAnimVersion = room.animVersion;
 
+  const shotId = allocateShotId();
+  pushEvent('shot_initiated', { roomId, playerId, power: clampedPower, angle: clampedAngle, spinX: msg.spinX, spinY: msg.spinY, isBreakShot, tableBallsLeft: objectBallsLeft }, shotId);
+
   pushRoomLog(room, isBreakShot
     ? `💥 ${shooterName} executes the BREAK SHOT!`
     : `${shooterName} shoots with Power: ${Math.round(clampedPower)}%`);
@@ -301,7 +305,7 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
   const maxStepsLimit = 2400;
   const ballsPocketedThisShot: number[] = [];
   let cueBallPocketed = false;
-  const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false };
+  const contactTracker = { firstContactBallId: null as number | null, cushionContactOccurred: false, shotId };
   let lastCapturePositions = room.balls.map(b => ({ x: b.x, y: b.y }));
   const MOVEMENT_THRESHOLD_SQ = 4;
   let framesSinceLastCapture = 0;
@@ -340,6 +344,23 @@ export async function handleShoot(ws: WebSocket, msg: Extract<SocketMessage, { t
   }
   if (framesSinceLastCapture > 0 || frames.length === 0) frames.push(captureFrame(room.balls));
   forceSettleBalls(room.balls);
+
+  // Log ball_settled for every non-pocketed ball's final position
+  for (const b of room.balls) {
+    if (!b.isPocketed) {
+      pushEvent('ball_settled', { ballId: b.id, x: b.x, y: b.y, sleeping: b.sleeping }, shotId);
+    }
+  }
+
+  pushEvent('shot_complete', { roomId, playerId, totalSteps: iterations, framesCount: frames.length, ballsPocketed: ballsPocketedThisShot, cueBallPocketed, firstContactBallId: contactTracker.firstContactBallId }, shotId);
+
+  // Periodically flush telemetry to stdout (debug mode; production would write to file)
+  if (shotId % 100 === 0) {
+    const events = flushEvents();
+    if (events.length > 0) {
+      console.log(`[TELEMETRY] Flushed ${events.length} physics events (shot #${shotId})`);
+    }
+  }
 
   const compactFrames = frames.map(f => f.map(b => [b.id, b.x, b.y, b.isPocketed ? 1 : 0]));
   const payload = JSON.stringify({ type: 'physics_frames', frames: compactFrames, totalSteps: iterations });
