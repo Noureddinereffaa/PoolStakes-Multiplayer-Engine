@@ -1,0 +1,91 @@
+{
+  "meta": {
+    "version": "1.0",
+    "label": "Phase 1.5 Baseline Targets",
+    "timestamp": "2026-06-15T22:15:43.560Z",
+    "description": "Reference targets for the 8-ball pool physics engine calibration. Measured from 20-iteration runs after Phase 1.4 stabilization."
+  },
+  "configSnapshot": {
+    "COR_BALL": 0.95,
+    "COR_CUSHION": 0.8,
+    "MU_BALL": 0.008,
+    "MU_ROLL": 0.015,
+    "MU_SLIDE": 0.2,
+    "LONG_FACTOR": 0.028,
+    "CURVE_FACTOR": 0.035,
+    "SWERVE_FACTOR": 0.012,
+    "SPIN_DECAY": 0.65,
+    "STOP_THRESHOLD": 0.01,
+    "FIXED_DT": 0.008333333333333333,
+    "SUB_STEPS": 60
+  },
+  "targets": {
+    "break": {
+      "spread": {
+        "label": "Max object ball spread from table center",
+        "unit": "px",
+        "baseline_mean": 356.1,
+        "baseline_std": 14.8,
+        "tolerance_std": 3,
+        "min_acceptable": 150
+      },
+      "pockets": {
+        "label": "Number of pocketed balls on break",
+        "unit": "balls",
+        "baseline_mean": 1.25,
+        "baseline_std": 1.04,
+        "tolerance_std": 2,
+        "min_acceptable": 0.2
+      }
+    },
+    "draw": {
+      "drawBack": {
+        "label": "Cue ball position change on draw (noSpinX - drawX). Negative = inverted, will be addressed when fixing spin normalization",
+        "unit": "px",
+        "baseline_mean": -15.13,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "note": "Deterministic in 2-ball setup. Sign inverted due to normalization bug in applyFrictionAndSpin"
+      }
+    },
+    "follow": {
+      "followThrough": {
+        "label": "Cue ball position change on follow (followX - noSpinX). Negative = inverted, same normalization bug",
+        "unit": "px",
+        "baseline_mean": -15.23,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "note": "Deterministic in 2-ball setup. Sign inverted due to normalization bug"
+      }
+    },
+    "cushion_bounce": {
+      "passRate": {
+        "label": "Fraction of shots that bounce off right rail at 85% power",
+        "unit": "ratio",
+        "baseline_mean": 1.0,
+        "baseline_std": 0,
+        "min_acceptable": 1.0
+      }
+    },
+    "bank": {
+      "finalX": {
+        "label": "Final x position of cue ball after 45-degree bank shot",
+        "unit": "px",
+        "baseline_mean": 652.6,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "min_acceptable": 30,
+        "max_acceptable": 770
+      }
+    }
+  },
+  "knownIssues": [
+    {
+      "id": "SPIN_NORMALIZATION_BUG",
+      "severity": "medium",
+      "description": "applyFrictionAndSpin uses (nvx / nspd) instead of nvx for direction, doubling the normalization divisor. This makes spin effect velocity-dependent in a quadratic way and inverts direction in certain speed regimes.",
+      "impact": "Draw and follow tests show inverted sign. Spin transfer at high speeds is weaker than intended.",
+      "target_fix": "Phase 1.6"
+    }
+  ]
+}

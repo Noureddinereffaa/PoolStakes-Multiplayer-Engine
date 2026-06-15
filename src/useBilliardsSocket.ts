@@ -176,10 +176,6 @@ export function useBilliardsSocket({
             break;
           case 'physics_frames':
             if (mountedRef.current) {
-              // Ignore server frames if we recently predicted them locally (Client-Side Prediction)
-              if (Date.now() - lastLocalShotRef.current < 2000) {
-                break;
-              }
               setOpponentAim(null);
               setPhysicsFrames(
                 (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>
@@ -651,6 +647,9 @@ export function useBilliardsSocket({
     if (!pending || !roomState) return;
     pendingShotRef.current = null;
 
+    // Only use client-side prediction when offline (no server to send frames)
+    if (!isOffline) return;
+
     const angle = pending.angle;
     const power = pending.power;
     const spinX = pending.spinX || 0;
@@ -695,7 +694,7 @@ export function useBilliardsSocket({
         });
       }
     }
-  }, [roomState, pendingShotTick]);
+  }, [roomState, pendingShotTick, isOffline]);
 
   return {
     roomId,
