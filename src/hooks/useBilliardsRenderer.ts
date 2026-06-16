@@ -883,6 +883,13 @@ export function useBilliardsRenderer(ctx: RenderContext) {
         snapTargetId: ctx.snapTargetIdRef?.current ?? null,
       };
 
+      // Validate snapshot — skip frame if roomState or balls are missing
+      if (!snap.roomState || !snap.balls) {
+        ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+        animationId = raf(drawLoop);
+        return;
+      }
+
       // Decay impact camera shake based on real time (not frame rate dependent)
       const now = framePerf;
       const dtMs = now - lastFrameTime;

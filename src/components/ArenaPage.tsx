@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { RoomState, Difficulty } from '../types';
+import { getSafeFrame, SafeFrame } from '../utils/safeFrame';
 
 import {
   isMobileDevice,
@@ -12,6 +13,7 @@ import {
   vibrate
 } from '../utils/mobile';
 import PoolTable, { PoolTableHandle } from './PoolTable';
+import PoolTable3D from './PoolTable3D';
 import PowerControl from './PowerControl';
 import {
   Minimize, Maximize, MessageSquare, Send, Copy, Lock, Unlock, Cpu, X, Users, Bot, Volume2, VolumeX,
@@ -19,6 +21,10 @@ import {
 import { ProvablyFairVerify } from './ProvablyFairVerify';
 import { poolAudio } from '../utils/audio';
 import { motion, AnimatePresence } from 'framer-motion';
+import CasinoSpectator from './CasinoSpectator';
+import CasinoCelebration from './CasinoCelebration';
+import FoulFlash from './FoulFlash';
+import CasinoAmbientParticles from './CasinoAmbientParticles';
 
 interface ArenaPageProps {
   roomState: RoomState | null;
@@ -418,6 +424,98 @@ function SidePanel({ roomState, userSession, language, activeEscrow, chatMessage
   );
 }
 
+function ArenaLoadingState({ onQuitRoom, language }: { onQuitRoom: () => void; language: 'en' | 'ar' }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden overscroll-none select-none">
+      <style>{`
+        @keyframes neonPulse {
+          0%, 100% { border-color: #2a1005; box-shadow: 0 0 30px rgba(0,0,0,0.8) inset, 0 0 0 rgba(245,158,11,0); }
+          50% { border-color: #5c2a0a; box-shadow: 0 0 30px rgba(0,0,0,0.8) inset, 0 0 25px rgba(245,158,11,0.15); }
+        }
+        @keyframes spin3d {
+          0% { transform: rotateY(0deg) rotateX(10deg); }
+          100% { transform: rotateY(360deg) rotateX(10deg); }
+        }
+        @keyframes chipStack {
+          0% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-4px) scale(1.02); }
+          100% { transform: translateY(0) scale(1); }
+        }
+        @keyframes cardFlip {
+          0% { transform: rotateY(0deg); }
+          50% { transform: rotateY(180deg); }
+          100% { transform: rotateY(360deg); }
+        }
+        @keyframes fadeDots {
+          0%, 20% { opacity: 0; }
+          50% { opacity: 1; }
+          80%, 100% { opacity: 0; }
+        }
+        .loading-8ball {
+          animation: spin3d 3s linear infinite;
+          transform-style: preserve-3d;
+        }
+        .loading-chip {
+          animation: chipStack 1.2s ease-in-out infinite;
+        }
+        .loading-chip:nth-child(2) { animation-delay: 0.15s; }
+        .loading-chip:nth-child(3) { animation-delay: 0.3s; }
+        .loading-card {
+          animation: cardFlip 2s ease-in-out infinite;
+          transform-style: preserve-3d;
+        }
+        .loading-dot:nth-child(1) { animation: fadeDots 1.4s ease-in-out infinite; }
+        .loading-dot:nth-child(2) { animation: fadeDots 1.4s ease-in-out infinite 0.2s; }
+        .loading-dot:nth-child(3) { animation: fadeDots 1.4s ease-in-out infinite 0.4s; }
+      `}</style>
+      <div className="h-12 bg-gradient-to-b from-black/80 to-transparent px-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="loading-chip w-5 h-5 rounded-full border-2 border-amber-600/60 bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center text-[6px] font-black text-amber-900">$</div>
+          <div className="w-20 h-3 rounded bg-gradient-to-r from-amber-900/30 via-amber-700/20 to-amber-900/30" />
+        </div>
+        <div className="w-16 h-4 rounded bg-gradient-to-r from-amber-900/20 via-amber-700/15 to-amber-900/20" />
+      </div>
+      <div className="flex-1 w-full max-w-6xl mx-auto flex items-center justify-center p-2 sm:p-4">
+        <div className="w-full aspect-[2/1] rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-br from-[#1a0c06] to-[#0a0402] border-[16px] sm:border-[24px] border-[#2a1005] shadow-[0_0_60px_rgba(0,0,0,0.8)_inset,0_0_25px_rgba(245,158,11,0.08)] relative overflow-hidden">
+          <div className="absolute inset-0 opacity-[0.03]" style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23f59e0b' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }} />
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/10 to-transparent" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-6">
+              <div className="flex items-center gap-4">
+                <div className="loading-8ball w-10 h-10 rounded-full bg-gradient-to-br from-gray-900 to-black border-2 border-white/20 flex items-center justify-center text-sm font-black text-white shadow-lg">
+                  8
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <div className="loading-chip w-8 h-2 rounded-sm bg-gradient-to-r from-amber-500 to-amber-700 border border-amber-400/30" />
+                  <div className="loading-chip w-8 h-2 rounded-sm bg-gradient-to-r from-amber-400 to-amber-600 border border-amber-300/30" style={{ animationDelay: '0.15s' }} />
+                  <div className="loading-chip w-8 h-2 rounded-sm bg-gradient-to-r from-amber-600 to-amber-800 border border-amber-500/30" style={{ animationDelay: '0.3s' }} />
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-amber-500/70 font-mono font-bold text-xs sm:text-sm uppercase tracking-widest">
+                  {language === 'ar' ? 'جاري تجهيز الطاولة' : 'PREPARING ARENA'}
+                </span>
+                <span className="flex gap-0.5">
+                  <span className="loading-dot w-1 h-1 rounded-full bg-amber-500" />
+                  <span className="loading-dot w-1 h-1 rounded-full bg-amber-500" />
+                  <span className="loading-dot w-1 h-1 rounded-full bg-amber-500" />
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="h-20 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center pb-4">
+        <button onClick={onQuitRoom} className="px-8 py-2.5 rounded-xl bg-amber-950/40 border border-amber-900/30 text-amber-600 font-black tracking-widest hover:bg-amber-900/60 hover:text-amber-400 transition-colors">
+          {language === 'ar' ? 'إلغاء وإلعودة' : 'CANCEL & RETURN'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ArenaPage({
   roomState, userSession, language, onQuitRoom, myPlayerObj, isMyTurn,
   physicsFrames, setPhysicsFrames, physicsTotalSteps, handleShoot, handleResetCueBall, handleCallPocket, opponentAim,
@@ -444,6 +542,13 @@ export default function ArenaPage({
   const [headerVisible, setHeaderVisible] = useState(true);
   const [showCallPocket, setShowCallPocket] = useState(false);
   const [calledPocketId, setCalledPocketId] = useState<number | null>(null);
+  const [showCasinoView, setShowCasinoView] = useState(false);
+  const [use3D, setUse3D] = useState(false);
+  const [celebrationIntensity, setCelebrationIntensity] = useState(0);
+  const [foulFlash, setFoulFlash] = useState(false);
+  const [winCelebration, setWinCelebration] = useState(0);
+  const prevPocketedCountRef = useRef(0);
+  const wasGameOverRef = useRef(false);
 
   const toggleHeader = useCallback(() => setHeaderVisible(v => !v), []);
 
@@ -526,7 +631,12 @@ export default function ArenaPage({
     style.textContent = `@keyframes fadeScaleIn {
       from { opacity: 0; transform: scale(0.3) translateY(-16px); }
       to { opacity: 1; transform: scale(1) translateY(0); }
-    }`;
+    }
+    @keyframes turnPulse {
+      0%, 100% { border-color: rgba(251,191,36,0.5); box-shadow: 0 0 6px rgba(245,158,11,0.15); }
+      50% { border-color: rgba(251,191,36,0.85); box-shadow: 0 0 16px rgba(245,158,11,0.35); }
+    }
+    .turn-active { animation: turnPulse 1.8s ease-in-out infinite; }`;
       document.head.appendChild(style);
     }
   }, []);
@@ -599,28 +709,30 @@ export default function ArenaPage({
   const isWinner = isGameOver && roomState.winnerId === myPlayerObj?.id;
   const winnerName = isGameOver ? roomState.players.find(p => p.id === roomState.winnerId)?.username || 'Player' : '';
 
-  const myPocketCount = mySide ? roomState.balls.filter(b => {
+  const myPocketCount = mySide && roomState ? roomState.balls.filter(b => {
     if (b.id === 0 || b.id === 8 || !b.isPocketed) return false;
     return (mySide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
   }).length : 0;
-  const oppPocketCount = opponentSide ? roomState.balls.filter(b => {
+  const oppPocketCount = opponentSide && roomState ? roomState.balls.filter(b => {
     if (b.id === 0 || b.id === 8 || !b.isPocketed) return false;
     return (opponentSide === 'solids' ? b.type === 'solid' : b.type === 'stripe');
   }).length : 0;
 
   // Show Call Pocket dialog when it's my turn and 8-ball is my next target
-  const myGroupCleared = mySide ? roomState.balls.filter(b => !b.isPocketed && b.id !== 0 && b.id !== 8 && (mySide === 'solids' ? b.type === 'solid' : b.type === 'stripe')).length === 0 : false;
-  const eightBallAlive = !roomState.balls.find(b => b.id === 8)?.isPocketed;
-  const shouldCallPocket = isMyTurn && roomState.status === 'playing' && myGroupCleared && eightBallAlive && calledPocketId === null;
+  const myGroupCleared = mySide && roomState ? roomState.balls.filter(b => !b.isPocketed && b.id !== 0 && b.id !== 8 && (mySide === 'solids' ? b.type === 'solid' : b.type === 'stripe')).length === 0 : false;
+  const eightBallAlive = roomState ? !roomState.balls.find(b => b.id === 8)?.isPocketed : false;
+  const shouldCallPocket = isMyTurn && !!roomState && roomState.status === 'playing' && myGroupCleared && eightBallAlive && calledPocketId === null;
 
   useEffect(() => {
-    if (isGameOver) {
+    if (isGameOver && !wasGameOverRef.current) {
       if (isWinner) {
         poolAudio.playWin();
+        setWinCelebration(2);
       } else {
         poolAudio.playLose();
       }
     }
+    wasGameOverRef.current = isGameOver;
   }, [isGameOver, isWinner]);
 
   const prevTimerRef = useRef(timerVal);
@@ -647,6 +759,7 @@ export default function ArenaPage({
       const lastLog = roomState.log[roomState.log.length - 1];
       if (lastLog.toLowerCase().includes('foul') || lastLog.toLowerCase().includes('scratch')) {
         setFoulNotification(lastLog);
+        setFoulFlash(true);
         poolAudio.playFoul();
         setTimeout(() => setFoulNotification(null), 3000);
       }
@@ -678,43 +791,22 @@ export default function ArenaPage({
     setIsMuted(newMuted);
   }, []);
 
-  if (!roomState) {
-    return (
-      <div className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden overscroll-none select-none">
-        {/* Skeleton Header */}
-        <div className="h-12 bg-gradient-to-b from-black/80 to-transparent px-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-amber-900/30 animate-pulse" />
-            <div className="w-20 h-3 rounded bg-amber-900/20 animate-pulse" />
-          </div>
-          <div className="w-16 h-4 rounded bg-amber-900/20 animate-pulse" />
-        </div>
-        
-        {/* Skeleton Table Area */}
-        <div className="flex-1 w-full max-w-6xl mx-auto flex items-center justify-center p-2 sm:p-4">
-          <div className="w-full aspect-[2/1] rounded-[2rem] sm:rounded-[3rem] bg-gradient-to-br from-[#1a0c06] to-[#0a0402] border-[16px] sm:border-[24px] border-[#2a1005] shadow-[0_0_60px_rgba(0,0,0,0.8)_inset] relative overflow-hidden">
-            <div className="absolute inset-0 bg-emerald-950/20 animate-pulse" />
-            
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-6">
-                <span className="w-5 h-5 rounded-full bg-amber-500 animate-ping shadow-[0_0_20px_#f59e0b]" />
-                <div className="text-amber-500/70 font-mono font-bold text-xs sm:text-sm uppercase tracking-widest">
-                  {language === 'ar' ? 'جاري تجهيز الطاولة...' : 'PREPARING ARENA...'}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Skeleton Footer Controls */}
-        <div className="h-20 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center pb-4">
-          <button onClick={onQuitRoom} className="px-8 py-2.5 rounded-xl bg-amber-950/40 border border-amber-900/30 text-amber-600 font-black tracking-widest hover:bg-amber-900/60 hover:text-amber-400 transition-colors">
-            {language === 'ar' ? 'إلغاء وإلعودة' : 'CANCEL & RETURN'}
-          </button>
-        </div>
-      </div>
-    );
+  const frame = getSafeFrame(roomState);
+  if (!frame) {
+    return <ArenaLoadingState onQuitRoom={onQuitRoom} language={language} />;
   }
+
+  const pocketedCount = frame.balls.filter(b => b.isPocketed && b.id !== 0).length;
+  useEffect(() => {
+    if (pocketedCount > prevPocketedCountRef.current) {
+      const diff = pocketedCount - prevPocketedCountRef.current;
+      setCelebrationIntensity(diff);
+      if (use3D) {
+        (tableRef.current as any)?.triggerConfetti?.(diff);
+      }
+    }
+    prevPocketedCountRef.current = pocketedCount;
+  }, [pocketedCount, use3D]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -746,7 +838,7 @@ export default function ArenaPage({
             <div className="flex items-center justify-between gap-1 md:gap-2 max-w-4xl mx-auto">
               
               {/* Left Player (Me) - compact: avatar + name only */}
-              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${isMyTurn ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] bg-black/30 rounded-full px-1 py-0.5 md:p-1 border border-white/5 ${isMyTurn ? 'turn-active' : ''}`}
                 role="status" aria-label={`${myPlayer?.username || 'You'} - ${myPocketed.length} balls pocketed${isMyTurn ? ' - your turn' : ''}`}
               >
                 <div className="w-5 h-5 md:w-8 md:h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-[8px] md:text-sm shadow shrink-0">🎱</div>
@@ -770,9 +862,25 @@ export default function ArenaPage({
                 </div>
               </div>
 
+              {/* Escrow chip badge */}
+              {activeEscrow > 0 && (
+                <motion.div
+                  key={activeEscrow}
+                  initial={{ scale: 1.3, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="flex items-center gap-1 shrink-0 bg-gradient-to-br from-amber-600/20 to-amber-800/10 border border-amber-500/30 rounded-full px-1.5 md:px-2 py-0.5"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                    <circle cx="12" cy="12" r="10" fill="#f59e0b" fillOpacity="0.1" />
+                    <path d="M12 6v12M6 12h12" stroke="#f59e0b" />
+                  </svg>
+                  <span className="text-[9px] md:text-xs font-black font-mono text-amber-300 leading-none">${activeEscrow.toFixed(0)}</span>
+                </motion.div>
+              )}
+
               {/* Right Player (Opponent) - compact: avatar + name + pocket badge */}
-              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border ${!isMyTurn && roomState.status === 'playing' ? 'border-amber-400/60 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-white/5'}`}
-                role="status" aria-label={`${opponent?.username || 'Waiting'} - ${opponentPocketed.length} balls pocketed${!isMyTurn && roomState.status === 'playing' ? ' - their turn' : ''}`}
+              <div className={`flex items-center gap-1 md:gap-2 min-w-0 flex-[2] justify-end bg-black/30 rounded-full px-1 py-0.5 md:p-1 border border-white/5 ${!isMyTurn && frame.status === 'playing' ? 'turn-active' : ''}`}
+                role="status" aria-label={`${opponent?.username || 'Waiting'} - ${opponentPocketed.length} balls pocketed${!isMyTurn && frame.status === 'playing' ? ' - their turn' : ''}`}
               >
                 {/* Opponent pocket count badge */}
                 <div className="flex items-center gap-1">
@@ -789,6 +897,45 @@ export default function ArenaPage({
               <button onClick={onQuitRoom} className="shrink-0 p-1.5 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 transition" aria-label="Quit game">
                 <svg width={isMobile ? 12 : 16} height={isMobile ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+                </svg>
+              </button>
+
+              {/* 3D Toggle button */}
+              <button
+                onClick={() => setUse3D(v => !v)}
+                className={`shrink-0 p-1.5 rounded-full transition border ${use3D ? 'bg-amber-500/20 border-amber-400/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'}`}
+                title={use3D ? 'Switch to 2D' : 'Switch to 3D'}
+              >
+                <svg width={isMobile ? 12 : 14} height={isMobile ? 12 : 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              </button>
+
+              {/* Casino View button */}
+              <button
+                onClick={() => setShowCasinoView(true)}
+                className="shrink-0 p-1.5 rounded-full bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 transition"
+                title="Casino Spectator View"
+              >
+                <svg width={isMobile ? 12 : 14} height={isMobile ? 12 : 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="14" rx="2" ry="2" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                  <line x1="9" y1="3" x2="9" y2="10" />
+                  <line x1="15" y1="3" x2="15" y2="10" />
+                </svg>
+              </button>
+
+              {/* Info/Sidebar toggle */}
+              <button onClick={() => setShowSidebar(v => !v)}
+                className={`shrink-0 p-1.5 rounded-full transition border ${showSidebar ? 'bg-amber-500/20 border-amber-400/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'}`}
+                aria-label="Toggle info panel"
+              >
+                <svg width={isMobile ? 12 : 14} height={isMobile ? 12 : 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
               </button>
 
@@ -825,8 +972,8 @@ export default function ArenaPage({
         {isMobile && (
           <div className="flex-shrink-0 h-full z-30 flex items-center">
             <PowerControl
-              isVisible={isMyTurn && roomState.status === 'playing' && !isGameOver}
-              disabled={!isMyTurn || roomState.status !== 'playing'}
+              isVisible={isMyTurn && frame.status === 'playing' && !isGameOver}
+              disabled={!isMyTurn || frame.status !== 'playing'}
               onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
               onDragStateChange={(d: boolean) => { tableRef.current?.setIsPulling(d); }}
               onShoot={handleShootClick}
@@ -834,12 +981,22 @@ export default function ArenaPage({
           </div>
         )}
         <div className={`flex-1 relative ${showSidebar && isMobile ? 'hidden' : ''}`}>
-          <PoolTable ref={tableRef}
-            roomState={roomState} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
-            myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
-            physicsFrames={physicsFrames} physicsTotalSteps={physicsTotalSteps} onClearFrames={() => setPhysicsFrames(null)}
-            opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
-          />
+          <CasinoAmbientParticles active={frame.status === 'playing'} />
+          {use3D ? (
+            <PoolTable3D ref={tableRef as React.Ref<any>}
+              roomState={frame} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
+              myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
+              physicsFrames={physicsFrames} physicsTotalSteps={physicsTotalSteps} onClearFrames={() => setPhysicsFrames(null)}
+              opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
+            />
+          ) : (
+            <PoolTable ref={tableRef}
+              roomState={frame} onShoot={handleShoot} onResetCueBall={handleResetCueBall}
+              myPlayerId={myPlayerObj?.id || ''} isMyTurn={isMyTurn}
+              physicsFrames={physicsFrames} physicsTotalSteps={physicsTotalSteps} onClearFrames={() => setPhysicsFrames(null)}
+              opponentAim={opponentAim} onPreviewAim={handlePreviewAim} onJoinAI={handleJoinAI}
+            />
+          )}
 
           {/* Desktop: Power slider — overlaid left side */}
           {!isMobile && (
@@ -847,7 +1004,7 @@ export default function ArenaPage({
               <div className="pointer-events-auto">
                 <PowerControl
                   isVisible={true}
-                  disabled={!isMyTurn || roomState.status !== 'playing' || isGameOver}
+                  disabled={!isMyTurn || frame.status !== 'playing' || isGameOver}
                   onPowerChange={(p: number) => { tableRef.current?.setShotPower(p); }}
                   mode="desktop"
                 />
@@ -856,7 +1013,7 @@ export default function ArenaPage({
           )}
 
           {/* AI summon centered overlay */}
-          {roomState.players.length === 1 && (
+          {frame.players.length === 1 && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
               <button onClick={() => handleJoinAI('medium')}
                 className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black text-xs font-bold transition flex items-center gap-2 shadow-[0_0_25px_rgba(245,158,11,0.25)] hover:shadow-[0_0_35px_rgba(245,158,11,0.4)] border border-amber-400/20"
@@ -865,7 +1022,7 @@ export default function ArenaPage({
           )}
 
           {/* "YOUR TURN" overlay */}
-          {isMyTurn && roomState.status === 'playing' && turnChanged && (
+          {isMyTurn && frame.status === 'playing' && turnChanged && (
             <div className="absolute left-1/2 top-8 -translate-x-1/2 z-20 pointer-events-none">
               <div className="px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 backdrop-blur-sm animate-pulse">
                 <span className="text-xs font-black font-mono text-amber-300 tracking-widest">
@@ -900,7 +1057,7 @@ export default function ArenaPage({
           )}
 
           {/* ── CALL POCKET DIALOG ──────────────────────────── */}
-          {(showCallPocket || shouldCallPocket) && isMyTurn && roomState.status === 'playing' && (
+          {(showCallPocket || shouldCallPocket) && isMyTurn && frame.status === 'playing' && (
             <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
               <div className="relative p-5 rounded-2xl border border-amber-500/40 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_60px_rgba(245,158,11,0.2)] max-w-xs w-full mx-4 text-center">
                 <div className="text-3xl mb-1">🎱</div>
@@ -944,7 +1101,7 @@ export default function ArenaPage({
           )}
 
           {/* Called pocket reminder badge */}
-          {calledPocketId !== null && isMyTurn && roomState.status === 'playing' && eightBallAlive && (
+          {calledPocketId !== null && isMyTurn && frame.status === 'playing' && eightBallAlive && (
             <div className="absolute top-2 right-2 z-10 pointer-events-auto">
               <button
                 onClick={() => { setCalledPocketId(null); setShowCallPocket(true); }}
@@ -963,7 +1120,7 @@ export default function ArenaPage({
         </div>
 
         {/* Mobile: pocketed balls — safe zone rail, always visible, never overlays table */}
-        {isMobile && (allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+        {isMobile && (allPocketed.length > 0 || (frame.status !== 'waiting' && frame.status !== 'gameover')) && (
           <div className="flex-shrink-0 h-full z-10 flex items-stretch">
             <div className="flex flex-col items-center justify-end gap-0.5 py-4 px-1.5 bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] border border-[#3a1a0a]/70 shadow-lg shadow-black/50 min-w-[40px]"
               style={{
@@ -999,7 +1156,7 @@ export default function ArenaPage({
         {/* Desktop: Pocketed Balls Panel — premium right rail, single column */}
         {!isMobile && (
           <div className="shrink-0 flex items-stretch ml-0 z-10 pointer-events-none">
-            {(allPocketed.length > 0 || (roomState.status !== 'waiting' && roomState.status !== 'gameover')) && (
+            {(allPocketed.length > 0 || (frame.status !== 'waiting' && frame.status !== 'gameover')) && (
               <div className="flex flex-col items-center justify-end gap-1 py-5 px-2.5 rounded-r-2xl border-l-0 border border-[#3a1a0a]/80 bg-gradient-to-b from-[#2a1508] via-[#1a0a04] to-[#0d0501] shadow-lg shadow-black/50 min-w-[48px]"
                 style={{
                   boxShadow: 'inset 3px 0 12px rgba(0,0,0,0.5), inset -1px 0 6px rgba(180,120,60,0.08), 5px 0 20px rgba(0,0,0,0.4)',
@@ -1039,7 +1196,7 @@ export default function ArenaPage({
             <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 280, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.25 }} className="overflow-hidden shrink-0"
             >
-              <SidePanel roomState={roomState} userSession={userSession} language={language} activeEscrow={activeEscrow}
+              <SidePanel roomState={frame} userSession={userSession} language={language} activeEscrow={activeEscrow}
                 chatMessage={chatMessage} setChatMessage={setChatMessage} handleSendChat={handleSendChat}
                 handleJoinAI={handleJoinAI} chatRef={chatRef} onClose={() => setShowSidebar(false)} />
             </motion.aside>
@@ -1048,7 +1205,7 @@ export default function ArenaPage({
             <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }} className="absolute inset-y-0 right-0 w-full max-w-sm z-30"
             >
-              <SidePanel roomState={roomState} userSession={userSession} language={language} activeEscrow={activeEscrow}
+              <SidePanel roomState={frame} userSession={userSession} language={language} activeEscrow={activeEscrow}
                 chatMessage={chatMessage} setChatMessage={setChatMessage} handleSendChat={handleSendChat}
                 handleJoinAI={handleJoinAI} chatRef={chatRef} onClose={() => setShowSidebar(false)} />
             </motion.aside>
@@ -1063,9 +1220,32 @@ export default function ArenaPage({
           role="dialog" aria-label="Game Over" aria-modal="true"
         >
           <motion.div initial={{ scale: 0.8, y: 30 }} animate={{ scale: 1, y: 0 }}
-            className="relative p-6 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_60px_rgba(245,158,11,0.15)] max-w-xs w-full mx-4 text-center"
+            className="relative p-6 rounded-2xl border-2 border-amber-500/30 bg-gradient-to-b from-[#1a1208] to-[#0d0806] shadow-[0_0_80px_rgba(245,158,11,0.12),0_0_0_1px_rgba(245,158,11,0.06)_inset] max-w-xs w-full mx-4 text-center"
           >
-            <div className="text-4xl mb-2">{isWinner ? '🏆' : '💔'}</div>
+            {/* Gold trim corners */}
+            <div className="absolute -top-px -left-px w-4 h-4 border-t-2 border-l-2 border-amber-400/40 rounded-tl" />
+            <div className="absolute -top-px -right-px w-4 h-4 border-t-2 border-r-2 border-amber-400/40 rounded-tr" />
+            <div className="absolute -bottom-px -left-px w-4 h-4 border-b-2 border-l-2 border-amber-400/40 rounded-bl" />
+            <div className="absolute -bottom-px -right-px w-4 h-4 border-b-2 border-r-2 border-amber-400/40 rounded-br" />
+            <div className={`text-3xl mb-2 ${isWinner ? '' : 'text-rose-400'}`}>
+              {isWinner ? (
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto">
+                  <circle cx="12" cy="8" r="5" fill="#f59e0b" fillOpacity="0.15" />
+                  <path d="M12 2v1m0 10v1m5-6h1M6 8H5m3.5-3.5l.7.7m5.1-.7l-.7.7" stroke="#f59e0b" strokeWidth="1.2" />
+                  <path d="M6 21c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="#f59e0b" />
+                  <path d="M8 21c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="#f59e0b" strokeOpacity="0.5" />
+                  <path d="M16 17.5A8 8 0 0 0 8 21" stroke="#f59e0b" strokeOpacity="0.3" />
+                  <path d="M9 13s1.5 2 3 2 3-2 3-2" stroke="#f59e0b" strokeWidth="1.2" />
+                </svg>
+              ) : (
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto">
+                  <path d="M12 12L7 7m0 5l5-5" stroke="#f43f5e" strokeWidth="2" />
+                  <circle cx="12" cy="12" r="9" stroke="#f43f5e" fill="#f43f5e" fillOpacity="0.08" />
+                  <path d="M16 16l-4-4" stroke="#f43f5e" strokeOpacity="0.4" strokeWidth="1.5" />
+                  <path d="M8 16l4-4" stroke="#f43f5e" strokeOpacity="0.4" strokeWidth="1.5" />
+                </svg>
+              )}
+            </div>
             <div className={`text-xl font-black font-mono mb-1 ${isWinner ? 'text-amber-400' : 'text-rose-400'}`}>
               {isWinner ? (language === 'ar' ? 'فوز!' : 'YOU WIN!') : (language === 'ar' ? 'خسارة' : 'DEFEAT')}
             </div>
@@ -1085,7 +1265,7 @@ export default function ArenaPage({
                 <>
                   <div className="bg-black/50 rounded-lg border border-amber-900/30 p-2">
                     <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'مجموعتي' : 'My Group'}</div>
-                    <div className="text-sm font-black font-mono text-amber-300">{mySide === 'solids' ? '● SOLIDS' : '◐ STRIPES'}</div>
+                    <div className="text-sm font-black font-mono text-amber-300">{mySide === 'solids' ? 'SOLIDS' : 'STRIPES'}</div>
                   </div>
                   <div className="bg-black/50 rounded-lg border border-amber-900/30 p-2">
                     <div className="text-[9px] text-amber-600 font-mono">{language === 'ar' ? 'المتبقي' : 'Remaining'}</div>
@@ -1096,15 +1276,54 @@ export default function ArenaPage({
             </div>
             <div className="flex gap-2">
               <button onClick={handleRematch}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-black transition shadow-lg shadow-amber-500/20"
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-black text-xs font-black transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5"
                 autoFocus
-              >🔄 {language === 'ar' ? 'إعادة' : 'REMATCH'}</button>
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                {language === 'ar' ? 'إعادة' : 'REMATCH'}
+              </button>
               <button onClick={onQuitRoom}
-                className="flex-1 py-2.5 rounded-xl bg-black/60 border border-amber-900/40 hover:border-amber-700/60 text-amber-400 text-xs font-black transition"
-              >✕ {language === 'ar' ? 'خروج' : 'QUIT'}</button>
+                className="flex-1 py-2.5 rounded-xl bg-black/60 border border-amber-900/40 hover:border-amber-700/60 text-amber-400 text-xs font-black transition flex items-center justify-center gap-1.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                {language === 'ar' ? 'خروج' : 'QUIT'}
+              </button>
             </div>
           </motion.div>
         </motion.div>
+      )}
+
+      {/* Casino Spectator Overlay */}
+      {showCasinoView && (
+        <CasinoSpectator onClose={() => setShowCasinoView(false)} balls={frame.balls} />
+      )}
+
+      {/* Pocket Celebration */}
+      {celebrationIntensity > 0 && (
+        <CasinoCelebration
+          intensity={celebrationIntensity}
+          onComplete={() => setCelebrationIntensity(0)}
+        />
+      )}
+
+      {/* Win Celebration */}
+      {winCelebration > 0 && (
+        <CasinoCelebration
+          intensity={winCelebration}
+          onComplete={() => setWinCelebration(0)}
+        />
+      )}
+
+      {/* Foul Flash */}
+      {foulFlash && (
+        <FoulFlash onComplete={() => setFoulFlash(false)} />
       )}
     </motion.div>
   );

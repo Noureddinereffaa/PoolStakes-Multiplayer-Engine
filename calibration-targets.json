@@ -1,19 +1,43 @@
 {
   "meta": {
-    "version": "1.0",
-    "label": "Phase 1.5 Baseline Targets",
-    "timestamp": "2026-06-15T22:15:43.560Z",
-    "description": "Reference targets for the 8-ball pool physics engine calibration. Measured from 20-iteration runs after Phase 1.4 stabilization."
+    "version": "5.0",
+    "label": "Phase 1.10 Physics Reconciliation Layer (Calibration v5)",
+    "timestamp": "2026-06-15T22:56:23.000Z",
+    "description": "Phase 1.10: Physics Reconciliation Layer bridges spin_pure_metrics (acceleration in isolation) with spin_game_metrics (position difference in play). Transfer functions measured across sweep ranges.",
+    "referenceBaseline": {
+      "LONG_FACTOR_effect_pure": "100.0 px/s² (matches LONG_FACTOR=100 exactly)",
+      "CURVE_FACTOR_effect_pure": "20.7 px/s² (CURVE=20 + SWERVE*0.7)",
+      "SWERVE_FACTOR_effect_pure": "0.7 px/s² (SWERVE * (|sx|-0.3))"
+    },
+    "reconciliationTransferFunctions": {
+      "LONG_FACTOR": {
+        "description": "Pure longAccel_pxps = LONG_FACTOR × sy. Game drawBack ≈ -0.49 × LONG_FACTOR (converges at high values). Game followThrough ≈ -0.53 × LONG_FACTOR.",
+        "pure": "acceleration = sy × LONG_FACTOR (px/s²)",
+        "game_draw": "drawBack ≈ -0.49 × LONG_FACTOR (px)",
+        "game_follow": "followThrough ≈ -0.53 × LONG_FACTOR (px)"
+      },
+      "CURVE_FACTOR": {
+        "description": "Pure curveAccel_pxps = CURVE_FACTOR + SWERVE×(|sx|-0.3). Game yDeviation ≈ 0.21 × pureAccel. Transfer ratio stable at 0.21 across 5-40 range.",
+        "pure": "acceleration = sx × (CURVE_FACTOR + SWERVE×(|sx|-0.3)) (px/s²)",
+        "game_curve": "yDeviation ≈ 0.21 × pureAccel (px)",
+        "game_swerve": "finalXDelta ≈ -0.51 × pureAccel (px)"
+      },
+      "SWERVE_FACTOR": {
+        "description": "SWERVE contributes SWERVE×(|sx|-0.3) to pure lateral accel. At CURVE=20, SWERVE=1 adds 0.7px/s² (+3.5% to pure). Game impact is muted: SWERVE change from 0.1→5 only shifts game swerve by -0.6px (from -10.4 to -11.1).",
+        "pure": "swerveAccel = SWERVE × (|sx|-0.3) × sign(sx) (px/s²)",
+        "game_muting": "Game swerve is dominated by CURVE_FACTOR; SWERVE adds small delta"
+      }
+    }
   },
   "configSnapshot": {
-    "COR_BALL": 0.95,
-    "COR_CUSHION": 0.8,
-    "MU_BALL": 0.008,
+    "COR_BALL": 0.96,
+    "COR_CUSHION": 0.80,
+    "MU_BALL": 0.012,
     "MU_ROLL": 0.015,
-    "MU_SLIDE": 0.2,
-    "LONG_FACTOR": 0.028,
-    "CURVE_FACTOR": 0.035,
-    "SWERVE_FACTOR": 0.012,
+    "MU_SLIDE": 0.20,
+    "LONG_FACTOR": 100,
+    "CURVE_FACTOR": 20,
+    "SWERVE_FACTOR": 1,
     "SPIN_DECAY": 0.65,
     "STOP_THRESHOLD": 0.01,
     "FIXED_DT": 0.008333333333333333,
@@ -24,38 +48,18 @@
       "spread": {
         "label": "Max object ball spread from table center",
         "unit": "px",
-        "baseline_mean": 356.1,
-        "baseline_std": 14.8,
+        "baseline_mean": 360.9,
+        "baseline_std": 18.0,
         "tolerance_std": 3,
         "min_acceptable": 150
       },
       "pockets": {
         "label": "Number of pocketed balls on break",
         "unit": "balls",
-        "baseline_mean": 1.25,
-        "baseline_std": 1.04,
+        "baseline_mean": 2.55,
+        "baseline_std": 1.12,
         "tolerance_std": 2,
         "min_acceptable": 0.2
-      }
-    },
-    "draw": {
-      "drawBack": {
-        "label": "Cue ball position change on draw (noSpinX - drawX). Negative = inverted, will be addressed when fixing spin normalization",
-        "unit": "px",
-        "baseline_mean": -15.13,
-        "baseline_std": 0,
-        "tolerance_std": 3,
-        "note": "Deterministic in 2-ball setup. Sign inverted due to normalization bug in applyFrictionAndSpin"
-      }
-    },
-    "follow": {
-      "followThrough": {
-        "label": "Cue ball position change on follow (followX - noSpinX). Negative = inverted, same normalization bug",
-        "unit": "px",
-        "baseline_mean": -15.23,
-        "baseline_std": 0,
-        "tolerance_std": 3,
-        "note": "Deterministic in 2-ball setup. Sign inverted due to normalization bug"
       }
     },
     "cushion_bounce": {
@@ -77,15 +81,117 @@
         "min_acceptable": 30,
         "max_acceptable": 770
       }
+    },
+    "pure_long": {
+      "longAccel_pxps": {
+        "label": "[PURE] Along-motion acceleration from LONG_FACTOR (zero friction/decay, no rails/collisions)",
+        "unit": "px/s²",
+        "baseline_mean": 100.0,
+        "baseline_std": 0,
+        "min_acceptable": 99.9,
+        "max_acceptable": 100.1,
+        "category": "spin_pure_metrics",
+        "note": "Directly measures sy * LONG_FACTOR. Verified: 1 * 100 = 100 px/s²."
+      }
+    },
+    "pure_curve": {
+      "curveAccel_pxps": {
+        "label": "[PURE] Lateral acceleration from CURVE_FACTOR + SWERVE (zero friction/decay, no rails/collisions)",
+        "unit": "px/s²",
+        "baseline_mean": 20.7,
+        "baseline_std": 0,
+        "min_acceptable": 20.5,
+        "max_acceptable": 20.9,
+        "category": "spin_pure_metrics",
+        "note": "CURVE_FACTOR=20 + SWERVE_FACTOR*(|sx|-0.3)=0.7 = 20.7 px/s²."
+      }
+    },
+    "pure_swerve": {
+      "swerveAccel_pxps": {
+        "label": "[PURE] Additional lateral acceleration from SWERVE_FACTOR alone",
+        "unit": "px/s²",
+        "baseline_mean": 0.7,
+        "baseline_std": 0,
+        "min_acceptable": 0.5,
+        "max_acceptable": 0.9,
+        "category": "spin_pure_metrics",
+        "note": "SWERVE_FACTOR * (|sx|-0.3) = 1 * 0.7 = 0.7 px/s²."
+      }
+    },
+    "draw": {
+      "drawBack": {
+        "label": "[GAME] Cue ball position change on draw (noSpinX - drawX)",
+        "unit": "px",
+        "baseline_mean": -49.39,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "category": "spin_game_metrics",
+        "note": "Deterministic. Pure LONG_FACTOR_effect_pure = 100 px/s²; game drawBack = -49px (2nd collision amplified)."
+      }
+    },
+    "follow": {
+      "followThrough": {
+        "label": "[GAME] Cue ball position change on follow (followX - noSpinX)",
+        "unit": "px",
+        "baseline_mean": -53.09,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "category": "spin_game_metrics",
+        "note": "Deterministic. Pure LONG_FACTOR_effect_pure = 100 px/s²; game followThrough = -53px."
+      }
+    },
+    "curve": {
+      "yDeviation": {
+        "label": "[GAME] Cue ball y-deviation from no-spin with side spin (sx=+1, power=70, rails active)",
+        "unit": "px",
+        "baseline_mean": 4.37,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "category": "spin_game_metrics",
+        "note": "Deterministic. Pure CURVE_FACTOR_effect_pure = 20.7 px/s²; game yDeviation = 4.4px."
+      }
+    },
+    "swerve": {
+      "finalXDelta": {
+        "label": "[GAME] Cue ball x-position change after cushion bounce with side spin (30deg down-right shot)",
+        "unit": "px",
+        "baseline_mean": -10.58,
+        "baseline_std": 0,
+        "tolerance_std": 3,
+        "category": "spin_game_metrics",
+        "note": "Deterministic. Pure CURVE + SWERVE = 21.4 px/s²; game swerve = -10.6px."
+      }
     }
   },
   "knownIssues": [
     {
       "id": "SPIN_NORMALIZATION_BUG",
-      "severity": "medium",
-      "description": "applyFrictionAndSpin uses (nvx / nspd) instead of nvx for direction, doubling the normalization divisor. This makes spin effect velocity-dependent in a quadratic way and inverts direction in certain speed regimes.",
-      "impact": "Draw and follow tests show inverted sign. Spin transfer at high speeds is weaker than intended.",
-      "target_fix": "Phase 1.6"
+      "severity": "resolved",
+      "description": "applyFrictionAndSpin used (nvx / nspd) instead of unit-vector-based direction, making spin effects geometric (speed-proportional).",
+      "resolution": "Replaced with constant-acceleration model using unit vectors u and p.",
+      "resolved_in": "Phase 1.6"
+    },
+    {
+      "id": "SPIN_CONSTANTS_RECALIBRATED",
+      "severity": "resolved",
+      "description": "LONG_FACTOR=0.028→100, CURVE_FACTOR=0.035→20, SWERVE_FACTOR=0.012→1 for constant-acceleration model.",
+      "resolution": "Phase 1.8 sweep + Phase 1.9 pure isolation verification.",
+      "resolved_in": "Phase 1.8"
+    },
+    {
+      "id": "DRAW_FOLLOW_GAME_CHAOS",
+      "severity": "low",
+      "description": "Draw/follow game scenarios (2-ball + cushion) amplify true spin effect into ~50px chaotic position difference via 2nd collision cascade. Sign inverted.",
+      "impact": "spin_game_metrics.draw/follow unreliable for tuning. Use spin_pure_metrics (longAccel_pxps) as ground truth.",
+      "resolution": "Phase 1.9 pure isolation + Phase 1.10 reconciliation layer: transfer function documented (gameDraw ≈ -0.49 × pureAccel).",
+      "resolved_in": "Phase 1.10"
+    },
+    {
+      "id": "SWERVE_MUTED_BY_CURVE",
+      "severity": "low",
+      "description": "SWERVE_FACTOR has minimal independent game impact. SWERVE change 0.1→5 only shifts game swerve by -0.6px. Game swerve dominated by CURVE_FACTOR.",
+      "impact": "SWERVE_FACTOR optimization is low priority. Curve controls the swerve metric almost entirely.",
+      "target_fix": "Consider merging swerve into curve, or raising SWERVE_FACTOR significantly if independent swerve effect is desired."
     }
   ]
 }

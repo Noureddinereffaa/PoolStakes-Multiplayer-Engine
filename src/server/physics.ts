@@ -24,51 +24,70 @@ export const MAX_Y = TABLE_H - CUSHION - BALL_R;
 // ═══════════════════════════════════════════════════════════════
 //  PHYSICS CONFIG — single source of truth
 // ═══════════════════════════════════════════════════════════════
-export const PHYSICS = {
-  // ── Timestep ──────────────────────────────────────────
-  /** Fixed physics timestep (seconds) */
+export interface PhysicsConfig {
+  FIXED_DT: number;
+  SUB_STEPS: number;
+  GRAVITY: number;
+  MU_SLIDE: number;
+  MU_ROLL: number;
+  SLIDE_ROLL_SPEED: number;
+  COR_BALL: number;
+  COR_CUSHION: number;
+  MU_BALL: number;
+  MU_CUSHION: number;
+  SOLVER_ITERS: number;
+  CURVE_FACTOR: number;
+  LONG_FACTOR: number;
+  SWERVE_FACTOR: number;
+  SPIN_DECAY: number;
+  STOP_THRESHOLD: number;
+  MAX_SPEED: number;
+}
+
+export const PHYSICS: PhysicsConfig = {
   FIXED_DT:           1 / 120,
-  /** Sub-steps executed per call to simulatePhysicsStep */
   SUB_STEPS:          60,
-  /** Base Gravity for friction calculation */
   GRAVITY:            980,
 
-  // ── Friction ──────────────────────────────────────────
-  /** Sliding friction coefficient */
   MU_SLIDE:           0.20,
-  /** Rolling friction coefficient */
   MU_ROLL:            0.015,
-  /** Speed threshold where slide transitions to roll */
   SLIDE_ROLL_SPEED:   15.0,
 
-  // ── Collision ─────────────────────────────────────────
-  /** Coefficient of restitution: ball→ball (professional: 0.95–0.97) */
-  COR_BALL:           0.95,
-  /** Coefficient of restitution: ball→cushion (professional: 0.80–0.85) */
+  COR_BALL:           0.96,
   COR_CUSHION:        0.80,
-  /** Coulomb friction tangential multiplier (reduced from 0.015; Phase 1.4) */
-  MU_BALL:            0.008,
-  /** Cushion tangential friction */
+  MU_BALL:            0.012,
   MU_CUSHION:         0.15,
-  /** Solver iterations for positional correction */
   SOLVER_ITERS:       10,
 
-  // ── Spin / English ────────────────────────────────────
-  /** Side spin → lateral curve strength */
-  CURVE_FACTOR:       0.035,
-  /** Top/back spin → follow/draw strength */
-  LONG_FACTOR:        0.028,
-  /** Swerve: pre-contact curve from heavy side spin */
-  SWERVE_FACTOR:      0.012,
-  /** Spin decay per second (fraction remaining) */
+  CURVE_FACTOR:       20,
+  LONG_FACTOR:        100,
+  SWERVE_FACTOR:      1,
   SPIN_DECAY:         0.65,
 
-  // ── Stability ─────────────────────────────────────────
-  /** Speed below which a ball is force-stopped (reduced from 0.02; Phase 1.4) */
   STOP_THRESHOLD:     0.01,
-  /** Maximum allowed ball speed (safe-guard) */
   MAX_SPEED:          4000,
-} as const;
+};
+
+let _defaultConfig: PhysicsConfig | null = null;
+
+/** Save current config as the default (called once at import time). */
+function saveDefault(): void {
+  if (!_defaultConfig) _defaultConfig = { ...PHYSICS };
+}
+saveDefault();
+
+/**
+ * Apply a partial override to the live physics config.
+ * Restore with `resetPhysicsConfig()`.
+ */
+export function setPhysicsConfig(overrides: Partial<PhysicsConfig>): void {
+  Object.assign(PHYSICS, overrides);
+}
+
+/** Restore all physics constants to their original values. */
+export function resetPhysicsConfig(): void {
+  if (_defaultConfig) Object.assign(PHYSICS, _defaultConfig);
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  POCKETS
@@ -243,24 +262,26 @@ function applyFrictionAndSpin(balls: Ball[], dt: number): void {
         const nvy = b.vy;
         const nspd = Math.hypot(nvx, nvy);
         if (nspd > 0.05) {
+          // Unit vectors: u = direction of motion, p = perpendicular
+          const ux = nvx / nspd;
+          const uy = nvy / nspd;
           const px = -nvy / nspd;
           const py =  nvx / nspd;
+          const dt_ = dt;
 
-          // Side spin → lateral curve
-          const curve = sx * cfg.CURVE_FACTOR * nspd * dt;
-          b.vx += px * curve;
-          b.vy += py * curve;
+          // Side spin → constant lateral acceleration (perpendicular)
+          b.vx += px * (sx * cfg.CURVE_FACTOR * dt_);
+          b.vy += py * (sx * cfg.CURVE_FACTOR * dt_);
 
-          // Top/back spin → follow/draw along velocity
-          const follow = sy * cfg.LONG_FACTOR * nspd * dt;
-          b.vx += (nvx / nspd) * follow;
-          b.vy += (nvy / nspd) * follow;
+          // Top/back spin → constant along-motion acceleration
+          b.vx += ux * (sy * cfg.LONG_FACTOR * dt_);
+          b.vy += uy * (sy * cfg.LONG_FACTOR * dt_);
 
-          // Swerve: heavy side spin curves pre-contact
+          // Swerve: constant lateral push from heavy side spin
           if (Math.abs(sx) > 0.3) {
-            const swerve = cfg.SWERVE_FACTOR * (Math.abs(sx) - 0.3) * nspd * dt * Math.sign(sx);
-            b.vx += px * swerve;
-            b.vy += py * swerve;
+            const swerveAccel = cfg.SWERVE_FACTOR * (Math.abs(sx) - 0.3) * Math.sign(sx);
+            b.vx += px * (swerveAccel * dt_);
+            b.vy += py * (swerveAccel * dt_);
           }
         }
       }
@@ -566,6 +587,84 @@ export function simulatePhysicsStep(
 // ═══════════════════════════════════════════════════════════════
 export function simulateOneFrame(balls: Ball[], tracker?: { firstContactBallId: number | null; cushionContactOccurred?: boolean }): void {
   simulatePhysicsStep(balls, tracker);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PURE SPIN MEASUREMENT  (no collisions, no rails, controlled friction/decay)
+// ═══════════════════════════════════════════════════════════════
+
+export interface PureSpinResult {
+  frames: number;
+  totalTime: number;
+  vxInitial: number;
+  vyInitial: number;
+  vxFinal: number;
+  vyFinal: number;
+  spinXFinal: number;
+  spinYFinal: number;
+  longAccel: number;   // along-motion acceleration (px/s²)
+  curveAccel: number;  // lateral acceleration (px/s²)
+  swerveAccel: number; // additional swerve acceleration (px/s²)
+}
+
+/**
+ * Run a single cue ball with spin in isolation (zero friction, zero decay by default)
+ * to measure the raw constant acceleration produced by the spin constants.
+ *
+ * No collisions, no rails, no pockets — pure acceleration measurement.
+ */
+export function measurePureSpinEffect(
+  vx: number,
+  vy: number,
+  spinX: number,
+  spinY: number,
+  frames: number = 60,
+  configOverrides?: Partial<PhysicsConfig>,
+): PureSpinResult {
+  const saved = { ...PHYSICS };
+
+  // Default: zero friction, zero spin decay for raw measurement
+  setPhysicsConfig({
+    MU_SLIDE: 0,
+    MU_ROLL: 0,
+    SLIDE_ROLL_SPEED: 15,
+    SPIN_DECAY: 0,
+    ...configOverrides,
+  });
+
+  const ball: Ball = {
+    id: 0, x: 400, y: 200,
+    vx, vy, radius: BALL_R,
+    isPocketed: false, sleeping: false,
+    type: 'cue', color: '#FFF',
+    spinX, spinY,
+  };
+
+  const balls: Ball[] = [ball];
+
+  for (let f = 0; f < frames; f++) {
+    simulatePhysicsStep(balls);
+  }
+
+  Object.assign(PHYSICS, saved);
+
+  const totalTime = frames * PHYSICS.FIXED_DT;
+  const dvx = ball.vx - vx;
+  const dvy = ball.vy - vy;
+
+  return {
+    frames,
+    totalTime,
+    vxInitial: vx,
+    vyInitial: vy,
+    vxFinal: ball.vx,
+    vyFinal: ball.vy,
+    spinXFinal: ball.spinX || 0,
+    spinYFinal: ball.spinY || 0,
+    longAccel: dvx / totalTime,
+    curveAccel: dvy / totalTime,
+    swerveAccel: 0, // set externally if needed
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════

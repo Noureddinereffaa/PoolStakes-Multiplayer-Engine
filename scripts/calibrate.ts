@@ -2,7 +2,7 @@ import {
   getInitialBalls, simulatePhysicsStep, isAnyBallMoving, forceSettleBalls,
   powerToVelocity, breakPowerToVelocity,
   BALL_R, MIN_X, MAX_X, MIN_Y, MAX_Y,
-  PHYSICS,
+  PHYSICS, measurePureSpinEffect,
 } from '../src/server/physics';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -193,6 +193,67 @@ function scenarioCushionBounce(n: number): ScenarioReport {
   };
 }
 
+function scenarioCurve(n: number): ScenarioReport {
+  const yDeltas: number[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const run = (sx: number): number => {
+      const b = getInitialBalls();
+      const cue = b[0];
+      b.forEach(bb => { if (bb.id !== 0) bb.isPocketed = true; });
+      cue.x = 200; cue.y = 200; cue.sleeping = false;
+      cue.spinX = sx;
+      cue.vx = powerToVelocity(70);
+      cue.vy = 0;
+      runUntilSettled(b);
+      return cue.y;
+    };
+
+    const noSpinEndY = run(0);
+    const curveEndY = run(1);
+    yDeltas.push(curveEndY - noSpinEndY);
+  }
+
+  return {
+    name: 'curve',
+    n,
+    metrics: {
+      yDeviation: computeStats(yDeltas, 'px'),
+    },
+  };
+}
+
+function scenarioSwerve(n: number): ScenarioReport {
+  const xDeltas: number[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const run = (sx: number): number => {
+      const b = getInitialBalls();
+      const cue = b[0];
+      b.forEach(bb => { if (bb.id !== 0) bb.isPocketed = true; });
+      const speed = powerToVelocity(70);
+      cue.x = 200; cue.y = 300; cue.sleeping = false;
+      cue.spinX = sx;
+      cue.vx = speed * Math.cos(Math.PI / 6);
+      cue.vy = speed * Math.sin(Math.PI / 6);
+      runUntilSettled(b);
+      return cue.x;
+    };
+
+    const noSpinEndX = run(0);
+    const swerveEndX = run(1);
+    xDeltas.push(noSpinEndX - swerveEndX);
+  }
+
+  return {
+    name: 'swerve',
+    n,
+    metrics: {
+      finalXDelta: computeStats(xDeltas, 'px'),
+    },
+  };
+}
+
 function scenarioBank(n: number): ScenarioReport {
   const positions: number[] = [];
 
@@ -219,12 +280,59 @@ function scenarioBank(n: number): ScenarioReport {
   };
 }
 
+// ── Pure Spin Scenarios (Phase 1.9 — isolation mode) ──────────────
+
+function scenarioPureLong(n: number): ScenarioReport {
+  const accels: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = measurePureSpinEffect(500, 0, 0, 1, 60);
+    accels.push(r.longAccel);
+  }
+  return {
+    name: 'pure_long',
+    n,
+    metrics: { longAccel_pxps: computeStats(accels, 'px/s²') },
+  };
+}
+
+function scenarioPureCurve(n: number): ScenarioReport {
+  const accels: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = measurePureSpinEffect(500, 0, 1, 0, 60);
+    accels.push(r.curveAccel);
+  }
+  return {
+    name: 'pure_curve',
+    n,
+    metrics: { curveAccel_pxps: computeStats(accels, 'px/s²') },
+  };
+}
+
+function scenarioPureSwerve(n: number): ScenarioReport {
+  const accels: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = measurePureSpinEffect(500, 0, 1, 0, 60);
+    const curveOnly = PHYSICS.CURVE_FACTOR;
+    accels.push(r.curveAccel - curveOnly);
+  }
+  return {
+    name: 'pure_swerve',
+    n,
+    metrics: { swerveAccel_pxps: computeStats(accels, 'px/s²') },
+  };
+}
+
 // ── Main ───────────────────────────────────────────────────────────
-function runCalibration(n = 20): CalibrationReport {
+export function runCalibration(n = 20): CalibrationReport {
   const scenarios: ScenarioReport[] = [
     scenarioBreak(n),
     scenarioDraw(n),
     scenarioFollow(n),
+    scenarioCurve(n),
+    scenarioSwerve(n),
+    scenarioPureLong(n),
+    scenarioPureCurve(n),
+    scenarioPureSwerve(n),
     scenarioCushionBounce(n),
     scenarioBank(n),
   ];
@@ -259,4 +367,6 @@ function main(): void {
   console.log(json);
 }
 
-main();
+// Only run main when invoked directly, not when imported
+const isMain = process.argv[1]?.includes('calibrate');
+if (isMain) main();

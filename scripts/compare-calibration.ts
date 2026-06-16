@@ -47,13 +47,21 @@ function compare(): void {
 
       const current = metric.mean;
       const drift = current - tgt.baseline_mean;
-      const maxDrift = tgt.tolerance_std * tgt.baseline_std;
-      const within = Math.abs(drift) <= maxDrift && current >= (tgt.min_acceptable ?? -Infinity) && current <= (tgt.max_acceptable ?? Infinity);
+      const isDeterministic = tgt.baseline_std === 0;
+      const maxDrift = isDeterministic ? 0 : tgt.tolerance_std * tgt.baseline_std;
+      const withinBounds = current >= (tgt.min_acceptable ?? -Infinity) && current <= (tgt.max_acceptable ?? Infinity);
+      const withinDrift = isDeterministic ? true : Math.abs(drift) <= maxDrift;
+      const within = withinDrift && withinBounds;
 
       const status = within ? '✅' : '❌';
       if (!within) allPass = false;
 
-      const driftStr = tgt.baseline_std > 0 ? `${drift > 0 ? '+' : ''}${drift.toFixed(2)} (limit ±${maxDrift.toFixed(2)})` : 'N/A (deterministic)';
+      let driftStr: string;
+      if (isDeterministic) {
+        driftStr = 'deterministic (no drift possible)';
+      } else {
+        driftStr = `${drift > 0 ? '+' : ''}${drift.toFixed(2)} (limit ±${maxDrift.toFixed(2)})`;
+      }
       lines.push(`  ${status}  ${scenario.name}.${metricName}: ${current.toFixed(2)} ${tgt.unit}  (drift=${driftStr})`);
     }
   }

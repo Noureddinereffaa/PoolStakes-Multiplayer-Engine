@@ -281,33 +281,32 @@ export default function App() {
 
   // Sync lobby connection state
   useEffect(() => {
-    if (roomState?.status === 'gameover' && mountedRef.current) {
-      const roomKey = roomState.name;
-      if (gameoverProcessedRef.current.has(roomKey)) return;
-      gameoverProcessedRef.current.add(roomKey);
+    if (!roomState || roomState.status !== 'gameover' || !mountedRef.current) return;
+    const roomKey = roomState.name;
+    if (gameoverProcessedRef.current.has(roomKey)) return;
+    gameoverProcessedRef.current.add(roomKey);
 
-      fetchLaravelUsers();
-      // append history locally
-      const winnerName = roomState.players.find((p: any) => p.id === roomState.winnerId)?.username || 'Winner';
-      const loserName = roomState.players.find((p: any) => p.id !== roomState.winnerId)?.username || 'Loser';
-      
-      const newMatch: MatchType = {
-        id: `match-${Date.now()}`,
-        roomName: roomState.name,
-        winnerName,
-        loserName,
-        stake: roomState.stake,
-        prizeAmount: roomState.stake * 2 * 0.95,
-        commission: roomState.stake * 2 * 0.05,
-        timestamp: new Date().toLocaleTimeString(),
-        pocketsByWinner: roomState.balls.filter((b: any) => b.id !== 0 && b.isPocketed).length
-      };
+    fetchLaravelUsers();
+    // append history locally
+    const winnerName = roomState.players.find((p: any) => p.id === roomState.winnerId)?.username || 'Winner';
+    const loserName = roomState.players.find((p: any) => p.id !== roomState.winnerId)?.username || 'Loser';
+    
+    const newMatch: MatchType = {
+      id: `match-${Date.now()}`,
+      roomName: roomState.name,
+      winnerName,
+      loserName,
+      stake: roomState.stake,
+      prizeAmount: roomState.stake * 2 * 0.95,
+      commission: roomState.stake * 2 * 0.05,
+      timestamp: new Date().toLocaleTimeString(),
+      pocketsByWinner: roomState.balls.filter((b: any) => b.id !== 0 && b.isPocketed).length
+    };
 
-      setMatchHistory(prev => {
-        if (prev.some(m => m.roomName === roomState.name && m.winnerName === winnerName)) return prev;
-        return [newMatch, ...prev];
-      });
-    }
+    setMatchHistory(prev => {
+      if (prev.some(m => m.roomName === roomState.name && m.winnerName === winnerName)) return prev;
+      return [newMatch, ...prev];
+    });
   }, [roomState?.status, roomState?.winnerId]);
 
   // Handle User Registration

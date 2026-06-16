@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { RoomState, Ball, Difficulty } from './types';
 import { simulatePhysicsStep, isAnyBallMoving, captureFrame, powerToVelocity, getInitialBalls } from './server/physics';
 import { markPingSent, markPongReceived, resetMetrics, getConnectionGrade } from './utils/connectionQuality';
+import { isReplayActive } from './utils/replayGuard';
 
 interface QueuedMessage {
   type: string;
@@ -147,25 +148,6 @@ export function useBilliardsSocket({
               reconnectAttemptRef.current = 0;
             }
             if (mountedRef.current) {
-              // Client-side state validation: compare local physics with server state
-              const localState = roomStateRef.current;
-              if (localState && localState.status === 'playing' && msg.state.status === 'playing') {
-                // Check for significant position discrepancies
-                let maxPosDiff = 0;
-                for (const serverBall of msg.state.balls) {
-                  const localBall = localState.balls.find(b => b.id === serverBall.id);
-                  if (localBall && !localBall.isPocketed && !serverBall.isPocketed) {
-                    const dx = localBall.x - serverBall.x;
-                    const dy = localBall.y - serverBall.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    maxPosDiff = Math.max(maxPosDiff, dist);
-                  }
-                }
-                // If discrepancy > 5 units (half ball radius), log warning
-                if (maxPosDiff > 5) {
-                  console.warn('[Client Validation] Significant position drift detected:', maxPosDiff.toFixed(2), 'units');
-                }
-              }
               setRoomState(msg.state);
               setOpponentAim(null);
             }
@@ -175,7 +157,7 @@ export function useBilliardsSocket({
             } catch {}
             break;
           case 'physics_frames':
-            if (mountedRef.current) {
+            if (mountedRef.current && !isReplayActive()) {
               setOpponentAim(null);
               setPhysicsFrames(
                 (msg.frames as Array<Array<[number, number, number, number]>>).map(frame =>

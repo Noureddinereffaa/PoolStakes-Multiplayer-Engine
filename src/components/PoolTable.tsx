@@ -76,7 +76,7 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const TABLE_BOUNDS = { minX: 38, maxX: 762, minY: 38, maxY: 362 }; // matches server CUSHION + BALL_R + 2
   const placementErrorMessage = () => {
     if (!isScratchPlacing) return null;
-    const overOtherBall = roomState.balls.some((b) => {
+    const overOtherBall = (roomState.balls ?? []).some((b) => {
       if (b.id === 0 || b.isPocketed) return false;
       return Math.hypot(placedPos.x - b.x, placedPos.y - b.y) < 20.0;
     });
@@ -113,8 +113,8 @@ export default forwardRef<PoolTableHandle, PoolTableProps>(function PoolTable({
   const dustSpecksRef = useRef<Array<{ x: number; y: number; vx: number; vy: number; radius: number; alpha: number; speed: number }>>([]);
   const sinkingBallsRef = useRef<Array<{ id: number; ball: Ball; progress: number; maxProgress: number; pocketX: number; pocketY: number }>>([]);
 
-  const [animatedBalls, setAnimatedBalls] = useState<Ball[]>(roomState.balls);
-  const animatedBallsRef = useRef<Ball[]>(roomState.balls);
+  const [animatedBalls, setAnimatedBalls] = useState<Ball[]>(roomState.balls ?? []);
+  const animatedBallsRef = useRef<Ball[]>(roomState.balls ?? []);
   const [animPhase, setAnimPhase] = useState<'idle' | 'animating'>('idle');
   const animPhaseRef = useRef<'idle' | 'animating'>('idle');
   const isAnimating = animPhase === 'animating';
